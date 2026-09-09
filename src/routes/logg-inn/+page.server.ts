@@ -72,7 +72,11 @@ export const actions: Actions = {
 		};
 
 		// Egen teller per brukernavn, i tillegg til IP-grensen i hooks.
-		const grense = await rateLimit(`login:${brukernavn.toLowerCase()}`, 10, 300);
+		const grense = await rateLimit(
+			`login:${brukernavn.toLowerCase()}`,
+			config.security.rateLimit.paloggingPerBruker,
+			config.security.rateLimit.paloggingVinduSekunder
+		);
 		if (!grense.tillatt) {
 			await logg({ type: 'login', subtype: 'ratelimit', handling: 'E', utfall: '4', utfallBeskrivelse: 'For mange forsøk' }, aktor);
 			return svar(429, { feil: 'For mange påloggingsforsøk. Vent noen minutter.' });

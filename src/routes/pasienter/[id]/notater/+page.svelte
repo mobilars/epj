@@ -1,23 +1,21 @@
 <script lang="ts">
 	let { data, form } = $props();
-	let viserSkjema = $state(false);
+
 </script>
 
 <div class="rad-mellom">
 	<h2>Journalnotater</h2>
-	{#if data.kanSkrive}
-		<button type="button" class="primar" onclick={() => (viserSkjema = !viserSkjema)}>
-			{viserSkjema ? 'Avbryt' : 'Nytt notat'}
-		</button>
-	{/if}
+
 </div>
 
 {#if form?.feil}
 	<div class="varsel varsel-feil" role="alert">{form.feil}</div>
 {/if}
 
-{#if viserSkjema}
-	<form method="POST" action="?/nytt" class="kort">
+{#if data.kanSkrive}
+	<section class="kort">
+		<h3>Nytt notat</h3>
+		<form method="POST" action="?/nytt">
 		<div class="felt">
 			<label for="tittel">Tittel</label>
 			<input id="tittel" name="tittel" value="Konsultasjonsnotat" />
@@ -47,8 +45,9 @@
 				</div>
 			</div>
 		</fieldset>
-		<button type="submit" class="primar">Lagre notat</button>
-	</form>
+			<button type="submit" class="primar">Lagre notat</button>
+		</form>
+	</section>
 {/if}
 
 {#if data.notater.length === 0}

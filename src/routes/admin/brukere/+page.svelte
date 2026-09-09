@@ -1,11 +1,10 @@
 <script lang="ts">
 	let { data, form } = $props();
-	let viserNy = $state(false);
+
 </script>
 
 <div class="rad-mellom">
 	<h2>Brukere og roller</h2>
-	<button type="button" class="primar" onclick={() => (viserNy = !viserNy)}>{viserNy ? 'Avbryt' : 'Ny bruker'}</button>
 </div>
 
 {#if form?.feil}<div class="varsel varsel-feil" role="alert">{form.feil}</div>{/if}
@@ -16,8 +15,9 @@
 	</div>
 {/if}
 
-{#if viserNy}
-	<form method="POST" action="?/opprett" class="kort">
+<section class="kort">
+	<h3>Ny bruker</h3>
+	<form method="POST" action="?/opprett">
 		<div class="rad">
 			<div style="flex:1 1 12rem"><label for="brukernavn">Brukernavn</label><input id="brukernavn" name="brukernavn" required /></div>
 			<div style="flex:1 1 14rem"><label for="navn">Navn</label><input id="navn" name="navn" /></div>
@@ -35,7 +35,7 @@
 		</fieldset>
 		<button type="submit" class="primar">Opprett bruker</button>
 	</form>
-{/if}
+</section>
 
 <div class="kort tabell-omslag">
 	<table>

@@ -64,7 +64,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 	await sikreSkjema();
 
 	const requestId = event.request.headers.get('x-request-id') ?? randomUUID();
-	const nonce = randomUUID();
 	event.locals.requestId = requestId;
 	event.locals.clientIp = klientIp(event);
 	event.locals.auth = null;
@@ -76,7 +75,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const strengt = sti.startsWith('/oauth/token') || sti === '/logg-inn';
 	const grense = await rateLimit(
 		`${strengt ? 'auth' : 'alm'}:${event.locals.clientIp}`,
-		strengt ? 20 : 600,
+		strengt ? config.security.rateLimit.autentiseringPerMinutt : config.security.rateLimit.generellPerMinutt,
 		60
 	);
 	if (!grense.tillatt) {
@@ -109,11 +108,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.locals.auth = await kontekstFraSesjon(event, requestId);
 	}
 
-	const svar = await resolve(event, {
-		transformPageChunk: ({ html }) => html.replace(/%sveltekit\.nonce%/g, nonce)
-	});
+	const svar = await resolve(event);
 
-	for (const [k, v] of Object.entries(sikkerhetsheadere(nonce, erFhirApi))) {
+	for (const [k, v] of Object.entries(sikkerhetsheadere(erFhirApi))) {
 		svar.headers.set(k, v);
 	}
 	svar.headers.set('x-request-id', requestId);

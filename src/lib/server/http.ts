@@ -54,10 +54,12 @@ export async function ryddRateLimit(): Promise<number> {
 /**
  * Sikkerhetsheadere.
  *
- * CSP er streng og bruker nonce - journalen laster ingen skript fra tredjepart.
- * SMART-apper kjører i egne opphav og påvirkes ikke av denne policyen.
+ * Innholdssikkerhetspolicyen for HTML-sider settes av SvelteKit selv
+ * (`kit.csp` i svelte.config.js), slik at rammeverkets egne innebygde skript
+ * får riktig nonce. Her settes de øvrige headerne, pluss en minimal policy for
+ * API-svar, som aldri rendres som HTML.
  */
-export function sikkerhetsheadere(nonce: string, erFhirApi: boolean): Record<string, string> {
+export function sikkerhetsheadere(erFhirApi: boolean): Record<string, string> {
 	const felles: Record<string, string> = {
 		'x-content-type-options': 'nosniff',
 		'referrer-policy': 'no-referrer',
@@ -72,22 +74,7 @@ export function sikkerhetsheadere(nonce: string, erFhirApi: boolean): Record<str
 		// API-svar rendres ikke som HTML; en minimal policy holder.
 		return { ...felles, 'content-security-policy': "default-src 'none'; frame-ancestors 'none'", 'cache-control': 'no-store' };
 	}
-	return {
-		...felles,
-		'content-security-policy': [
-			"default-src 'self'",
-			`script-src 'self' 'nonce-${nonce}'`,
-			"style-src 'self' 'unsafe-inline'",
-			"img-src 'self' data:",
-			"font-src 'self'",
-			"connect-src 'self'",
-			"form-action 'self'",
-			"frame-ancestors 'none'",
-			"base-uri 'none'",
-			"object-src 'none'"
-		].join('; '),
-		'cache-control': 'no-store, no-cache, must-revalidate'
-	};
+	return { ...felles, 'cache-control': 'no-store, no-cache, must-revalidate' };
 }
 
 /** CORS for FHIR-endepunktet. SMART-apper kjører i nettleseren fra egne opphav. */

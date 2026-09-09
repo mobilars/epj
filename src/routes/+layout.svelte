@@ -23,6 +23,13 @@
 	);
 
 	const visMiljobanner = $derived(!data.miljo.produksjon || data.miljo.integrasjoner === 'mock');
+
+	// Markerer at siden er hydrert. Grensesnittet virker uten JavaScript, men
+	// hydreringen skriver blant annet input-verdier på nytt. Markøren gjør det
+	// mulig for automatiserte tester - og for feilsøking - å vite når den er ferdig.
+	$effect(() => {
+		document.documentElement.dataset.hydrert = 'ja';
+	});
 </script>
 
 <svelte:head>

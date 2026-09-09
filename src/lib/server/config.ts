@@ -10,12 +10,18 @@
 const env: Record<string, string | undefined> = process.env;
 
 // Laster .env i utvikling. I produksjon settes variablene av kjøremiljøet.
+//
+// Variabler som allerede er satt i miljøet vinner over .env. Uten dette ville
+// en .env-fil i prosjektmappen overstyre verdiene testkjøringer og
+// containeroppsett setter eksplisitt - en feilkilde som er vanskelig å se.
 if (process.env.NODE_ENV !== 'production' && typeof process.loadEnvFile === 'function') {
+	const eksplisitt = { ...process.env };
 	try {
 		process.loadEnvFile();
 	} catch {
 		/* .env er valgfri */
 	}
+	Object.assign(process.env, eksplisitt);
 }
 
 function required(name: string, fallbackInDev: string): string {
@@ -117,7 +123,18 @@ export const config = {
 		/** Betrodde proxy-hopp for utledning av klient-IP i audit-loggen. */
 		trustedProxyHops: int('EPJ_TRUSTED_PROXY_HOPS', 1),
 		/** Slår på HSTS og Secure-flagg. Skal alltid være på utenfor lokal utvikling. */
-		httpsOnly: bool('EPJ_HTTPS_ONLY', process.env.NODE_ENV === 'production')
+		httpsOnly: bool('EPJ_HTTPS_ONLY', process.env.NODE_ENV === 'production'),
+		/**
+		 * Ratebegrensning. Påloggingsendepunktene har egne, strengere grenser enn
+		 * resten, både per IP-adresse og per brukernavn, slik at én konto ikke kan
+		 * angripes fra mange adresser.
+		 */
+		rateLimit: {
+			generellPerMinutt: int('EPJ_RATE_GENERELL', 600),
+			autentiseringPerMinutt: int('EPJ_RATE_AUTH', 20),
+			paloggingPerBruker: int('EPJ_RATE_LOGIN_BRUKER', 10),
+			paloggingVinduSekunder: int('EPJ_RATE_LOGIN_VINDU', 300)
+		}
 	},
 
 	/**

@@ -1,24 +1,20 @@
 <script lang="ts">
 	let { data, form } = $props();
-	let skjema = $state<'ingen' | 'dialog' | 'henvisning'>('ingen');
 
 	const kanTa = (typer: string[], type: string) => typer.includes(type);
 </script>
 
 <div class="rad-mellom">
 	<h2>Meldinger</h2>
-	{#if data.kanSende}
-		<div class="rad">
-			<button type="button" onclick={() => (skjema = skjema === 'dialog' ? 'ingen' : 'dialog')}>Ny dialogmelding</button>
-			<button type="button" class="primar" onclick={() => (skjema = skjema === 'henvisning' ? 'ingen' : 'henvisning')}>Ny henvisning</button>
-		</div>
-	{/if}
+
 </div>
 
 {#if form?.feil}<div class="varsel varsel-feil" role="alert">{form.feil}</div>{/if}
 
-{#if skjema === 'dialog'}
-	<form method="POST" action="?/dialog" class="kort">
+{#if data.kanSende}
+	<section class="kort">
+		<h3>Ny dialogmelding</h3>
+		<form method="POST" action="?/dialog">
 		<div class="rad">
 			<div style="flex:1 1 18rem">
 				<label for="mottaker-d">Mottaker</label>
@@ -36,12 +32,13 @@
 			<div style="flex:0 0 8rem"><label for="hpr-d">HPR-nummer</label><input id="hpr-d" name="hpr" /></div>
 		</div>
 		<div class="felt"><label for="innhold">Innhold</label><textarea id="innhold" name="innhold" required></textarea></div>
-		<button type="submit" class="primar">Send</button>
-	</form>
-{/if}
+			<button type="submit" class="primar">Send</button>
+		</form>
+	</section>
 
-{#if skjema === 'henvisning'}
-	<form method="POST" action="?/henvisning" class="kort">
+	<section class="kort">
+		<h3>Ny henvisning</h3>
+		<form method="POST" action="?/henvisning">
 		<div class="rad">
 			<div style="flex:1 1 18rem">
 				<label for="mottaker-h">Mottaker</label>
@@ -68,8 +65,9 @@
 		<div class="felt"><label for="anamnese">Anamnese</label><textarea id="anamnese" name="anamnese"></textarea></div>
 		<div class="felt"><label for="onsket">Ønsket undersøkelse</label><input id="onsket" name="onsket" /></div>
 		<label><input type="checkbox" name="informert" value="på" checked style="width:auto" /> Pasienten er informert om henvisningen</label>
-		<button type="submit" class="primar">Send henvisning</button>
-	</form>
+			<button type="submit" class="primar">Send henvisning</button>
+		</form>
+	</section>
 {/if}
 
 <div class="kort tabell-omslag">

@@ -2,14 +2,8 @@
 	import { page } from '$app/state';
 	let { data, form } = $props();
 
-	let brukernavn = $state('');
-	let visEngangskode = $state(false);
-
-	$effect(() => {
-		if (form?.krevErMfa) visEngangskode = true;
-		if (form?.brukernavn) brukernavn = form.brukernavn;
-	});
-
+	// Skjemaet fungerer uten JavaScript: engangskodefeltet står alltid der, og
+	// brukernavnet fylles ut på serversiden etter et mislykket forsøk.
 	const feilFraUrl = $derived(page.url.searchParams.get('feil'));
 </script>
 
@@ -48,26 +42,26 @@
 				<input type="hidden" name="retur" value={data.retur} />
 				<div class="felt">
 					<label for="brukernavn">Brukernavn</label>
-					<input id="brukernavn" name="brukernavn" bind:value={brukernavn} autocomplete="username" required />
+					<!-- Feltet fylles bevisst ikke ut på nytt etter et mislykket forsøk:
+					     en reaktiv verdi på et input-felt overskriver det brukeren
+					     rekker å taste før siden er ferdig hydrert. -->
+					<input id="brukernavn" name="brukernavn" autocomplete="username" required />
 				</div>
 				<div class="felt">
 					<label for="passord">Passord</label>
 					<input id="passord" name="passord" type="password" autocomplete="current-password" required />
 				</div>
-				{#if visEngangskode}
-					<div class="felt">
-						<label for="engangskode">Engangskode</label>
-						<input
-							id="engangskode"
-							name="engangskode"
-							inputmode="numeric"
-							autocomplete="one-time-code"
-							pattern="[0-9]{'{'}6{'}'}"
-							placeholder="000000"
-						/>
-						<small>Seks siffer fra autentiseringsappen din.</small>
-					</div>
-				{/if}
+				<div class="felt">
+					<label for="engangskode">Engangskode</label>
+					<input
+						id="engangskode"
+						name="engangskode"
+						inputmode="numeric"
+						autocomplete="one-time-code"
+						placeholder="000000"
+					/>
+					<small>Seks siffer fra autentiseringsappen din.</small>
+				</div>
 				<button type="submit" class="primar">Logg inn</button>
 			</form>
 
@@ -81,7 +75,7 @@
 						<tbody>
 							{#each data.demobrukere as d (d.brukernavn)}
 								<tr>
-									<td><button type="button" class="liten diskret mono" onclick={() => (brukernavn = d.brukernavn)}>{d.brukernavn}</button></td>
+									<td class="mono">{d.brukernavn}</td>
 									<td>{d.navn}</td>
 									<td>{d.rolle}</td>
 								</tr>

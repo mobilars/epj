@@ -1,11 +1,10 @@
 <script lang="ts">
 	let { data, form } = $props();
-	let viserNy = $state(false);
+
 </script>
 
 <div class="rad-mellom">
 	<h2>SMART-apper og tjenester</h2>
-	<button type="button" class="primar" onclick={() => (viserNy = !viserNy)}>{viserNy ? 'Avbryt' : 'Registrer app'}</button>
 </div>
 
 <div class="varsel varsel-info">
@@ -27,8 +26,9 @@
 	</div>
 {/if}
 
-{#if viserNy}
-	<form method="POST" action="?/registrer" class="kort">
+<section class="kort">
+	<h3>Registrer app</h3>
+	<form method="POST" action="?/registrer">
 		<div class="rad">
 			<div style="flex:1 1 14rem"><label for="navn">Navn</label><input id="navn" name="navn" required /></div>
 			<div style="flex:0 0 12rem">
@@ -61,7 +61,7 @@
 		<div class="felt"><label for="jwks">JWKS (JSON)</label><textarea id="jwks" name="jwks" placeholder={'{"keys":[...]}'}></textarea></div>
 		<button type="submit" class="primar">Registrer</button>
 	</form>
-{/if}
+</section>
 
 {#each data.apper as a (a.clientId)}
 	<article class="kort">
