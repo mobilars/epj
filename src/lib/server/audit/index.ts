@@ -111,6 +111,24 @@ function byggAuditEvent(innslag: AuditInnslag, aktor: AuditAktor, tidspunkt: str
 	};
 }
 
+/**
+ * Kanonisk JSON: nøkler sortert rekursivt.
+ *
+ * Innholdet lagres som `jsonb` for å kunne søkes i, men PostgreSQL normaliserer
+ * nøkkelrekkefølgen i jsonb. Hashen må derfor beregnes over en form som er lik
+ * både før lagring og etter at raden er lest tilbake - ellers ville
+ * verifiseringen slått ut på helt uskadde rader.
+ */
+export function kanoniserJson(verdi: unknown): string {
+	if (verdi === null || typeof verdi !== 'object') return JSON.stringify(verdi ?? null);
+	if (Array.isArray(verdi)) return `[${verdi.map(kanoniserJson).join(',')}]`;
+	const par = Object.entries(verdi as Record<string, unknown>)
+		.filter(([, v]) => v !== undefined)
+		.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+		.map(([k, v]) => `${JSON.stringify(k)}:${kanoniserJson(v)}`);
+	return `{${par.join(',')}}`;
+}
+
 function beregnHash(forrigeHash: string, kanonisk: string): string {
 	return createHash('sha256').update(`${forrigeHash}\n${kanonisk}`).digest('hex');
 }
@@ -128,7 +146,7 @@ export async function logg(innslag: AuditInnslag, aktor: AuditAktor): Promise<{ 
 		const forrigeHash = forrige?.hash ?? 'genesis';
 		const tidspunkt = new Date().toISOString();
 		const event = byggAuditEvent(innslag, aktor, tidspunkt);
-		const kanonisk = JSON.stringify(event);
+		const kanonisk = kanoniserJson(event);
 		const hash = beregnHash(forrigeHash, kanonisk);
 
 		const rad = await en<{ seq: number }>(
@@ -140,7 +158,7 @@ export async function logg(innslag: AuditInnslag, aktor: AuditAktor): Promise<{ 
 				tidspunkt, innslag.type, innslag.subtype ?? null, innslag.handling, innslag.utfall,
 				innslag.utfallBeskrivelse ?? null, aktor.userId, aktor.actorRef, aktor.navn, aktor.rolle,
 				aktor.clientId, aktor.ip, innslag.patientId ?? null, innslag.entityRef ?? null,
-				innslag.purposeOfUse ?? null, aktor.requestId, kanonisk, forrigeHash, hash
+				innslag.purposeOfUse ?? null, aktor.requestId, JSON.stringify(event), forrigeHash, hash
 			]
 		);
 		return { seq: rad?.seq ?? 0, hash };
@@ -229,7 +247,7 @@ export async function verifiserLoggkjede(fraSeq = 0, maks = 100_000): Promise<Kj
 		if (forrige !== null && rad.prev_hash !== forrige) {
 			return { gyldig: false, kontrollerte: rader.length, forsteBrudd: { seq: rad.seq, forventet: forrige, funnet: rad.prev_hash } };
 		}
-		const forventet = beregnHash(rad.prev_hash, JSON.stringify(rad.content));
+		const forventet = beregnHash(rad.prev_hash, kanoniserJson(rad.content));
 		if (forventet !== rad.hash) {
 			return { gyldig: false, kontrollerte: rader.length, forsteBrudd: { seq: rad.seq, forventet, funnet: rad.hash } };
 		}

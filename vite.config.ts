@@ -7,6 +7,12 @@ export default defineConfig({
 	ssr: { external: ['node:sqlite'] },
 	test: {
 		include: ['tests/**/*.test.ts'],
-		environment: 'node'
+		environment: 'node',
+		setupFiles: ['tests/setup.ts'],
+		// Integrasjonstestene oppretter hver sin database; kjør filene sekvensielt
+		// for å holde antallet samtidige tilkoblinger nede.
+		fileParallelism: false,
+		testTimeout: 30_000,
+		hookTimeout: 60_000
 	}
 });

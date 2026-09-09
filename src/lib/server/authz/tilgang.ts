@@ -82,11 +82,14 @@ export async function vurder(spm: TilgangSporsmal): Promise<Beslutning> {
 
 	// --- Lag 1: scope -------------------------------------------------------
 	const pasientId = spm.patientId ?? (spm.ressurs ? pasientIdFraRessurs(spm.ressurs) : null);
+	// For en innbygger som er logget inn i egen journal er pasientkonteksten
+	// personen selv, også når det ikke finnes en SMART-launch.
+	const kontekstPasient = ctx.launch.patientId ?? egenPasientId(ctx);
 	const scopeSvar = sjekkScope(ctx.scopes, {
 		ressurs: resourceType,
 		operasjon,
 		kontekstPasientId: pasientId,
-		tokenPasientId: ctx.launch.patientId ?? null
+		tokenPasientId: kontekstPasient
 	});
 	if (!scopeSvar.tillatt) return NEKT(scopeSvar.grunn ?? 'Mangler scope');
 

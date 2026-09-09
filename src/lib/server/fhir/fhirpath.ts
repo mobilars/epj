@@ -6,9 +6,20 @@
  * identifikatorer og datoer fra en ressurs uten å gå veien om serveren.
  */
 
-/** Normaliserer tekst for søk: små bokstaver, uten diakritiske tegn. */
+/**
+ * Normaliserer tekst for sammenlikning og søk.
+ *
+ * Unicode-dekomponering alene gir inkonsistent resultat på norsk: «å» brytes
+ * opp i a + ring og mister ringen, mens «ø» og «æ» er egne bokstaver og blir
+ * stående. Da ville «Håkon» matchet «Hakon», men «Søren» ikke «Soren». Vi
+ * folder derfor de norske bokstavene eksplisitt først, slik at oppførselen er
+ * den samme for alle tre.
+ */
+const NORSKE_BOKSTAVER: Record<string, string> = { æ: 'ae', ø: 'o', å: 'a', Æ: 'ae', Ø: 'o', Å: 'a' };
+
 export function normaliserTekst(v: string): string {
 	return v
+		.replace(/[æøåÆØÅ]/g, (t) => NORSKE_BOKSTAVER[t])
 		.normalize('NFD')
 		.replace(/[\u0300-\u036f]/g, '')
 		.toLowerCase()
@@ -72,17 +83,23 @@ export function utvidDato(v: string, ende: 'lav' | 'hoy'): string | null {
 	return new Date(d).toISOString();
 }
 
+/**
+ * Tolker en FHIR-referanse. Håndterer relative referanser (`Patient/123`),
+ * absolutte URL-er, `urn:uuid:`-referanser og versjonsspesifikke referanser
+ * (`Observation/9/_history/2`), som skal gi ressursens id - ikke versjonen.
+ */
 export function parseReferanse(v: unknown): { type: string | null; id: string } | null {
 	let ref: string | undefined;
 	if (typeof v === 'string') ref = v;
 	else if (isObj(v) && typeof v.reference === 'string') ref = v.reference;
 	if (!ref) return null;
 	if (ref.startsWith('urn:uuid:')) return { type: null, id: ref.slice('urn:uuid:'.length) };
-	const deler = ref.split('/').filter(Boolean);
+
+	// Fjern versjonsdelen før vi plukker ut type og id.
+	const utenVersjon = ref.split('/_history/')[0];
+	const deler = utenVersjon.split('/').filter(Boolean);
 	if (deler.length >= 2) {
-		const id = deler[deler.length - 1];
-		const type = deler[deler.length - 2];
-		return { type, id: id.split('/_history/')[0] };
+		return { type: deler[deler.length - 2], id: deler[deler.length - 1] };
 	}
-	return { type: null, id: ref };
+	return { type: null, id: utenVersjon };
 }

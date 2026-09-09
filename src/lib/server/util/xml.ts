@@ -52,10 +52,14 @@ export function dokument(rot: XmlNode): string {
 }
 
 /**
- * Enkel, ikke-validerende parser som gir et tre av noder. Brukes til å lese
- * innkommende meldinger og applikasjonskvitteringer i testmiljø.
- * Håndterer ikke DTD/entiteter utover de fem predefinerte - innkommende
- * meldinger fra meldingstjeneren valideres mot XSD i produksjonsoppsettet.
+ * Parser som gir et tre av noder. Brukes til å lese innkommende meldinger og
+ * applikasjonskvitteringer.
+ *
+ * Den kaster på ugyldig input i stedet for å tolke den «så godt den kan»: en
+ * melding som ikke lar seg lese skal gi en applikasjonskvittering med feilkode,
+ * ikke en halvveis tolket melding. DTD og andre entiteter enn de fem
+ * predefinerte støttes ikke - innkommende meldinger valideres mot XSD i
+ * produksjonsoppsettet.
  */
 export type ParsedNode = {
 	navn: string;
@@ -67,53 +71,76 @@ export type ParsedNode = {
 export function parseXml(xml: string): ParsedNode {
 	const uten = xml.replace(/<\?[\s\S]*?\?>/g, '').replace(/<!--[\s\S]*?-->/g, '');
 	let i = 0;
-	function unescape(s: string): string {
-		return s
+
+	function unescape(v: string): string {
+		return v
 			.replace(/&lt;/g, '<').replace(/&gt;/g, '>')
 			.replace(/&quot;/g, '"').replace(/&apos;/g, "'")
 			.replace(/&amp;/g, '&');
 	}
-	function parseNode(): ParsedNode {
-		while (uten[i] !== '<') i++;
+
+	function krev(betingelse: boolean, melding: string): void {
+		if (!betingelse) throw new Error(`Ugyldig XML: ${melding} (posisjon ${i})`);
+	}
+
+	function parseNode(dybde: number): ParsedNode {
+		krev(dybde < 100, 'for dyp nøsting');
+		while (i < uten.length && uten[i] !== '<') i++;
+		krev(i < uten.length, 'fant ingen elementstart');
 		i++; // '<'
+
 		const navnStart = i;
-		while (!/[\s/>]/.test(uten[i])) i++;
+		while (i < uten.length && !/[\s/>]/.test(uten[i])) i++;
+		krev(i < uten.length, 'uavsluttet elementnavn');
 		const navn = uten.slice(navnStart, i);
+		krev(navn.length > 0, 'tomt elementnavn');
+
 		const attributter: Record<string, string> = {};
 		for (;;) {
-			while (/\s/.test(uten[i])) i++;
+			while (i < uten.length && /\s/.test(uten[i])) i++;
+			krev(i < uten.length, 'uavsluttet starttagg');
 			if (uten[i] === '/' || uten[i] === '>') break;
+
 			const aStart = i;
-			while (uten[i] !== '=' && !/\s/.test(uten[i])) i++;
+			while (i < uten.length && uten[i] !== '=' && !/\s/.test(uten[i]) && uten[i] !== '>') i++;
+			krev(i < uten.length && uten[i] !== '>', 'uavsluttet attributtnavn');
 			const aNavn = uten.slice(aStart, i);
-			while (uten[i] !== '"' && uten[i] !== "'") i++;
+			while (i < uten.length && uten[i] !== '"' && uten[i] !== "'" && uten[i] !== '>') i++;
+			krev(i < uten.length && uten[i] !== '>', `attributtet ${aNavn} mangler verdi`);
 			const quote = uten[i++];
 			const vStart = i;
-			while (uten[i] !== quote) i++;
+			while (i < uten.length && uten[i] !== quote) i++;
+			krev(i < uten.length, `uavsluttet verdi for attributtet ${aNavn}`);
 			attributter[aNavn] = unescape(uten.slice(vStart, i));
 			i++;
 		}
+
 		if (uten[i] === '/') {
+			krev(uten[i + 1] === '>', 'forventet «/>»');
 			i += 2;
 			return { navn, attributter, barn: [], tekst: '' };
 		}
 		i++; // '>'
+
 		const barn: ParsedNode[] = [];
 		let tekst = '';
 		for (;;) {
 			const neste = uten.indexOf('<', i);
-			if (neste === -1) break;
+			krev(neste !== -1, `elementet ${navn} er ikke lukket`);
 			tekst += uten.slice(i, neste);
 			if (uten[neste + 1] === '/') {
-				i = uten.indexOf('>', neste) + 1;
+				const slutt = uten.indexOf('>', neste);
+				krev(slutt !== -1, `uavsluttet sluttagg for ${navn}`);
+				i = slutt + 1;
 				break;
 			}
 			i = neste;
-			barn.push(parseNode());
+			barn.push(parseNode(dybde + 1));
 		}
 		return { navn, attributter, barn, tekst: unescape(tekst).trim() };
 	}
-	return parseNode();
+
+	return parseNode(0);
 }
 
 export function finn(node: ParsedNode, sti: string): ParsedNode | undefined {
