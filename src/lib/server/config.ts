@@ -92,6 +92,17 @@ export const config = {
 		httpsOnly: bool('EPJ_HTTPS_ONLY', process.env.NODE_ENV === 'production')
 	},
 
+	/**
+	 * Lokal innlogging med brukernavn/passord/engangskode. Beregnet på
+	 * utvikling, testmiljø og som reserveløsning hvis HelseID er utilgjengelig.
+	 * Skal være avslått i produksjon når HelseID er i bruk.
+	 */
+	testinnlogging: {
+		aktivert: bool('EPJ_TESTINNLOGGING', process.env.NODE_ENV !== 'production'),
+		/** Viser demobrukere med ferdig utfylt passord på påloggingssiden. */
+		visDemobrukere: bool('EPJ_VIS_DEMOBRUKERE', process.env.NODE_ENV !== 'production')
+	},
+
 	audit: {
 		/** Helsepersonelloven/pasientjournalforskriften: logg skal bevares i minst 10 år. */
 		retentionYears: int('EPJ_AUDIT_RETENTION_YEARS', 10)
@@ -126,10 +137,24 @@ export const config = {
 			egenandelUrl: env.EPJ_HELFO_EGENANDEL_URL ?? '',
 			avtaleId: env.EPJ_HELFO_AVTALE_ID ?? ''
 		},
+		/**
+		 * HelseID er den primære påloggingsmekanismen for helsepersonell.
+		 * Klienten autentiserer seg med private_key_jwt; ingen delt hemmelighet.
+		 */
 		helseId: {
-			issuer: env.EPJ_HELSEID_ISSUER ?? '',
+			enabled: bool('EPJ_HELSEID_ENABLED', false),
+			issuer: (env.EPJ_HELSEID_ISSUER ?? 'https://helseid-sts.test.nhn.no').replace(/\/$/, ''),
 			clientId: env.EPJ_HELSEID_CLIENT_ID ?? '',
-			enabled: bool('EPJ_HELSEID_ENABLED', false)
+			/** Privat nøkkel (PEM, PKCS#8) for klientassertions. */
+			privateKeyPem: env.EPJ_HELSEID_PRIVATE_KEY ?? '',
+			keyId: env.EPJ_HELSEID_KEY_ID ?? '',
+			signeringsalgoritme: (env.EPJ_HELSEID_ALG ?? 'RS256') as 'RS256' | 'PS256' | 'ES256',
+			scopes: (env.EPJ_HELSEID_SCOPES ??
+				'openid profile helseid://scopes/identity/pid helseid://scopes/identity/security_level helseid://scopes/hpr/hpr_number')
+				.split(/\s+/).filter(Boolean),
+			get redirectUri() {
+				return env.EPJ_HELSEID_REDIRECT_URI ?? '';
+			}
 		}
 	}
 };

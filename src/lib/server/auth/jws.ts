@@ -1,4 +1,4 @@
-import { createPrivateKey, createPublicKey, createSign, createVerify, generateKeyPairSync, type KeyObject } from 'node:crypto';
+import { constants, createPrivateKey, createPublicKey, createSign, createVerify, generateKeyPairSync, type KeyObject } from 'node:crypto';
 
 /**
  * Kompakt JWS med ES256 (ECDSA P-256 + SHA-256), implementert direkte mot
@@ -6,10 +6,26 @@ import { createPrivateKey, createPublicKey, createSign, createVerify, generateKe
  * konverterer begge veier.
  */
 
+export type Algoritme = 'ES256' | 'RS256' | 'PS256';
+
 export interface JwtHeader {
-	alg: 'ES256';
+	alg: Algoritme;
 	typ?: string;
 	kid?: string;
+}
+
+/**
+ * ES256 brukes for tokens vi selv utsteder. RS256/PS256 må støttes fordi HelseID
+ * signerer sine id_token med RS256, og forventer klientassertions signert med
+ * RS256 eller PS256.
+ */
+const TILLATTE_ALGORITMER: ReadonlySet<string> = new Set(['ES256', 'RS256', 'PS256']);
+
+function signeringsopsjoner(alg: Algoritme): { hash: string; padding?: number; saltLength?: number } {
+	if (alg === 'PS256') {
+		return { hash: 'SHA256', padding: constants.RSA_PKCS1_PSS_PADDING, saltLength: 32 };
+	}
+	return { hash: 'SHA256' };
 }
 
 export type JwtPayload = Record<string, unknown> & {
@@ -67,27 +83,43 @@ function rawTilDer(raw: Buffer): Buffer {
 	return Buffer.concat([Buffer.from([0x30, body.length]), body]);
 }
 
-export function signer(payload: JwtPayload, privatePem: string, kid: string, typ = 'JWT'): string {
-	const header: JwtHeader = { alg: 'ES256', typ, kid };
+export function signer(
+	payload: JwtPayload,
+	privatePem: string,
+	kid: string,
+	typ = 'JWT',
+	alg: Algoritme = 'ES256'
+): string {
+	const header: JwtHeader = { alg, typ, kid };
 	const signeringsinput = `${b64u(JSON.stringify(header))}.${b64u(JSON.stringify(payload))}`;
 	const key: KeyObject = createPrivateKey(privatePem);
-	const der = createSign('SHA256').update(signeringsinput).sign(key);
-	return `${signeringsinput}.${b64u(derTilRaw(der))}`;
+	const opsjoner = signeringsopsjoner(alg);
+	const signatur = createSign(opsjoner.hash).update(signeringsinput).sign(
+		alg === 'PS256' ? { key, padding: opsjoner.padding, saltLength: opsjoner.saltLength } : key
+	);
+	return `${signeringsinput}.${b64u(alg === 'ES256' ? derTilRaw(signatur) : signatur)}`;
 }
 
-export function verifiser(jwt: string, publicJwks: JsonWebKey[]): JwtPayload {
+export function verifiser(jwt: string, publicJwks: JsonWebKey[], forventetAlg?: Algoritme): JwtPayload {
 	const deler = jwt.split('.');
 	if (deler.length !== 3) throw new Error('Ugyldig JWT-struktur');
 	const [h, p, s] = deler;
 	const header = JSON.parse(fraB64u(h).toString('utf8')) as JwtHeader;
-	if (header.alg !== 'ES256') throw new Error(`Algoritmen ${header.alg} er ikke tillatt`);
+	// `alg` leses fra headeren, men må stå på tillatelseslisten. «none» og
+	// bytte til HMAC med den offentlige nøkkelen som hemmelighet er dermed utelukket.
+	if (!TILLATTE_ALGORITMER.has(header.alg)) throw new Error(`Algoritmen ${header.alg} er ikke tillatt`);
+	if (forventetAlg && header.alg !== forventetAlg) throw new Error(`Forventet ${forventetAlg}, fikk ${header.alg}`);
 	const kandidater = header.kid ? publicJwks.filter((k) => (k as { kid?: string }).kid === header.kid) : publicJwks;
 	if (kandidater.length === 0) throw new Error('Ukjent nøkkel-id (kid)');
-	const der = rawTilDer(fraB64u(s));
+	const rå = fraB64u(s);
+	const signatur = header.alg === 'ES256' ? rawTilDer(rå) : rå;
+	const opsjoner = signeringsopsjoner(header.alg);
 	const ok = kandidater.some((jwk) => {
 		try {
 			const key = createPublicKey({ key: jwk as never, format: 'jwk' });
-			return createVerify('SHA256').update(`${h}.${p}`).verify(key, der);
+			return createVerify(opsjoner.hash)
+				.update(`${h}.${p}`)
+				.verify(header.alg === 'PS256' ? { key, padding: opsjoner.padding, saltLength: opsjoner.saltLength } : key, signatur);
 		} catch {
 			return false;
 		}
