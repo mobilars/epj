@@ -2,7 +2,21 @@
  * Sentral konfigurasjon. Alle sikkerhetsrelevante verdier hentes fra miljøvariabler
  * slik at ingen hemmeligheter ligger i kodebasen (Normen faktaark 14 - konfigurasjon).
  */
-import { env } from '$env/dynamic/private';
+/**
+ * Leses fra `process.env`. SvelteKit eksponerer de samme variablene gjennom
+ * `$env/dynamic/private`, men ved å gå direkte til `process.env` fungerer
+ * konfigurasjonen også i migrasjons- og seed-skript og i enhetstestene.
+ */
+const env: Record<string, string | undefined> = process.env;
+
+// Laster .env i utvikling. I produksjon settes variablene av kjøremiljøet.
+if (process.env.NODE_ENV !== 'production' && typeof process.loadEnvFile === 'function') {
+	try {
+		process.loadEnvFile();
+	} catch {
+		/* .env er valgfri */
+	}
+}
 
 function required(name: string, fallbackInDev: string): string {
 	const v = env[name];

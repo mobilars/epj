@@ -3,7 +3,7 @@ import type { Cookies } from '@sveltejs/kit';
 import { config } from '../config';
 import { dekrypter, krypter } from '../util/crypto';
 import { nyId } from '../util/ids';
-import { signer, verifiser, type Algoritme } from './jws';
+import { signer, verifiser, type Algoritme, type Jwk } from './jws';
 import { en, exec, transaction } from '../db';
 import { opprettBruker, hentBruker, rollerFor, type Bruker } from './brukere';
 import type { Rolle } from '../authz/roles';
@@ -45,7 +45,7 @@ interface Metadata {
 }
 
 let metadataCache: { verdi: Metadata; til: number } | null = null;
-let jwksCache: { verdi: JsonWebKey[]; til: number } | null = null;
+let jwksCache: { verdi: Jwk[]; til: number } | null = null;
 
 export async function hentMetadata(): Promise<Metadata> {
 	if (metadataCache && Date.now() < metadataCache.til) return metadataCache.verdi;
@@ -57,12 +57,12 @@ export async function hentMetadata(): Promise<Metadata> {
 	return verdi;
 }
 
-async function hentJwks(): Promise<JsonWebKey[]> {
+async function hentJwks(): Promise<Jwk[]> {
 	if (jwksCache && Date.now() < jwksCache.til) return jwksCache.verdi;
 	const meta = await hentMetadata();
 	const svar = await fetch(meta.jwks_uri, { signal: AbortSignal.timeout(10_000) });
 	if (!svar.ok) throw new Error(`Klarte ikke å hente HelseID-nøkler (${svar.status})`);
-	const jwks = (await svar.json()) as { keys: JsonWebKey[] };
+	const jwks = (await svar.json()) as { keys: Jwk[] };
 	jwksCache = { verdi: jwks.keys, til: Date.now() + 3600_000 };
 	return jwks.keys;
 }

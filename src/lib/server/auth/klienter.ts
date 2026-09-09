@@ -1,7 +1,7 @@
 import { en, exec, query } from '../db';
 import { hashPassord, likeStrenger, tokenHash, verifiserPassord } from '../util/crypto';
 import { nyId, nyToken } from '../util/ids';
-import { verifiser as verifiserJws, dekodUtenVerifisering } from './jws';
+import { verifiser as verifiserJws, dekodUtenVerifisering, type Jwk } from './jws';
 import { config } from '../config';
 
 export type Klientkategori = 'smart-ehr' | 'smart-standalone' | 'backend' | 'internal';
@@ -12,7 +12,7 @@ export interface OAuthKlient {
 	type: 'public' | 'confidential';
 	klient_kategori: Klientkategori;
 	secret_hash: string | null;
-	jwks: { keys: JsonWebKey[] } | null;
+	jwks: { keys: Jwk[] } | null;
 	jwks_uri: string | null;
 	redirect_uris: string[];
 	tillatte_scopes: string[];
@@ -43,7 +43,7 @@ export interface NyKlient {
 	redirectUris: string[];
 	scopes: string[];
 	grantTypes?: string[];
-	jwks?: { keys: JsonWebKey[] };
+	jwks?: { keys: Jwk[] };
 	jwksUri?: string;
 	logoUrl?: string;
 	databehandleravtale?: string;
@@ -156,13 +156,13 @@ export async function autentiserKlient(
 	return { ok: true, klient, metode: 'none' };
 }
 
-async function klientNokler(klient: OAuthKlient): Promise<JsonWebKey[]> {
+async function klientNokler(klient: OAuthKlient): Promise<Jwk[]> {
 	if (klient.jwks?.keys?.length) return klient.jwks.keys;
 	if (!klient.jwks_uri) return [];
 	try {
 		const svar = await fetch(klient.jwks_uri, { signal: AbortSignal.timeout(5000) });
 		if (!svar.ok) return [];
-		const jwks = (await svar.json()) as { keys?: JsonWebKey[] };
+		const jwks = (await svar.json()) as { keys?: Jwk[] };
 		return jwks.keys ?? [];
 	} catch {
 		return [];

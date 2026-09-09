@@ -41,10 +41,18 @@ export const load: PageServerLoad = async (event) => {
 	};
 };
 
+interface Skjemasvar {
+	feil?: string;
+	brukernavn?: string;
+	krevErMfa?: boolean;
+}
+
 export const actions: Actions = {
 	default: async (event) => {
+		const svar = (status: number, data: Skjemasvar) => fail(status, data);
+
 		if (!config.testinnlogging.aktivert) {
-			return fail(403, { feil: 'Lokal pålogging er slått av. Bruk HelseID.' });
+			return svar(403, { feil: 'Lokal pålogging er slått av. Bruk HelseID.' });
 		}
 
 		const form = await event.request.formData();
@@ -67,29 +75,29 @@ export const actions: Actions = {
 		const grense = await rateLimit(`login:${brukernavn.toLowerCase()}`, 10, 300);
 		if (!grense.tillatt) {
 			await logg({ type: 'login', subtype: 'ratelimit', handling: 'E', utfall: '4', utfallBeskrivelse: 'For mange forsøk' }, aktor);
-			return fail(429, { feil: 'For mange påloggingsforsøk. Vent noen minutter.' });
+			return svar(429, { feil: 'For mange påloggingsforsøk. Vent noen minutter.' });
 		}
 
 		if (!brukernavn || !passord) {
-			return fail(400, { feil: 'Fyll inn brukernavn og passord.', brukernavn });
+			return svar(400, { feil: 'Fyll inn brukernavn og passord.', brukernavn });
 		}
 
 		const resultat = await loggInn(brukernavn, passord, engangskode || undefined);
 
 		switch (resultat.utfall) {
 			case 'krever-mfa':
-				return fail(401, { krevErMfa: true, brukernavn, feil: 'Skriv inn engangskoden fra autentiseringsappen.' });
+				return svar(401, { krevErMfa: true, brukernavn, feil: 'Skriv inn engangskoden fra autentiseringsappen.' });
 			case 'laast':
 				await logg({ type: 'login', subtype: 'passord', handling: 'E', utfall: '4', utfallBeskrivelse: 'Kontoen er låst' }, aktor);
-				return fail(423, { feil: 'Kontoen er midlertidig låst etter flere mislykkede forsøk.' });
+				return svar(423, { feil: 'Kontoen er midlertidig låst etter flere mislykkede forsøk.' });
 			case 'sperret':
 				await logg({ type: 'login', subtype: 'passord', handling: 'E', utfall: '4', utfallBeskrivelse: 'Kontoen er sperret' }, aktor);
-				return fail(403, { feil: 'Kontoen er sperret. Kontakt systemansvarlig.' });
+				return svar(403, { feil: 'Kontoen er sperret. Kontakt systemansvarlig.' });
 			case 'feil-passord':
 			case 'ukjent-bruker':
 				await logg({ type: 'login', subtype: 'passord', handling: 'E', utfall: '4', utfallBeskrivelse: 'Feil brukernavn eller passord' }, aktor);
 				// Samme melding uansett årsak - vi avslører ikke om brukeren finnes.
-				return fail(401, { feil: 'Feil brukernavn, passord eller engangskode.', brukernavn });
+				return svar(401, { feil: 'Feil brukernavn, passord eller engangskode.', brukernavn });
 			case 'ok': {
 				await opprettSesjon(
 					resultat.bruker.id,

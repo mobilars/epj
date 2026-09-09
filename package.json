@@ -11,11 +11,15 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node --experimental-sqlite build/index.js",
+    "start": "node build/index.js",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "seed": "node --experimental-sqlite scripts/seed.js"
+    "seed": "vite-node -c scripts/vite.config.ts scripts/seed.ts",
+    "migrer": "vite-node -c scripts/vite.config.ts scripts/migrer.ts",
+    "fhir:test": "vite-node -c scripts/vite.config.ts scripts/test-fhir-server.ts",
+    "test:e2e": "playwright test",
+    "test:alle": "vitest run && playwright test"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

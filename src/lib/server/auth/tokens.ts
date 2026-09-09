@@ -44,7 +44,7 @@ export interface UtstedelseInn {
  * i Normen ved avslutning av arbeidsforhold.
  */
 export async function utstedTokens(inn: UtstedelseInn): Promise<UtstedtToken> {
-	const nokkel = aktivSigneringsnokkel();
+	const nokkel = await aktivSigneringsnokkel();
 	const nå = Math.floor(Date.now() / 1000);
 	const jti = nyId();
 	const familie = nyId();
@@ -195,7 +195,7 @@ export interface TokenValidering {
 export async function validerAccessToken(token: string): Promise<TokenValidering> {
 	let payload: Record<string, unknown>;
 	try {
-		payload = verifiser(token, jwks().keys) as Record<string, unknown>;
+		payload = verifiser(token, (await jwks()).keys) as Record<string, unknown>;
 	} catch (err) {
 		return { gyldig: false, feil: (err as Error).message };
 	}

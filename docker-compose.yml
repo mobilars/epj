@@ -1,0 +1,116 @@
+# ---------------------------------------------------------------------------
+# Utviklings- og testoppsett.
+#
+#   postgres  - to databaser: `epj` (identitet, tilgang, logg, integrasjoner)
+#               og `hapi` (kliniske FHIR-data)
+#   hapi      - HAPI FHIR JPA-server, R5. Eksponeres kun internt i nettverket
+#               `internt`; all trafikk utenfra går gjennom `epj`-appen som
+#               håndhever tilgangskontroll og skriver sikkerhetslogg.
+#   epj       - SvelteKit-applikasjonen (journal, API-fasade, OAuth-server)
+#
+# I produksjon skal `hapi` verken ha publiserte porter eller rute ut mot
+# internett, og `postgres` skal kjøre med TLS og kryptert lagring.
+# ---------------------------------------------------------------------------
+
+name: epj
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-epj}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-epj}
+      POSTGRES_DB: epj
+      POSTGRES_INITDB_ARGS: '--data-checksums'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init-databases.sql:/docker-entrypoint-initdb.d/10-databases.sql:ro
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    networks: [internt]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-epj} -d epj']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  hapi:
+    image: hapiproject/hapi:v8.0.0
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/hapi
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-epj}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-epj}
+      SPRING_DATASOURCE_DRIVERCLASSNAME: org.postgresql.Driver
+      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgres94Dialect
+      SPRING_JPA_PROPERTIES_HIBERNATE_SEARCH_ENABLED: 'false'
+      # R5 er datamodellen for hele journalen.
+      HAPI_FHIR_FHIR_VERSION: R5
+      HAPI_FHIR_SERVER_ADDRESS: http://hapi:8080/fhir
+      HAPI_FHIR_ALLOW_MULTIPLE_DELETE: 'true'
+      HAPI_FHIR_ALLOW_EXTERNAL_REFERENCES: 'true'
+      HAPI_FHIR_ALLOW_PLACEHOLDER_REFERENCES: 'true'
+      HAPI_FHIR_ENFORCE_REFERENTIAL_INTEGRITY_ON_WRITE: 'false'
+      HAPI_FHIR_ENFORCE_REFERENTIAL_INTEGRITY_ON_DELETE: 'false'
+      # $everything og pasientkompartment brukes av /fhir-fasaden.
+      HAPI_FHIR_ALLOW_CASCADING_DELETES: 'false'
+      HAPI_FHIR_DEFAULT_PAGE_SIZE: '50'
+      HAPI_FHIR_MAX_PAGE_SIZE: '200'
+      HAPI_FHIR_CORS_ALLOWED_ORIGIN: 'http://localhost:5173'
+      JAVA_TOOL_OPTIONS: '-Xmx2g'
+    ports:
+      # Kun for lokal feilsøking. Fjernes i produksjon.
+      - '${HAPI_PORT:-8080}:8080'
+    networks: [internt]
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -sf http://localhost:8080/fhir/metadata?_summary=true > /dev/null || exit 1']
+      interval: 15s
+      timeout: 10s
+      retries: 40
+      start_period: 120s
+
+  epj:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      hapi:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      EPJ_BASE_URL: ${EPJ_BASE_URL:-http://localhost:3000}
+      EPJ_DATABASE_URL: postgres://${POSTGRES_USER:-epj}:${POSTGRES_PASSWORD:-epj}@postgres:5432/epj
+      EPJ_HAPI_BASE_URL: http://hapi:8080/fhir
+      EPJ_DATA_KEY: ${EPJ_DATA_KEY:?EPJ_DATA_KEY må settes}
+      EPJ_HTTPS_ONLY: ${EPJ_HTTPS_ONLY:-false}
+      EPJ_INTEGRASJON_MODUS: ${EPJ_INTEGRASJON_MODUS:-mock}
+      EPJ_TESTINNLOGGING: ${EPJ_TESTINNLOGGING:-true}
+      EPJ_HELSEID_ENABLED: ${EPJ_HELSEID_ENABLED:-false}
+      EPJ_HELSEID_ISSUER: ${EPJ_HELSEID_ISSUER:-}
+      EPJ_HELSEID_CLIENT_ID: ${EPJ_HELSEID_CLIENT_ID:-}
+      EPJ_HELSEID_PRIVATE_KEY: ${EPJ_HELSEID_PRIVATE_KEY:-}
+      EPJ_HELSEID_KEY_ID: ${EPJ_HELSEID_KEY_ID:-}
+      EPJ_ORG_NAVN: ${EPJ_ORG_NAVN:-Fastlegekontoret}
+      EPJ_ORG_ORGNR: ${EPJ_ORG_ORGNR:-999999999}
+      EPJ_ORG_HER_ID: ${EPJ_ORG_HER_ID:-8000001}
+    ports:
+      - '${EPJ_PORT:-3000}:3000'
+    networks: [internt, ute]
+
+volumes:
+  pgdata:
+
+networks:
+  # HAPI og databasen ligger her, uten rute ut.
+  internt:
+    driver: bridge
+  ute:
+    driver: bridge

@@ -28,6 +28,9 @@ function signeringsopsjoner(alg: Algoritme): { hash: string; padding?: number; s
 	return { hash: 'SHA256' };
 }
 
+/** JWK med de feltene JOSE bruker. `JsonWebKey` i lib.dom mangler kid/alg/use. */
+export type Jwk = JsonWebKey & { kid?: string; alg?: string; use?: string };
+
 export type JwtPayload = Record<string, unknown> & {
 	iss?: string;
 	sub?: string;
@@ -41,9 +44,9 @@ export type JwtPayload = Record<string, unknown> & {
 const b64u = (b: Buffer | string): string => Buffer.from(b as never).toString('base64url');
 const fraB64u = (s: string): Buffer => Buffer.from(s, 'base64url');
 
-export function genererNokkelpar(): { privatePkcs8: string; publicJwk: JsonWebKey; kid: string } {
+export function genererNokkelpar(): { privatePkcs8: string; publicJwk: Jwk; kid: string } {
 	const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
-	const publicJwk = publicKey.export({ format: 'jwk' }) as JsonWebKey;
+	const publicJwk = publicKey.export({ format: 'jwk' }) as Jwk;
 	const kid = b64u(Buffer.from(JSON.stringify({ crv: publicJwk.crv, kty: publicJwk.kty, x: publicJwk.x, y: publicJwk.y })))
 		.slice(0, 22);
 	return {
@@ -100,7 +103,7 @@ export function signer(
 	return `${signeringsinput}.${b64u(alg === 'ES256' ? derTilRaw(signatur) : signatur)}`;
 }
 
-export function verifiser(jwt: string, publicJwks: JsonWebKey[], forventetAlg?: Algoritme): JwtPayload {
+export function verifiser(jwt: string, publicJwks: Jwk[], forventetAlg?: Algoritme): JwtPayload {
 	const deler = jwt.split('.');
 	if (deler.length !== 3) throw new Error('Ugyldig JWT-struktur');
 	const [h, p, s] = deler;
@@ -109,7 +112,7 @@ export function verifiser(jwt: string, publicJwks: JsonWebKey[], forventetAlg?: 
 	// bytte til HMAC med den offentlige nøkkelen som hemmelighet er dermed utelukket.
 	if (!TILLATTE_ALGORITMER.has(header.alg)) throw new Error(`Algoritmen ${header.alg} er ikke tillatt`);
 	if (forventetAlg && header.alg !== forventetAlg) throw new Error(`Forventet ${forventetAlg}, fikk ${header.alg}`);
-	const kandidater = header.kid ? publicJwks.filter((k) => (k as { kid?: string }).kid === header.kid) : publicJwks;
+	const kandidater = header.kid ? publicJwks.filter((k) => k.kid === header.kid) : publicJwks;
 	if (kandidater.length === 0) throw new Error('Ukjent nøkkel-id (kid)');
 	const rå = fraB64u(s);
 	const signatur = header.alg === 'ES256' ? rawTilDer(rå) : rå;
