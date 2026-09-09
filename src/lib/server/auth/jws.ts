@@ -1,4 +1,4 @@
-import { constants, createPrivateKey, createPublicKey, createSign, createVerify, generateKeyPairSync, type KeyObject } from 'node:crypto';
+import { constants, createHash, createPrivateKey, createPublicKey, createSign, createVerify, generateKeyPairSync, type KeyObject } from 'node:crypto';
 
 /**
  * Kompakt JWS med ES256 (ECDSA P-256 + SHA-256), implementert direkte mot
@@ -44,11 +44,23 @@ export type JwtPayload = Record<string, unknown> & {
 const b64u = (b: Buffer | string): string => Buffer.from(b as never).toString('base64url');
 const fraB64u = (s: string): Buffer => Buffer.from(s, 'base64url');
 
+/**
+ * Nøkkel-id som JWK-tommelavtrykk (RFC 7638): SHA-256 over en kanonisk JSON med
+ * bare de påkrevde feltene, i leksikografisk rekkefølge. Da blir id-en både
+ * unik per nøkkel og reproduserbar fra den offentlige nøkkelen alene.
+ */
+export function jwkTommelavtrykk(jwk: Jwk): string {
+	const kanonisk =
+		jwk.kty === 'EC'
+			? JSON.stringify({ crv: jwk.crv, kty: jwk.kty, x: jwk.x, y: jwk.y })
+			: JSON.stringify({ e: jwk.e, kty: jwk.kty, n: jwk.n });
+	return createHash('sha256').update(kanonisk).digest('base64url');
+}
+
 export function genererNokkelpar(): { privatePkcs8: string; publicJwk: Jwk; kid: string } {
 	const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
 	const publicJwk = publicKey.export({ format: 'jwk' }) as Jwk;
-	const kid = b64u(Buffer.from(JSON.stringify({ crv: publicJwk.crv, kty: publicJwk.kty, x: publicJwk.x, y: publicJwk.y })))
-		.slice(0, 22);
+	const kid = jwkTommelavtrykk(publicJwk);
 	return {
 		privatePkcs8: privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(),
 		publicJwk: { ...publicJwk, kid, alg: 'ES256', use: 'sig' },

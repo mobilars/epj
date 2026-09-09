@@ -63,7 +63,11 @@ export const config = {
 	 * skriver sikkerhetslogg.
 	 */
 	fhirServer: {
-		baseUrl: (env.EPJ_HAPI_BASE_URL ?? 'http://localhost:8080/fhir').replace(/\/$/, ''),
+		// Leses ved hvert oppslag, slik at testene kan peke på en server som
+		// først har fått tildelt port når prosessen kjører.
+		get baseUrl() {
+			return (env.EPJ_HAPI_BASE_URL ?? 'http://localhost:8080/fhir').replace(/\/$/, '');
+		},
 		/** Delt hemmelighet mot HAPI (Basic auth i referanseoppsettet). */
 		brukernavn: env.EPJ_HAPI_USER ?? '',
 		passord: env.EPJ_HAPI_PASSWORD ?? '',

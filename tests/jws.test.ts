@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createSign, generateKeyPairSync } from 'node:crypto';
-import { dekodUtenVerifisering, genererNokkelpar, signer, verifiser, type Jwk } from '../src/lib/server/auth/jws';
+import { dekodUtenVerifisering, genererNokkelpar, jwkTommelavtrykk, signer, verifiser, type Jwk } from '../src/lib/server/auth/jws';
 
 const b64u = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
 
@@ -58,6 +58,18 @@ describe('JWS ES256', () => {
 
 	it('avviser feil struktur', () => {
 		expect(() => verifiser('bare.to', [publicJwk])).toThrow(/struktur/i);
+	});
+
+	it('gir unik kid per nøkkel', () => {
+		const kids = new Set(Array.from({ length: 20 }, () => genererNokkelpar().kid));
+		expect(kids.size).toBe(20);
+	});
+
+	it('regner kid som RFC 7638-tommelavtrykk, reproduserbart fra den offentlige nøkkelen', () => {
+		const par = genererNokkelpar();
+		expect(jwkTommelavtrykk(par.publicJwk)).toBe(par.kid);
+		// Tommelavtrykket skal ikke påvirkes av tilleggsfelt som alg og use.
+		expect(jwkTommelavtrykk({ ...par.publicJwk, alg: undefined, use: undefined })).toBe(par.kid);
 	});
 });
 
