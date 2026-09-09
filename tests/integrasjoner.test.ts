@@ -87,7 +87,7 @@ beskriv('integrasjoner', () => {
 		it('varsler om interaksjon', async () => {
 			await forskriv({ ...resept, patientId, legemiddel: { navn: 'Warfarin', atc: 'B01AA03' } }, aktor);
 			const svar = await forskriv({ ...resept, patientId, legemiddel: { navn: 'Ibux', atc: 'M01AE01' } }, aktor);
-			const varsler = (svar.data as { varsler: string[] }).varsler;
+			const varsler = (svar.data as unknown as { varsler: string[] }).varsler;
 			expect(varsler.join(' ')).toMatch(/ALVORLIG/);
 			expect(varsler.join(' ')).toMatch(/blødningsrisiko/);
 		});
@@ -95,7 +95,7 @@ beskriv('integrasjoner', () => {
 		it('varsler om dobbeltforskrivning', async () => {
 			await forskriv({ ...resept, patientId }, aktor);
 			const svar = await forskriv({ ...resept, patientId }, aktor);
-			expect((svar.data as { varsler: string[] }).varsler.join(' ')).toMatch(/DOBBELTFORSKRIVNING/);
+			expect((svar.data as unknown as { varsler: string[] }).varsler.join(' ')).toMatch(/DOBBELTFORSKRIVNING/);
 		});
 
 		it('seponerer og fornyer', async () => {

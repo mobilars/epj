@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createHash, generateKeyPairSync, randomBytes } from 'node:crypto';
 import { en, exec, query } from '../src/lib/server/db/index';
 import { harTestdatabase, opprettTestdatabase, tomTabeller, type Testdatabase } from './fixtures/db';
-import { autentiserKlient, gyldigRedirectUri, registrerKlient, settKlientstatus } from '../src/lib/server/auth/klienter';
+import { autentiserKlient, gyldigRedirectUri, registrerKlient, settKlientstatus, type OAuthKlient } from '../src/lib/server/auth/klienter';
 import {
 	bytteInnKode,
 	forbrukLaunch,
@@ -64,8 +64,7 @@ beskriv('OAuth 2.1 og SMART App Launch', () => {
 			});
 
 		it('godtar en korrekt forespørsel', async () => {
-			const klient = (await en<{ client_id: string }>('SELECT client_id FROM oauth_client')) as never;
-			const v = validerAutorisasjonsforesporsel(sok(), { ...(klient as object), ...(await hentKlientRad()) } as never);
+			const v = validerAutorisasjonsforesporsel(sok(), await hentKlientRad());
 			expect(v.ok).toBe(true);
 		});
 
@@ -401,10 +400,12 @@ beskriv('OAuth 2.1 og SMART App Launch', () => {
 	});
 });
 
-async function hentKlientRad() {
+async function hentKlientRad(): Promise<OAuthKlient> {
 	const { hentKlient } = await import('../src/lib/server/auth/klienter');
 	const rad = await en<{ client_id: string }>('SELECT client_id FROM oauth_client ORDER BY opprettet LIMIT 1');
-	return (await hentKlient(rad?.client_id as string)) as never;
+	const klient = await hentKlient(rad?.client_id as string);
+	if (!klient) throw new Error('Fant ingen klient i testdatabasen');
+	return klient;
 }
 
 async function lagFremmedNokkel() {

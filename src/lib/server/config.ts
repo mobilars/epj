@@ -50,8 +50,16 @@ export const config = {
 		return this.baseUrl;
 	},
 
-	/** PostgreSQL. Applikasjonsdata ligger i skjemaet `epj`. */
-	databaseUrl: required('EPJ_DATABASE_URL', 'postgres://epj:epj@localhost:5432/epj'),
+	/**
+	 * PostgreSQL. Applikasjonsdata ligger i skjemaet `epj`.
+	 *
+	 * Obligatoriske verdier leses som getters, ikke ved modullasting: byggetrinnet
+	 * importerer serverkoden uten at driftsmiljøet finnes, og skal ikke feile av
+	 * den grunn. Mangler variabelen i produksjon, feiler første faktiske bruk.
+	 */
+	get databaseUrl() {
+		return required('EPJ_DATABASE_URL', 'postgres://epj:epj@localhost:5432/epj');
+	},
 	dbPoolMax: int('EPJ_DB_POOL_MAX', 10),
 	dbSsl: bool('EPJ_DB_SSL', process.env.NODE_ENV === 'production'),
 
@@ -77,7 +85,9 @@ export const config = {
 	},
 
 	/** Nøkkel for kryptering av data at rest (TOTP-hemmeligheter, private signeringsnøkler). */
-	dataEncryptionKey: required('EPJ_DATA_KEY', 'utviklingsnokkel-kun-for-lokal-bruk-0000'),
+	get dataEncryptionKey() {
+		return required('EPJ_DATA_KEY', 'utviklingsnokkel-kun-for-lokal-bruk-0000');
+	},
 
 	session: {
 		cookieName: 'epj_session',
