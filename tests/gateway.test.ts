@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { exec, query } from '../src/lib/server/db/index';
 import { harTestdatabase, opprettTestdatabase, tomTabeller, type Testdatabase } from './fixtures/db';
-import { startTestFhirServer, type TestFhirServer } from './fixtures/fhir-testserver';
+import { fhirForTest, type TestFhirServer } from './fixtures/fhir-testserver';
 import { appKontekst, kontekst } from './fixtures/kontekst';
 import { utfor } from '../src/lib/server/fhir/gateway';
 import { FhirError } from '../src/lib/server/fhir/outcome';
@@ -27,7 +27,7 @@ beskriv('FHIR-vokteren', () => {
 
 	beforeAll(async () => {
 		db = await opprettTestdatabase('gateway');
-		fhir = await startTestFhirServer();
+		fhir = await fhirForTest();
 		process.env.EPJ_HAPI_BASE_URL = fhir.url;
 	});
 
@@ -126,7 +126,9 @@ beskriv('FHIR-vokteren', () => {
 			const svar = await utfor({ ctx: kontekst(), metode: 'POST', sti: 'Observation/_search', sok: new URLSearchParams(), kropp: new URLSearchParams() });
 			expect((svar.ressurs as Bundle).entry).toHaveLength(0);
 			// Ingen kall skal ha gått videre til FHIR-serveren.
-			expect(fhir.kall.filter((k) => k.sti.startsWith('Observation/_search'))).toHaveLength(0);
+			if (!fhir.erEkte) {
+				expect(fhir.kall.filter((k) => k.sti.startsWith('Observation/_search'))).toHaveLength(0);
+			}
 		});
 
 		it('filtrerer bort sperrede pasienter etter at serveren har svart', async () => {
@@ -151,7 +153,9 @@ beskriv('FHIR-vokteren', () => {
 			const app = appKontekst('patient/Observation.rs?category=vital-signs', pasient1);
 			await utfor({ ctx: app, metode: 'POST', sti: 'Observation/_search', sok: new URLSearchParams(), kropp: new URLSearchParams() });
 			// Begrensningen skal ha nådd fram til serveren.
-			expect(fhir.kall.some((k) => k.sti === 'Observation/_search')).toBe(true);
+			if (!fhir.erEkte) {
+				expect(fhir.kall.some((k) => k.sti === 'Observation/_search')).toBe(true);
+			}
 		});
 
 		it('maskerer identifikatorer i loggen', async () => {
@@ -188,7 +192,7 @@ beskriv('FHIR-vokteren', () => {
 			await expect(
 				utfor({ ctx: kontekst(), metode: 'POST', sti: 'Observation', sok: new URLSearchParams(), kropp: { resourceType: 'Observation' } })
 			).rejects.toMatchObject({ status: 422 });
-			expect(fhir.kall.length).toBe(forFor);
+			if (!fhir.erEkte) expect(fhir.kall.length).toBe(forFor);
 		});
 
 		it('hindrer at en ressurs flyttes over på en pasient brukeren har tilgang til', async () => {
@@ -233,7 +237,9 @@ beskriv('FHIR-vokteren', () => {
 			).rejects.toMatchObject({ status: 403 });
 
 			// Hele transaksjonen skal være stoppet før den nådde serveren.
-			expect(fhir.kall.some((k) => k.metode === 'POST' && k.sti === '')).toBe(false);
+			if (!fhir.erEkte) {
+				expect(fhir.kall.some((k) => k.metode === 'POST' && k.sti === '')).toBe(false);
+			}
 		});
 
 		it('kjører en transaksjon der alt er tillatt', async () => {

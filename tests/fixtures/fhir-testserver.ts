@@ -16,7 +16,9 @@ import { randomUUID } from 'node:crypto';
 
 export interface TestFhirServer {
 	url: string;
-	server: Server;
+	server: Server | null;
+	/** True når testene kjører mot en ekte HAPI-server i stedet for dobbelen. */
+	erEkte: boolean;
 	lager: Map<string, Map<string, Record<string, unknown>>>;
 	kall: { metode: string; sti: string }[];
 	lukk(): Promise<void>;
@@ -61,6 +63,32 @@ function kodeVerdier(v: unknown): string[] {
 		const codings = (cc as { coding?: { system?: string; code?: string }[] })?.coding ?? [];
 		return codings.flatMap((c) => [c.code ?? '', `${c.system ?? ''}|${c.code ?? ''}`].filter(Boolean));
 	});
+}
+
+/**
+ * Gir en FHIR-server til testene.
+ *
+ * Med EPJ_BRUK_EKTE_HAPI=1 pekes testene mot en ekte HAPI-server i stedet for
+ * dobbelen. Da kjøres den samme testsuiten mot den virkelige implementasjonen,
+ * slik CI-jobben `integrasjon-hapi` gjør.
+ */
+export async function fhirForTest(): Promise<TestFhirServer> {
+	if (process.env.EPJ_BRUK_EKTE_HAPI === '1') {
+		const url = process.env.EPJ_HAPI_BASE_URL;
+		if (!url) throw new Error('EPJ_BRUK_EKTE_HAPI krever EPJ_HAPI_BASE_URL');
+		return {
+			url,
+			server: null,
+			erEkte: true,
+			lager: new Map(),
+			kall: [],
+			nullstill() {
+				/* En ekte server tømmes ikke mellom tester; testene lager egne pasienter. */
+			},
+			lukk: async () => undefined
+		};
+	}
+	return startTestFhirServer();
 }
 
 export async function startTestFhirServer(): Promise<TestFhirServer> {
@@ -246,6 +274,7 @@ export async function startTestFhirServer(): Promise<TestFhirServer> {
 	return {
 		url: `http://127.0.0.1:${port}/fhir`,
 		server,
+		erEkte: false,
 		lager,
 		kall,
 		nullstill() {

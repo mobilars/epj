@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { en, exec, query } from '../src/lib/server/db/index';
 import { harTestdatabase, opprettTestdatabase, tomTabeller, type Testdatabase } from './fixtures/db';
-import { startTestFhirServer, type TestFhirServer } from './fixtures/fhir-testserver';
+import { fhirForTest, type TestFhirServer } from './fixtures/fhir-testserver';
 import { forskriv, hentLegemiddelliste, fornye, seponer, synkHistorikk } from '../src/lib/server/integrasjoner/sfm/index';
 import { hentMottaker, kanMotta, sokMottakere, tilPart } from '../src/lib/server/integrasjoner/nhn/adresseregister';
 import { koeUt, listMeldinger, mottaMelding, registrerApprec, sendKo, ventendeKvitteringer } from '../src/lib/server/integrasjoner/nhn/meldingsko';
@@ -33,7 +33,7 @@ beskriv('integrasjoner', () => {
 
 	beforeAll(async () => {
 		db = await opprettTestdatabase('integr');
-		fhir = await startTestFhirServer();
+		fhir = await fhirForTest();
 		process.env.EPJ_HAPI_BASE_URL = fhir.url;
 	});
 	afterAll(async () => { await fhir.lukk(); await db.riv(); });
