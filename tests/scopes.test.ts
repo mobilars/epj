@@ -105,6 +105,37 @@ describe('innsnevring mot rolle', () => {
 		expect(ut).toBe('user/Observation.rs');
 	});
 
+	it('lar user/-scope dekke tilsvarende patient/-scope', () => {
+		// En app som startes i pasientkontekst ber om patient/-scope. Rollen til
+		// helsepersonell er beskrevet med user/-scope, og må dekke den smalere
+		// varianten - ellers kunne ingen kliniker starte en pasientnær app.
+		const ut = snevreInn(
+			'patient/Observation.rs patient/Condition.rs',
+			['patient/Observation.rs', 'patient/Condition.rs'],
+			new Set(['user/Observation.rs', 'user/Condition.cruds'])
+		);
+		expect(ut.split(' ').sort()).toEqual(['patient/Condition.rs', 'patient/Observation.rs']);
+	});
+
+	it('lar ikke patient/-scope dekke user/-scope', () => {
+		const ut = snevreInn('user/Observation.rs', ['user/Observation.rs'], new Set(['patient/Observation.rs']));
+		expect(ut).toBe('');
+	});
+
+	it('lar ikke system/-scope dekke brukerens scope', () => {
+		const ut = snevreInn('user/Observation.rs', ['user/Observation.rs'], new Set(['system/Observation.rs']));
+		expect(ut).toBe('');
+	});
+
+	it('gir ikke ubegrenset scope til en app som bare er tillatt et begrenset', () => {
+		const ut = snevreInn(
+			'patient/Observation.rs',
+			['patient/Observation.rs?category=vital-signs'],
+			new Set(['user/Observation.rs'])
+		);
+		expect(ut).toBe('');
+	});
+
 	it('beholder spesialscope uavhengig av rolle', () => {
 		const ut = snevreInn('openid launch/patient user/Patient.rs', ['openid', 'launch/patient', 'user/Patient.rs'], new Set(['user/Patient.rs']));
 		expect(ut.split(' ').sort()).toEqual(['launch/patient', 'openid', 'user/Patient.rs']);

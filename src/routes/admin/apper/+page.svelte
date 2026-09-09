@@ -58,6 +58,9 @@
 			<div style="flex:1 1 16rem"><label for="jwksUri">jwks_uri</label><input id="jwksUri" name="jwksUri" placeholder="https://app.example/jwks.json" /></div>
 			<div style="flex:1 1 12rem"><label for="databehandleravtale">Databehandleravtale</label><input id="databehandleravtale" name="databehandleravtale" placeholder="DBA-2026-001" /></div>
 		</div>
+		<div class="rad">
+			<div style="flex:1 1 18rem"><label for="launchUrl">Launch-URL (EHR launch)</label><input id="launchUrl" name="launchUrl" placeholder="https://app.example/launch" /></div>
+		</div>
 		<div class="felt"><label for="jwks">JWKS (JSON)</label><textarea id="jwks" name="jwks" placeholder={'{"keys":[...]}'}></textarea></div>
 		<button type="submit" class="primar">Registrer</button>
 	</form>

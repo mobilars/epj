@@ -21,12 +21,14 @@ export interface OAuthKlient {
 	krev_samtykke: boolean;
 	logo_url: string | null;
 	databehandleravtale: string | null;
+	/** URL journalen sender brukeren til ved EHR launch. */
+	launch_url: string | null;
 	status: string;
 	opprettet: string;
 }
 
 const FELT = `client_id, navn, type, klient_kategori, secret_hash, jwks, jwks_uri, redirect_uris,
-	tillatte_scopes, grant_types, krev_pkce, krev_samtykke, logo_url, databehandleravtale, status, opprettet`;
+	tillatte_scopes, grant_types, krev_pkce, krev_samtykke, logo_url, databehandleravtale, launch_url, status, opprettet`;
 
 export async function hentKlient(clientId: string): Promise<OAuthKlient | null> {
 	return en<OAuthKlient>(`SELECT ${FELT} FROM oauth_client WHERE client_id = $1`, [clientId]);
@@ -47,6 +49,7 @@ export interface NyKlient {
 	jwksUri?: string;
 	logoUrl?: string;
 	databehandleravtale?: string;
+	launchUrl?: string;
 	opprettetAv?: string;
 }
 
@@ -55,14 +58,14 @@ export async function registrerKlient(inn: NyKlient): Promise<{ klient: OAuthKli
 	const secret = inn.type === 'confidential' && !inn.jwks && !inn.jwksUri ? nyToken(32) : undefined;
 	await exec(
 		`INSERT INTO oauth_client (client_id, navn, type, klient_kategori, secret_hash, jwks, jwks_uri,
-			redirect_uris, tillatte_scopes, grant_types, krev_pkce, logo_url, databehandleravtale, opprettet_av)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+			redirect_uris, tillatte_scopes, grant_types, krev_pkce, logo_url, databehandleravtale, launch_url, opprettet_av)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
 		[
 			clientId, inn.navn, inn.type, inn.kategori, secret ? hashPassord(secret) : null,
 			inn.jwks ? JSON.stringify(inn.jwks) : null, inn.jwksUri ?? null,
 			JSON.stringify(inn.redirectUris), JSON.stringify(inn.scopes),
 			JSON.stringify(inn.grantTypes ?? (inn.kategori === 'backend' ? ['client_credentials'] : ['authorization_code', 'refresh_token'])),
-			inn.type === 'public', inn.logoUrl ?? null, inn.databehandleravtale ?? null, inn.opprettetAv ?? null
+			inn.type === 'public', inn.logoUrl ?? null, inn.databehandleravtale ?? null, inn.launchUrl ?? null, inn.opprettetAv ?? null
 		]
 	);
 	const klient = await hentKlient(clientId);

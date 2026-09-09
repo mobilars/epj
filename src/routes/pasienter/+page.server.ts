@@ -1,4 +1,4 @@
-import { redirect } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { ressurser, sokRessurser } from '$srv/fhir/internt';
 import { tilPasientVisning } from '$srv/fhir/visning';
@@ -16,6 +16,11 @@ import { query } from '$srv/db';
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx) redirect(303, `/logg-inn?retur=${encodeURIComponent(event.url.pathname)}`);
+	// Roller uten klinisk lesetilgang, som systemansvarlig, skal ikke kunne åpne
+	// pasientlisten i det hele tatt - heller ikke for å se at den er tom.
+	if (!ctx.rettigheter.has('journal:les')) {
+		error(403, 'Rollen din har ikke tilgang til pasientopplysninger.');
+	}
 
 	const sok = (event.url.searchParams.get('sok') ?? '').trim();
 

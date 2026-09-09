@@ -152,26 +152,41 @@ export function sjekkScope(sett: ScopeSett, spm: ScopeSpørsmål): ScopeSvar {
  */
 export function snevreInn(forespurt: string, tillatteForKlient: string[], tillatteForBruker: Set<string>): string {
 	const klientTillatt = new Set(tillatteForKlient);
-	const dekkesAvKlient = (s: string) => klientTillatt.has(s) || klientTillatt.has('*') || dekkesAvWildcard(s, klientTillatt);
 	return forespurt
 		.split(/\s+/)
 		.filter(Boolean)
-		.filter((s) => dekkesAvKlient(s))
-		.filter((s) => SPESIALSCOPES.has(s) || tillatteForBruker.has(s) || dekkesAvWildcard(s, tillatteForBruker))
+		.filter((s) => klientTillatt.has(s) || dekkesAv(s, klientTillatt))
+		.filter((s) => SPESIALSCOPES.has(s) || tillatteForBruker.has(s) || dekkesAv(s, tillatteForBruker))
 		.join(' ');
 }
 
-function dekkesAvWildcard(scope: string, tillatte: Set<string>): boolean {
+/**
+ * Avgjør om et scope dekkes av et sett andre scope.
+ *
+ * `*` dekker alle ressurstyper, og et scope med flere operasjoner dekker et med
+ * færre. `patient/` dekkes også av tilsvarende `user/`, fordi patient-varianten
+ * er en innsnevring til én pasient: har rollen lov til å lese målinger for alle
+ * pasientene sine, har den også lov til å la en app lese målinger for én av dem.
+ * Motsatt vei gjelder ikke, og `system/` dekker ingenting av dette - det er
+ * forbeholdt tjeneste-til-tjeneste-tilgang uten bruker.
+ */
+export function dekkesAv(scope: string, tillatte: Set<string>): boolean {
 	const parset = parseScope(scope);
 	if (!parset) return false;
 	for (const kandidat of tillatte) {
 		const k = parseScope(kandidat);
 		if (!k) continue;
-		if (k.kontekst !== parset.kontekst) continue;
+		if (!kontekstDekker(k.kontekst, parset.kontekst)) continue;
 		if (k.ressurs !== '*' && k.ressurs !== parset.ressurs) continue;
+		if (k.begrensning && !parset.begrensning) continue;
 		if ([...parset.operasjoner].every((o) => k.operasjoner.has(o))) return true;
 	}
 	return false;
+}
+
+function kontekstDekker(har: Kontekst, ber: Kontekst): boolean {
+	if (har === ber) return true;
+	return har === 'user' && ber === 'patient';
 }
 
 /** Menneskelig forklaring til samtykkedialogen. */

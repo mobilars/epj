@@ -36,6 +36,7 @@ export const load: PageServerLoad = async (event) => {
 			grantTypes: k.grant_types,
 			status: k.status,
 			databehandleravtale: k.databehandleravtale,
+			launchUrl: k.launch_url,
 			harNokler: Boolean(k.jwks || k.jwks_uri),
 			aktiveTokens: tokenKart.get(k.client_id) ?? 0,
 			opprettet: new Date(k.opprettet).toLocaleDateString('nb-NO')
@@ -76,6 +77,7 @@ export const actions: Actions = {
 			navn, type, kategori, redirectUris, scopes,
 			jwks,
 			jwksUri: String(form.get('jwksUri') ?? '').trim() || undefined,
+			launchUrl: String(form.get('launchUrl') ?? '').trim() || undefined,
 			databehandleravtale: String(form.get('databehandleravtale') ?? '').trim() || undefined,
 			opprettetAv: ctx.userId ?? undefined
 		});

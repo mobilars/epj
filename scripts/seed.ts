@@ -257,6 +257,7 @@ async function main(): Promise<void> {
 			'openid', 'fhirUser', 'launch', 'launch/patient', 'online_access',
 			'patient/Patient.rs', 'patient/Observation.rs', 'patient/Condition.rs', 'patient/MedicationRequest.rs'
 		],
+		launchUrl: 'http://localhost:4000/launch',
 		databehandleravtale: 'DBA-2026-001'
 	});
 	console.log(`SMART-app registrert: ${klient.client_id}${secret ? ` (hemmelighet: ${secret})` : ''}`);

@@ -1,4 +1,4 @@
-import { redirect } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
 import { utfor } from '$srv/fhir/gateway';
 import { FhirError } from '$srv/fhir/outcome';
@@ -20,6 +20,9 @@ import { fhirKlient } from '$srv/fhir/client';
 export const load: LayoutServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx) redirect(303, `/logg-inn?retur=${encodeURIComponent(event.url.pathname)}`);
+	if (!ctx.rettigheter.has('journal:les')) {
+		error(403, 'Rollen din har ikke tilgang til pasientopplysninger.');
+	}
 	const patientId = event.params.id;
 
 	let pasient = null;

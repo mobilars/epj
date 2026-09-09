@@ -24,6 +24,7 @@
 		{ href: `/pasienter/${data.patientId}/legemidler`, tekst: 'Legemidler' },
 		{ href: `/pasienter/${data.patientId}/meldinger`, tekst: 'Meldinger' },
 		{ href: `/pasienter/${data.patientId}/oppgjor`, tekst: 'Oppgjør' },
+		{ href: `/pasienter/${data.patientId}/apper`, tekst: 'Apper' },
 		{ href: `/pasienter/${data.patientId}/logg`, tekst: 'Innsynslogg' }
 	]);
 </script>
