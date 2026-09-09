@@ -36,7 +36,27 @@ export const config = {
 		return this.baseUrl;
 	},
 
-	databasePath: env.EPJ_DB_PATH ?? 'data/epj.db',
+	/** PostgreSQL. Applikasjonsdata ligger i skjemaet `epj`. */
+	databaseUrl: required('EPJ_DATABASE_URL', 'postgres://epj:epj@localhost:5432/epj'),
+	dbPoolMax: int('EPJ_DB_POOL_MAX', 10),
+	dbSsl: bool('EPJ_DB_SSL', process.env.NODE_ENV === 'production'),
+
+	/**
+	 * HAPI FHIR JPA-server. Denne er journalens kliniske lager: den eier
+	 * FHIR-ressursene, versjonshistorikken, søkeindeksene og profilvalideringen.
+	 * Serveren skal aldri eksponeres direkte mot internett - all trafikk går
+	 * gjennom `/fhir` i denne applikasjonen, som håndhever tilgangskontroll og
+	 * skriver sikkerhetslogg.
+	 */
+	fhirServer: {
+		baseUrl: (env.EPJ_HAPI_BASE_URL ?? 'http://localhost:8080/fhir').replace(/\/$/, ''),
+		/** Delt hemmelighet mot HAPI (Basic auth i referanseoppsettet). */
+		brukernavn: env.EPJ_HAPI_USER ?? '',
+		passord: env.EPJ_HAPI_PASSWORD ?? '',
+		timeoutMs: int('EPJ_HAPI_TIMEOUT_MS', 20_000),
+		/** Slår på $validate mot HAPI før skriving. */
+		validerVedSkriving: bool('EPJ_HAPI_VALIDATE', false)
+	},
 
 	/** Nøkkel for kryptering av data at rest (TOTP-hemmeligheter, private signeringsnøkler). */
 	dataEncryptionKey: required('EPJ_DATA_KEY', 'utviklingsnokkel-kun-for-lokal-bruk-0000'),

@@ -1,109 +1,129 @@
-import { DatabaseSync, type StatementSync } from 'node:sqlite';
-import { readFileSync, mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import pg from 'pg';
 import { config } from '../config';
 
-export type Row = Record<string, unknown>;
+const { Pool } = pg;
 
-let instance: DatabaseSync | null = null;
-const statementCache = new Map<string, StatementSync>();
+/**
+ * PostgreSQL-tilgang. Alle spørringer bruker parametriserte uttrykk ($1, $2 ...)
+ * - ingen brukerdata settes noen gang inn i SQL som tekst.
+ *
+ * Transaksjoner spores i AsyncLocalStorage slik at `query()` inne i en
+ * `transaction()` automatisk bruker samme klient som transaksjonen.
+ */
 
-function schemaPath(): string {
-	// Fungerer både under Vite (kildetre) og i bygget adapter-node-output.
-	const here = dirname(fileURLToPath(import.meta.url));
-	for (const candidate of [
-		join(here, 'schema.sql'),
-		join(process.cwd(), 'src/lib/server/db/schema.sql')
-	]) {
-		try {
-			readFileSync(candidate);
-			return candidate;
-		} catch {
-			/* prøv neste */
-		}
+let pool: pg.Pool | null = null;
+const transaksjonsKontekst = new AsyncLocalStorage<pg.PoolClient>();
+
+// PostgreSQL returnerer BIGINT som streng for å unngå tap av presisjon.
+// Beløp lagres i øre og holder seg trygt innenfor Number.MAX_SAFE_INTEGER.
+pg.types.setTypeParser(20, (v: string) => Number.parseInt(v, 10));
+
+export function getPool(): pg.Pool {
+	if (!pool) {
+		pool = new Pool({
+			connectionString: config.databaseUrl,
+			max: config.dbPoolMax,
+			idleTimeoutMillis: 30_000,
+			connectionTimeoutMillis: 10_000,
+			application_name: 'epj',
+			// Applikasjonstabellene ligger i skjemaet `epj`; HAPI eier `public`.
+			options: '-c search_path=epj,public',
+			...(config.dbSsl ? { ssl: { rejectUnauthorized: true } } : {})
+		});
+		pool.on('error', (err) => {
+			console.error('[db] uventet feil på inaktiv tilkobling', err);
+		});
 	}
-	throw new Error('Finner ikke schema.sql');
+	return pool;
 }
 
-export function db(): DatabaseSync {
-	if (instance) return instance;
-	if (config.databasePath !== ':memory:') mkdirSync(dirname(config.databasePath), { recursive: true });
-	instance = new DatabaseSync(config.databasePath);
-	instance.exec(readFileSync(schemaPath(), 'utf8'));
-	instance.exec("INSERT OR IGNORE INTO schema_version (versjon, anvendt) VALUES (1, datetime('now'))");
-	return instance;
+/** Brukes av integrasjonstestene til å injisere en egen pool. */
+export function setPool(ny: pg.Pool | null): void {
+	pool = ny;
 }
 
-/** Brukes av testene til å kjøre mot en isolert in-memory-database. */
-export function useDatabase(database: DatabaseSync): void {
-	instance = database;
-	statementCache.clear();
-}
-
-export function resetDatabaseForTest(): DatabaseSync {
-	const fresh = new DatabaseSync(':memory:');
-	fresh.exec(readFileSync(schemaPath(), 'utf8'));
-	useDatabase(fresh);
-	return fresh;
-}
-
-function prepare(sql: string): StatementSync {
-	let stmt = statementCache.get(sql);
-	if (!stmt) {
-		stmt = db().prepare(sql);
-		statementCache.set(sql, stmt);
+export async function lukkPool(): Promise<void> {
+	if (pool) {
+		await pool.end();
+		pool = null;
 	}
-	return stmt;
 }
 
-type Param = string | number | bigint | null | Uint8Array;
-
-function normalise(params: unknown[]): Param[] {
-	return params.map((p) => {
-		if (p === undefined || p === null) return null;
-		if (typeof p === 'boolean') return p ? 1 : 0;
-		if (typeof p === 'string' || typeof p === 'number' || typeof p === 'bigint') return p;
-		if (p instanceof Uint8Array) return p;
-		return JSON.stringify(p);
-	});
+function klient(): pg.Pool | pg.PoolClient {
+	return transaksjonsKontekst.getStore() ?? getPool();
 }
 
-export function all<T = Row>(sql: string, ...params: unknown[]): T[] {
-	return prepare(sql).all(...normalise(params)) as T[];
+export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(
+	sql: string,
+	params: unknown[] = []
+): Promise<T[]> {
+	const res = await klient().query<T>(sql, params as never[]);
+	return res.rows;
 }
 
-export function get<T = Row>(sql: string, ...params: unknown[]): T | undefined {
-	return prepare(sql).get(...normalise(params)) as T | undefined;
+export async function en<T extends pg.QueryResultRow = pg.QueryResultRow>(
+	sql: string,
+	params: unknown[] = []
+): Promise<T | null> {
+	const rader = await query<T>(sql, params);
+	return rader[0] ?? null;
 }
 
-export function run(sql: string, ...params: unknown[]): { changes: number; lastInsertRowid: number } {
-	const r = prepare(sql).run(...normalise(params));
-	return { changes: Number(r.changes), lastInsertRowid: Number(r.lastInsertRowid) };
+export async function exec(sql: string, params: unknown[] = []): Promise<number> {
+	const res = await klient().query(sql, params as never[]);
+	return res.rowCount ?? 0;
 }
 
 /**
- * Kjører `fn` i en transaksjon. Nøstede kall deltar i den ytre transaksjonen
- * (SQLite støtter ikke ekte nøsting uten savepoints, og vi trenger dem ikke her).
+ * Kjører `fn` i en databasetransaksjon. Nøstede kall bruker savepoints, slik at
+ * en indre feil kan rulles tilbake uten å avbryte hele den ytre transaksjonen.
  */
-let depth = 0;
-export function transaction<T>(fn: () => T): T {
-	if (depth > 0) return fn();
-	const d = db();
-	d.exec('BEGIN IMMEDIATE');
-	depth++;
+export async function transaction<T>(fn: () => Promise<T>): Promise<T> {
+	const eksisterende = transaksjonsKontekst.getStore();
+	if (eksisterende) {
+		const sp = `sp_${Math.random().toString(36).slice(2, 10)}`;
+		await eksisterende.query(`SAVEPOINT ${sp}`);
+		try {
+			const r = await fn();
+			await eksisterende.query(`RELEASE SAVEPOINT ${sp}`);
+			return r;
+		} catch (err) {
+			await eksisterende.query(`ROLLBACK TO SAVEPOINT ${sp}`);
+			throw err;
+		}
+	}
+
+	const c = await getPool().connect();
 	try {
-		const result = fn();
-		d.exec('COMMIT');
-		return result;
+		await c.query('BEGIN');
+		const r = await transaksjonsKontekst.run(c, fn);
+		await c.query('COMMIT');
+		return r;
 	} catch (err) {
 		try {
-			d.exec('ROLLBACK');
+			await c.query('ROLLBACK');
 		} catch {
-			/* transaksjonen kan allerede være avbrutt */
+			/* tilkoblingen kan allerede være borte */
 		}
 		throw err;
 	} finally {
-		depth--;
+		c.release();
+	}
+}
+
+/** Rådgivende lås brukt av bakgrunnsjobbene så bare én instans kjører av gangen. */
+export async function medLaas<T>(nokkel: number, fn: () => Promise<T>): Promise<T | null> {
+	const c = await getPool().connect();
+	try {
+		const res = await c.query<{ locked: boolean }>('SELECT pg_try_advisory_lock($1) AS locked', [nokkel]);
+		if (!res.rows[0]?.locked) return null;
+		try {
+			return await fn();
+		} finally {
+			await c.query('SELECT pg_advisory_unlock($1)', [nokkel]);
+		}
+	} finally {
+		c.release();
 	}
 }

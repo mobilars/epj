@@ -2,7 +2,7 @@ import { FhirError, issue } from './outcome';
 import { SEARCH_PARAMS } from './searchparams';
 import type { FhirResource, OperationOutcomeIssue } from './types';
 import { SYSTEM, gyldigHprNummer, gyldigNorskPersonnummer, gyldigOrganisasjonsnummer } from './kodeverk';
-import { hentVerdier } from './indexing';
+import { hentVerdier } from './fhirpath';
 
 const ID_MONSTER = /^[A-Za-z0-9\-.]{1,64}$/;
 
