@@ -120,7 +120,17 @@ async function handleIContext(
 	event.locals.auth = null;
 
 	const path = event.url.pathname;
-	const isFhirApi = path.startsWith('/fhir') || path.startsWith('/api') || path.startsWith('/oauth');
+	/**
+	 * API responses get a minimal policy, because nothing renders them as HTML.
+	 *
+	 * The consent dialog is the exception under /oauth: it is a page a person
+	 * reads and presses a button on, and it has to render inside the frame an
+	 * embedded app runs in. Treating it as an API response gave it
+	 * `default-src 'none'` and no framing, and the app never got past consent.
+	 */
+	const isFhirApi =
+		(path.startsWith('/fhir') || path.startsWith('/api') || path.startsWith('/oauth')) &&
+		!path.startsWith('/oauth/authorize');
 
 	// Platform administration is reached only on the platform's own hostname,
 	// and the organisation's pages are not reachable from there.

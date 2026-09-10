@@ -77,7 +77,15 @@ export function securityHeaders(isFhirApi: boolean): Record<string, string> {
 		'referrer-policy': 'no-referrer',
 		'cross-origin-opener-policy': 'same-origin',
 		'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
-		'x-frame-options': 'DENY'
+		/*
+		 * SAMEORIGIN, not DENY.
+		 *
+		 * X-Frame-Options has no equivalent of frame-ancestors 'self', and DENY
+		 * overrides the CSP in browsers that honour both - so an embedded app's
+		 * consent step was blocked however the CSP was written. A foreign site
+		 * still cannot frame the record, which is the point of the header.
+		 */
+		'x-frame-options': 'SAMEORIGIN'
 	};
 	if (config.security.httpsOnly) {
 		shared['strict-transport-security'] = 'max-age=31536000; includeSubDomains';
