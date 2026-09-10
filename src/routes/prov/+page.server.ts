@@ -1,7 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { config } from '$srv/config';
-import { createTrial, trialsAreOpen } from '$srv/tenant/trial';
+import { addressChoices, createTrial, trialsAreOpen } from '$srv/tenant/trial';
 import { requestEmailCode } from '$srv/auth/email-login';
 import { rateLimit } from '$srv/http';
 import { validNorwegianNationalId } from '$srv/fhir/codesystems';
@@ -18,9 +18,13 @@ import { log } from '$srv/audit';
  * also what proves the address was real. Nothing is confirmed beforehand: an
  * organisation nobody can sign in to costs nothing and disappears from view.
  */
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async (event) => {
 	if (!(await trialsAreOpen())) redirect(303, '/logg-inn');
-	return { open: true };
+	return {
+		addresses: addressChoices(),
+		// The address being looked at now, when it is one of the shared ones.
+		here: event.url.hostname
+	};
 };
 
 export const actions: Actions = {
@@ -33,7 +37,8 @@ export const actions: Actions = {
 			navn: text('navn'),
 			epost: text('epost'),
 			virksomhet: text('virksomhet'),
-			fodselsnummer: text('fodselsnummer')
+			fodselsnummer: text('fodselsnummer'),
+			adresse: text('adresse')
 		};
 		const fields = { values };
 
@@ -73,6 +78,7 @@ export const actions: Actions = {
 				contactEmail: values.epost,
 				practiceName: values.virksomhet,
 				nationalId: nationalId || undefined,
+				hostname: values.adresse || event.url.hostname,
 				ip: event.locals.clientIp
 			},
 			actor

@@ -32,6 +32,8 @@ export interface TrialRequest {
 	 * reach it.
 	 */
 	nationalId?: string;
+	/** Which shared address the practice will be reached on. */
+	hostname?: string;
 	ip: string | null;
 }
 
@@ -62,7 +64,14 @@ function slugFor(name: string): string {
 }
 
 export async function trialsAreOpen(): Promise<boolean> {
-	return config.tenant.trialsEnabled && Boolean(config.tenant.trialHostname);
+	// The main address is always shared, so there is always somewhere to put a
+	// trial. Whether anyone may make one is the only real question.
+	return config.tenant.trialsEnabled && config.tenant.sharedHostnames.length > 0;
+}
+
+/** The addresses a new organisation may be reached on. */
+export function addressChoices(): { hostname: string; url: string }[] {
+	return config.tenant.sharedHostnames.map((hostname) => ({ hostname, url: `https://${hostname}` }));
 }
 
 /**
@@ -84,9 +93,12 @@ export async function createTrial(request: TrialRequest, actor: AuditActor): Pro
 	}
 
 	const id = slugFor(request.practiceName || request.contactName);
-	const base = config.tenant.trialHostname
-		? `https://${config.tenant.trialHostname}`
-		: config.baseUrl.replace(/\/$/, '');
+	// Whichever shared address was chosen, and the main one when the choice is
+	// not one we offer - the list is small and comes from configuration, so
+	// anything else is either a stale form or somebody trying it on.
+	const shared = config.tenant.sharedHostnames;
+	const chosen = request.hostname && shared.includes(request.hostname) ? request.hostname : shared[0];
+	const base = `https://${chosen}`;
 
 	const result = await createTenant(
 		{

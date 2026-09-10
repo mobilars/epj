@@ -201,15 +201,30 @@ export const config = {
 		 */
 		developerHostname: env.EPJ_DEVELOPER_HOSTNAME ?? '',
 		/**
-		 * The hostname trial organisations share.
+		 * Addresses that belong to no single organisation.
 		 *
-		 * They have no hostname each: which organisation a request belongs to
-		 * follows from who is signed in, not from the address. That is a
-		 * deliberate narrowing - it works because a trial user belongs to exactly
-		 * one organisation and signs in by email - and it is why trials cannot be
-		 * reached from a practice's own hostname.
+		 * On one of these, which organisation a request concerns follows from who
+		 * is signed in rather than from the address. The main address is always
+		 * one of them; more can be listed, and an organisation picks among them
+		 * when it is created.
+		 *
+		 * A hostname registered to an organisation is not shared, whatever this
+		 * says: the lookup by hostname wins, because an address somebody was given
+		 * deliberately should keep meaning what they were told it means.
 		 */
-		trialHostname: env.EPJ_PROVE_VERTSNAVN ?? '',
+		get sharedHostnames(): string[] {
+			const listed = (env.EPJ_DELTE_VERTSNAVN ?? '')
+				.split(/[\s,]+/)
+				.map((h) => h.trim().toLowerCase())
+				.filter(Boolean);
+			let main = '';
+			try {
+				main = new URL(env.EPJ_BASE_URL ?? 'http://localhost:5173').hostname;
+			} catch {
+				/* an unparseable base URL is reported elsewhere */
+			}
+			return [...new Set([main, ...listed].filter(Boolean))];
+		},
 		/** Whether anyone may create a trial organisation from the front page. */
 		trialsEnabled: bool('EPJ_PROVEKONTO', false),
 		/** The hostname platform administration is reached on. */

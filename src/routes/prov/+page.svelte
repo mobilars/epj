@@ -1,5 +1,5 @@
 <script lang="ts">
-	let { form } = $props();
+	let { data, form } = $props();
 	const was = (f: string) =>
 		(form as { values?: Record<string, string> } | null)?.values?.[f] ?? '';
 </script>
@@ -30,6 +30,21 @@
 				<label for="virksomhet">Navn på kontoret</label>
 				<input id="virksomhet" name="virksomhet" required value={was('virksomhet')} placeholder="Storgata Legesenter" />
 			</div>
+			{#if data.addresses.length > 1}
+				<div class="felt">
+					<label for="adresse">Adresse</label>
+					<select id="adresse" name="adresse">
+						{#each data.addresses as a (a.hostname)}
+							<option value={a.hostname} selected={a.hostname === data.here}>{a.hostname}</option>
+						{/each}
+					</select>
+					<small class="svak">
+						Adressen deles med andre virksomheter. Hvilken journal du havner i, følger av hvem
+						som er innlogget – ikke av adressen.
+					</small>
+				</div>
+			{/if}
+
 			<div class="felt">
 				<label for="fodselsnummer">Fødselsnummer <span class="svak">(valgfritt)</span></label>
 				<input id="fodselsnummer" name="fodselsnummer" inputmode="numeric" value={was('fodselsnummer')} />

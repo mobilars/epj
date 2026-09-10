@@ -88,36 +88,6 @@ async function resolveTenant(
 	hostname: string,
 	sessionTenantId?: string | null
 ): Promise<{ tenant: Tenant; isPlatform: boolean } | { error: string; status: number }> {
-	/**
-	 * Trial organisations share one hostname, and the organisation follows from
-	 * who is signed in.
-	 *
-	 * The narrowing that makes this safe: the id comes from the session, which
-	 * is server-side, never from anything the client can name. A signed-out
-	 * visitor here gets the front page and the sign-in, and no organisation at
-	 * all - which is why this cannot be used to reach a practice that has its
-	 * own hostname.
-	 */
-	if (config.tenant.trialHostname && hostname === config.tenant.trialHostname) {
-		if (!sessionTenantId) {
-			const fallback = await getTenant(config.tenant.defaultValue);
-			if (!fallback) return { error: 'Standardvirksomheten mangler', status: 500 };
-			return { tenant: fallback, isPlatform: false };
-		}
-		const theirs = await getTenant(sessionTenantId);
-		if (!theirs) return { error: 'Virksomheten finnes ikke', status: 404 };
-		if (theirs.status !== 'aktiv') {
-			return { error: `Virksomheten er ${theirs.status}.`, status: 503 };
-		}
-		return { tenant: theirs, isPlatform: false };
-	}
-
-	if (config.tenant.platformHostname && hostname === config.tenant.platformHostname) {
-		const platform = await getTenant(PLATFORM_TENANT);
-		if (!platform) return { error: 'Plattformvirksomheten mangler', status: 500 };
-		return { tenant: platform, isPlatform: true };
-	}
-
 	const funnet = await getTenantOnHostname(hostname);
 	if (funnet) {
 		if (funnet.status !== 'aktiv') {

@@ -45,9 +45,9 @@ export const load: PageServerLoad = async (event) => {
 		// The other ways in, so the front page can point at them rather than
 		// leaving people to guess at hostnames.
 		emailLogin: config.testLogin.epost && allows(requireTenant().login_level, 'epost'),
-		trialUrl: config.tenant.trialsEnabled && config.tenant.trialHostname
-			? `https://${config.tenant.trialHostname}/prov`
-			: null,
+		// The trial form lives on every shared address; the one being looked at
+		// now is the natural place to send someone.
+		trialUrl: config.tenant.trialsEnabled ? '/prov' : null,
 		platformUrl: config.tenant.platformHostname ? `https://${config.tenant.platformHostname}/systemadmin` : null,
 		developerUrl: config.tenant.developerHostname ? `https://${config.tenant.developerHostname}/utvikler` : null
 	};
