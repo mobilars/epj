@@ -3,19 +3,19 @@ import { one, exec } from './db';
 import { config } from './config';
 import { currentTenant } from './tenant/context';
 
-/** Utleder klient-IP fra betrodde proxy-headere. */
+/** Derives the client IP from trusted proxy headers. */
 export function clientIp(event: RequestEvent): string {
 	const hops = config.security.trustedProxyHops;
 	const forwarded = event.request.headers.get('x-forwarded-for');
 	if (forwarded && hops > 0) {
 		const chain = forwarded.split(',').map((s) => s.trim()).filter(Boolean);
-		// Ta adressen som ligger `hops` fra slutten - alt lenger til venstre kan
-		// klienten selv ha satt.
+		// Take the address `hops` from the end - anything further left may have
+		// been set by the client itself.
 		//
-		// Er kjeden kortere enn antall betrodde hopp, har den ikke vært gjennom de
-		// proxyene vi tror. Da er hele headeren klientens eget verk, og vi bruker
-		// den ikke: ellers kunne hvem som helst velge sin egen adresse, og både
-		// ratebegrensningen per IP og kilde-IP i sikkerhetsloggen ville vært verdiløs.
+		// If the chain is shorter than the number of trusted hops, it has not been
+		// through the proxies we believe. The whole header is then the client's own
+		// work and we do not use it: otherwise anyone could pick their own address,
+		// and both per-IP rate limiting and source IP in the audit log would be worthless.
 		if (chain.length >= hops) {
 			const candidate = chain[chain.length - hops];
 			if (candidate) return candidate;
@@ -29,16 +29,16 @@ export function clientIp(event: RequestEvent): string {
 }
 
 /**
- * Enkel tellerbasert ratebegrensning i databasen.
- * Deles mellom instanser, og tåler at appen skaleres horisontalt.
+ * Simple counter-based rate limiting in the database.
+ * Shared between instances, and survives the app being scaled horizontally.
  */
 export async function rateLimit(
 	bucket: string,
 	max: number,
 	windowSekunder: number
 ): Promise<{ allowed: boolean; remaining: number; nullstillesAbout: number }> {
-	// Virksomheten inngår i nøkkelen, slik at én virksomhets trafikk ikke kan
-	// stenge ute en annen.
+	// The organisation is part of the key, so one organisation's traffic cannot
+	// shut out another's.
 	const key = `${currentTenant()?.id ?? 'ukjent'}:${bucket}`;
 	const now = Math.floor(Date.now() / 1000);
 	const windowStart = now - (now % windowSekunder);
@@ -58,18 +58,18 @@ export async function rateLimit(
 	};
 }
 
-/** Vedlikehold. Går bevisst på tvers av virksomheter: sletter bare gamle tellere. */
+/** Maintenance. Deliberately across organisations: deletes only old counters. */
 export async function purgeRateLimit(): Promise<number> {
 	return exec('DELETE FROM rate_limit WHERE window_start < $1', [Math.floor(Date.now() / 1000) - 86400]);
 }
 
 /**
- * Sikkerhetsheadere.
+ * Security headers.
  *
- * Innholdssikkerhetspolicyen for HTML-sider settes av SvelteKit selv
- * (`kit.csp` i svelte.config.js), slik at rammeverkets egne innebygde skript
- * får riktig nonce. Her settes de øvrige headerne, pluss en minimal policy for
- * API-svar, som aldri rendres som HTML.
+ * The content security policy for HTML pages is set by SvelteKit itself
+ * (`kit.csp` in svelte.config.js), so the framework's own inline scripts get
+ * the right nonce. The remaining headers are set here, plus a minimal policy
+ * for API responses, which are never rendered as HTML.
  */
 export function securityHeaders(isFhirApi: boolean): Record<string, string> {
 	const shared: Record<string, string> = {
@@ -83,13 +83,13 @@ export function securityHeaders(isFhirApi: boolean): Record<string, string> {
 		shared['strict-transport-security'] = 'max-age=31536000; includeSubDomains';
 	}
 	if (isFhirApi) {
-		// API-svar rendres ikke som HTML; en minimal policy holder.
+		// API responses are not rendered as HTML; a minimal policy is enough.
 		return { ...shared, 'content-security-policy': "default-src 'none'; frame-ancestors 'none'", 'cache-control': 'no-store' };
 	}
 	return { ...shared, 'cache-control': 'no-store, no-cache, must-revalidate' };
 }
 
-/** CORS for FHIR-endepunktet. SMART-apper kjører i nettleseren fra egne opphav. */
+/** CORS for the FHIR endpoint. SMART apps run in the browser from their own origins. */
 export function corsHeadere(origin: string | null, allowedOpphav: string[]): Record<string, string> {
 	if (!origin) return {};
 	const allowed = allowedOpphav.includes(origin) || allowedOpphav.includes('*');

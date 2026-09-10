@@ -5,19 +5,19 @@ import type { AuthContext } from '../authz/context';
 import type { FhirResource } from '../fhir/types';
 
 /**
- * Sikkerhetslogg.
+ * Audit log.
  *
- * EPJ-standarden krever at alle oppslag i og endringer av journalen logges, at
- * loggen ikke kan endres, og at pasienten kan få innsyn i hvem som har lest
- * journalen. Hver rad lagres som en fullstendig FHIR R5 AuditEvent, og radene
- * lenkes med SHA-256 slik at fjerning eller endring av en rad brytes opp i
- * verifiseringen (`verifiserLoggkjede`).
+ * The EPJ standard requires that every read of and change to the record is
+ * logged, that the log cannot be altered, and that the patient can see who has
+ * read their record. Each row is stored as a complete FHIR R5 AuditEvent, and
+ * rows are chained with SHA-256 so that removing or altering one breaks
+ * verification (`verifyLogChain`).
  *
- * Databasen har i tillegg en trigger som avviser UPDATE og DELETE på tabellen.
+ * The database additionally has a trigger refusing UPDATE and DELETE on the table.
  *
- * Loggen er delt per virksomhet, og hash-kjeden lenkes innenfor virksomheten.
- * Da kan hver virksomhet verifisere sin egen kjede uten å se de andres, og en
- * virksomhet kan ikke bryte en annens kjede ved å skrive et innslag.
+ * The log is partitioned per organisation, and the hash chain links within the
+ * organisation. Each can then verify its own chain without seeing the others,
+ * and one organisation cannot break another's chain by writing an entry.
  */
 
 export type Action = 'C' | 'R' | 'U' | 'D' | 'E';
@@ -33,7 +33,7 @@ export interface AuditEntry {
 	entityRef?: string | null;
 	entityName?: string | null;
 	purposeOfUse?: string;
-	/** Ekstra felt som legges på AuditEvent.entity[].detail. */
+	/** Extra fields attached to AuditEvent.entity[].detail. */
 	details?: Record<string, string | number | boolean | null | undefined>;
 }
 
@@ -117,12 +117,12 @@ function buildAuditEvent(entry: AuditEntry, actor: AuditActor, timestamp: string
 }
 
 /**
- * Kanonisk JSON: nøkler sortert rekursivt.
+ * Canonical JSON: keys sorted recursively.
  *
- * Innholdet lagres som `jsonb` for å kunne søkes i, men PostgreSQL normaliserer
- * nøkkelrekkefølgen i jsonb. Hashen må derfor beregnes over en form som er lik
- * både før lagring og etter at raden er lest tilbake - ellers ville
- * verifiseringen slått ut på helt uskadde rader.
+ * The content is stored as `jsonb` so it can be searched, but PostgreSQL
+ * normalises key order in jsonb. The hash must therefore be computed over a
+ * form that is identical both before storing and after reading the row back -
+ * otherwise verification would trip on perfectly intact rows.
  */
 export function kanoniserJson(value: unknown): string {
 	if (value === null || typeof value !== 'object') return JSON.stringify(value ?? null);
@@ -139,19 +139,19 @@ function computeHash(previousHash: string, kanonisk: string): string {
 }
 
 /**
- * Skriver ett innslag. Kalles for hvert API-kall, hver innlogging og hver
- * integrasjonshendelse. Feiler aldri stille: klarer vi ikke å logge, skal
- * operasjonen avvises av kalleren.
+ * Writes one entry. Called for every API call, every sign-in and every
+ * integration event. Never fails silently: if we cannot log, the caller must
+ * refuse the operation.
  */
 export async function log(
 	entry: AuditEntry,
 	actor: AuditActor,
-	/** Virksomhet innslaget hører til. Utledes fra konteksten når den ikke oppgis. */
+	/** Organisation the entry belongs to. Derived from context when not given. */
 	tenantId?: string
 ): Promise<{ seq: number; hash: string }> {
 	const tenant = tenantId ?? currentTenant()?.id ?? PLATFORM_TENANT;
 	return transaction(async () => {
-		// Lås tabellen kort for å garantere at kjeden bygges sekvensielt.
+		// Lock the table briefly to guarantee the chain is built sequentially.
 		await exec('LOCK TABLE audit_event IN EXCLUSIVE MODE');
 		const previous = await one<{ hash: string }>(
 			'SELECT hash FROM audit_event WHERE tenant_id = $1 ORDER BY seq DESC LIMIT 1',
@@ -251,8 +251,8 @@ export interface ChainResult {
 }
 
 /**
- * Verifiserer hash-kjeden. Kjøres som periodisk kontroll og av personvernombudet.
- * Et brudd betyr at rader er endret eller fjernet utenom applikasjonen.
+ * Verifies the hash chain. Run as a periodic check and by the privacy officer.
+ * A break means rows were altered or removed outside the application.
  */
 export async function verifyLogChain(fromSeq = 0, max = 100_000): Promise<ChainResult> {
 	const rows = await query<{ seq: number; content: FhirResource; prev_hash: string; hash: string }>(
@@ -273,7 +273,7 @@ export async function verifyLogChain(fromSeq = 0, max = 100_000): Promise<ChainR
 	return { valid: true, checked: rows.length };
 }
 
-/** Nødrettsoppslag som ennå ikke er gjennomgått av ledelsen. */
+/** Emergency-access lookups not yet reviewed by management. */
 export async function unreviewedEmergencyAccess(): Promise<LogRow[]> {
 	return query<LogRow>(
 		`SELECT a.seq, a.recorded, a.type_code, a.subtype, a.action, a.outcome, a.actor_name, a.actor_role,

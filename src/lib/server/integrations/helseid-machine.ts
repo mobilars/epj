@@ -4,10 +4,10 @@ import { sign, type Algoritme } from '../auth/jws';
 import { getMetadata } from '../auth/helseid';
 
 /**
- * Maskin-til-maskin-token fra HelseID (client_credentials + private_key_jwt).
+ * Machine-to-machine token from HelseID (client_credentials + private_key_jwt).
  *
- * Brukes av integrasjonene mot SFM og andre nasjonale tjenester. Tokenet
- * caches til like før utløp, slik at vi ikke henter nytt token per kall.
+ * Used by the integrations towards SFM and other national services. The token
+ * is cached until just before expiry, so we do not fetch a new one per call.
  */
 
 interface Cached {

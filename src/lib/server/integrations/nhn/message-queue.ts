@@ -11,16 +11,16 @@ import { buildApprec, readApprec, readMsgHead, APPREC_ERROR, type ApprecStatus }
 import { getRecipient, canReceive } from './address-registry';
 
 /**
- * Meldingskø mot NHN meldingstjener.
+ * Message queue towards the NHN message server.
  *
- * Utgående meldinger legges i kø, sendes, og venter deretter på
- * applikasjonskvittering. En melding regnes ikke som levert før AppRec med
- * status 1 eller 2 er mottatt - det er dette skillet som gjør at en henvisning
- * ikke kan bli borte uten at noen oppdager det.
+ * Outgoing messages are queued, sent, and then wait for an application receipt.
+ * A message does not count as delivered until an AppRec with status 1 or 2 has
+ * arrived - that distinction is what stops a referral going missing without
+ * anyone noticing.
  *
- * Innkommende meldinger lagres, besvares med AppRec, og speiles som FHIR-
- * ressurser i journalen (Communication for dialogmeldinger, DocumentReference
- * for epikriser, ServiceRequest for henvisninger).
+ * Incoming messages are stored, answered with an AppRec, and mirrored as FHIR
+ * resources in the record (Communication for dialogue messages,
+ * DocumentReference for discharge summaries, ServiceRequest for referrals).
  */
 
 export type Meldingsstatus =
@@ -60,7 +60,7 @@ export interface QueueIn {
 	refMsgId?: string;
 }
 
-/** Legger en ferdig bygget melding i utgående kø. */
+/** Puts a fully built message on the outgoing queue. */
 export async function queueOut(inValue: QueueIn, actor: AuditActor): Promise<{ ok: boolean; id?: string; error?: string }> {
 	const check = await canReceive(inValue.recipientHer, inValue.message_type);
 	if (!check.ok) {
@@ -96,25 +96,25 @@ export async function queueOut(inValue: QueueIn, actor: AuditActor): Promise<{ o
 
 const MAX_ATTEMPT = 6;
 
-/** Stabil tallverdi av virksomhets-id, brukt til å skille de rådgivende låsene. */
+/** Stable numeric value of the organisation id, used to separate advisory locks. */
 function hashToNumber(id: string): number {
 	let h = 0;
 	for (const tegn of id) h = (h * 31 + tegn.charCodeAt(0)) % 100_000;
 	return h;
 }
 
-/** Eksponentiell backoff: 1, 2, 4, 8, 16, 32 minutter. */
+/** Exponential backoff: 1, 2, 4, 8, 16, 32 minutes. */
 function nextAttempt(attempts: number): string {
 	return `${Math.min(2 ** attempts, 60)} minutes`;
 }
 
 /**
- * Sender alt som ligger klart i køen. Beskyttet av rådgivende lås slik at
- * flere appinstanser ikke sender samme melding to ganger.
+ * Sends everything ready in the queue. Protected by an advisory lock so several
+ * app instances do not send the same message twice.
  */
 export async function sendQueue(): Promise<{ sent_at: number; failed: number }> {
 	const tenantId = requireTenant().id;
-	// Låsen er per virksomhet, slik at treg utsending hos én ikke stanser de andre.
+	// The lock is per organisation, so slow sending at one does not stall the others.
 	const result = await withLock(918_271 + hashToNumber(tenantId), async () => {
 		const klare = await query<{ id: string; msg_id: string; message_type: string; recipient_her_id: string; payload_xml: string; attempts: number; patient_id: string | null }>(
 			`SELECT id, msg_id, message_type, recipient_her_id, payload_xml, attempts, patient_id FROM message
@@ -149,11 +149,11 @@ export async function sendQueue(): Promise<{ sent_at: number; failed: number }> 
 }
 
 /**
- * Transportlaget mot meldingstjeneren.
+ * The transport layer towards the message server.
  *
- * I `live`-modus legges meldingen på NHN meldingstjener (EDI 2.0) over
- * gjensidig autentisert TLS. I `mock`-modus leveres den lokalt, slik at
- * sende- og kvitteringsflyten kan kjøres uten Helsenett-tilkobling.
+ * In `live` mode the message is placed on the NHN message server (EDI 2.0) over
+ * mutually authenticated TLS. In `mock` mode it is delivered locally, so the
+ * send and receipt flow can be exercised without a health network connection.
  */
 async function transport(recipientHer: string, xml: string, message_type: string): Promise<void> {
 	if (config.integrations.modus === 'mock') {
@@ -175,18 +175,18 @@ async function transport(recipientHer: string, xml: string, message_type: string
 	if (!response.ok) throw new Error(`Meldingstjeneren svarte ${response.status}: ${(await response.text()).slice(0, 200)}`);
 }
 
-/** Simulerer at mottaker leser meldingen og kvitterer. */
+/** Simulates the recipient reading the message and acknowledging it. */
 async function mockLevering(recipientHer: string, xml: string, message_type: string): Promise<void> {
 	const read = readMsgHead(xml);
 	if (!read) throw new Error('Meldingen kunne ikke leses som hodemelding');
 	const recipient = await getRecipient(recipientHer);
-	// Kvitteringen kommer «tilbake» etter kort tid; her registreres den direkte.
+	// The receipt comes "back" after a short while; here it is recorded directly.
 	setTimeout(() => {
 		void registerApprec(read.msgId, '1', [], recipient?.name ?? recipientHer).catch(() => undefined);
 	}, 50);
 }
 
-/** Registrerer mottatt applikasjonskvittering på den utgående meldingen. */
+/** Records a received application receipt against the outgoing message. */
 export async function registerApprec(
 	refMsgId: string,
 	status: ApprecStatus,
@@ -220,14 +220,14 @@ export interface MottakResult {
 }
 
 /**
- * Tar imot en melding, lagrer den, kobler den til pasient og bygger AppRec.
- * Meldingen speiles som FHIR-ressurs slik at den blir en del av journalen og
- * tilgjengelig for SMART-apper gjennom /fhir.
+ * Accepts a message, stores it, links it to a patient and builds an AppRec.
+ * The message is mirrored as a FHIR resource so it becomes part of the record
+ * and available to SMART apps through /fhir.
  */
 export async function receiveMessage(xml: string, actor: AuditActor): Promise<MottakResult> {
 	const apprecError: { code: string; text: string }[] = [];
 
-	// Applikasjonskvittering på noe vi har sendt.
+	// An application receipt for something we sent.
 	const receipt = readApprec(xml);
 	if (receipt) {
 		await registerApprec(receipt.refMsgId, receipt.status, receipt.error, 'mottaker');
@@ -322,7 +322,7 @@ async function findPatientOnFnr(fnr: string): Promise<string | null> {
 	}
 }
 
-/** Lager FHIR-representasjonen av en innkommende melding. */
+/** Builds the FHIR representation of an incoming message. */
 async function mirrorToFhir(
 	read: NonNullable<ReturnType<typeof readMsgHead>>,
 	patientId: string,
@@ -419,7 +419,7 @@ export async function markerProcessed(id: string, actor: AuditActor): Promise<vo
 	);
 }
 
-/** Meldinger som er sendt, men som mangler applikasjonskvittering. */
+/** Messages that were sent but are missing an application receipt. */
 export async function pendingKvitteringer(eldreEnnMinutter = 60): Promise<Message[]> {
 	return query<Message>(
 		`SELECT ${FIELD} FROM message

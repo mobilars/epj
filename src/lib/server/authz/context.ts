@@ -7,7 +7,7 @@ export interface LaunchContext {
 	patientId?: string | null;
 	encounterId?: string | null;
 	intent?: string | null;
-	/** Referanse til brukeren slik SMART-appen ser den, f.eks. `Practitioner/42`. */
+	/** Reference to the user as the SMART app sees it, e.g. `Practitioner/42`. */
 	fhirUser?: string | null;
 	needPatientBanner?: boolean;
 }
@@ -15,7 +15,7 @@ export interface LaunchContext {
 export interface AuthContext {
 	mate: Autentiseringsmate;
 	userId: string | null;
-	/** `Practitioner/<id>` for helsepersonell, `Patient/<id>` for innbyggere. */
+	/** `Practitioner/<id>` for clinicians, `Patient/<id>` for citizens. */
 	actorRef: string;
 	name: string;
 	roles: Role[];
@@ -26,9 +26,9 @@ export interface AuthContext {
 	launch: LaunchContext;
 	sessionId: string | null;
 	tokenId: string | null;
-	/** Autentiseringsmetode: pwd, pwd+otp, helseid. */
+	/** Authentication method: pwd, pwd+otp, helseid. */
 	amr: string;
-	/** Tidspunkt reautentisering er gyldig til (ISO), for handlinger som krever step-up. */
+	/** When re-authentication is valid until (ISO), for actions needing step-up. */
 	elevatedTo: string | null;
 	ip: string;
 	requestId: string;
@@ -46,7 +46,7 @@ export function isPatient(ctx: AuthContext): boolean {
 	return ctx.roles.includes('pasient');
 }
 
-/** Pasient-id for en innbyggerbruker, ellers null. */
+/** Patient id for a citizen user, otherwise null. */
 export function ownPatientId(ctx: AuthContext): string | null {
 	if (!isPatient(ctx)) return null;
 	return ctx.actorRef.startsWith('Patient/') ? ctx.actorRef.slice('Patient/'.length) : null;

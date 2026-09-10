@@ -10,24 +10,24 @@ import { createUser, getUser, rolesFor, type User } from './users';
 import type { Role } from '../authz/roles';
 
 /**
- * HelseID som identitetsleverandør.
+ * HelseID as identity provider.
  *
- * HelseID er den nasjonale påloggingstjenesten for helsepersonell, driftet av
- * Norsk helsenett. Journalen opptrer som en OIDC-klient med
- * autorisasjonskodeflyt, PKCE og `private_key_jwt` - ingen delt hemmelighet
- * ligger i konfigurasjonen.
+ * HelseID is the national sign-in service for health personnel, operated by
+ * Norsk helsenett. The record acts as an OIDC client using the authorisation
+ * code flow, PKCE and `private_key_jwt` - no shared secret sits in the
+ * configuration.
  *
- * Fra id_token/userinfo henter vi:
- *   - `helseid://claims/identity/pid`            fødselsnummer (personidentifikator)
- *   - `helseid://claims/hpr/hpr_number`          HPR-nummer
- *   - `helseid://claims/identity/security_level` sikkerhetsnivå (4 kreves)
- *   - `name`                                     navn
+ * From the id_token/userinfo we take:
+ *   - `helseid://claims/identity/pid`            national identity number
+ *   - `helseid://claims/hpr/hpr_number`          HPR number
+ *   - `helseid://claims/identity/security_level` security level (4 required)
+ *   - `name`                                     name
  *
- * Brukere provisjoneres ved første pålogging, men får ingen roller automatisk:
- * rolletildeling er en administrativ handling som skal etterlate spor.
+ * Users are provisioned on first sign-in but get no roles automatically:
+ * assigning a role is an administrative act and must leave a trace.
  *
- * Koblingen er per virksomhet. Samme lege kan arbeide ved flere legekontorer,
- * og skal da ha én brukerkonto i hver - med hver sine roller og relasjoner.
+ * The link is per organisation. The same doctor may work at several practices,
+ * and then holds one account at each - with its own roles and relationships.
  */
 
 export const CLAIM = {
@@ -81,7 +81,7 @@ interface FlowState {
 	created_at: number;
 }
 
-/** Bygger autorisasjons-URL og legger flyttilstanden i en kryptert cookie. */
+/** Builds the authorisation URL and puts the flow state in an encrypted cookie. */
 export async function startLogin(cookies: Cookies, returnTo: string): Promise<string> {
 	const meta = await getMetadata();
 	const state = randomBytes(24).toString('base64url');
@@ -111,8 +111,8 @@ export async function startLogin(cookies: Cookies, returnTo: string): Promise<st
 }
 
 export function redirectUri(): string {
-	// Tilbakekallsadressen må ligge på virksomhetens eget vertsnavn, siden
-	// sesjonen opprettes der.
+	// The callback address must sit on the organisation's own hostname, since
+	// that is where the session is created.
 	return config.integrations.healthId.redirectUri || `${issuerFor(requireTenant())}/logg-inn/helseid/tilbake`;
 }
 
@@ -160,8 +160,8 @@ export type PaloggingsResult =
 	| { ok: false; error: string };
 
 /**
- * Fullfører flyten: bytter koden mot tokens, verifiserer id_token og
- * kobler eller oppretter den lokale brukeren.
+ * Completes the flow: exchanges the code for tokens, verifies the id_token and
+ * links or creates the local user.
  */
 export async function fullforLogin(
 	cookies: Cookies,
@@ -226,11 +226,11 @@ export async function fullforLogin(
 }
 
 /**
- * Finner den lokale brukeren for en HelseID-identitet, eller oppretter den.
+ * Finds the local user for a HelseID identity, or creates it.
  *
- * Kobling skjer på `sub` (stabil i HelseID) og sekundært på HPR-nummer, slik at
- * en bruker som er forhåndsregistrert av systemansvarlig kobles automatisk ved
- * første pålogging. Nye brukere opprettes uten roller og uten tilgang.
+ * Linking is on `sub` (stable in HelseID) and secondarily on HPR number, so a
+ * user pre-registered by the system administrator is linked automatically on
+ * first sign-in. New users are created without roles and without access.
  */
 export async function kobleOnLokalUser(
 	requirement: HealthIdRequirement

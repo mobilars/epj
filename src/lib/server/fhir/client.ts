@@ -4,16 +4,16 @@ import { FhirError, issue } from './outcome';
 import type { Bundle, FhirResource } from './types';
 
 /**
- * Klient mot HAPI FHIR JPA-serveren.
+ * Client for the HAPI FHIR JPA server.
  *
- * HAPI eier de kliniske dataene: lagring, versjonshistorikk, søkeindeksering,
- * `$everything`, `$validate` og profilvalidering mot de norske basisprofilene.
- * Denne klienten er bevisst tynn - all forretningslogikk og tilgangskontroll
- * ligger i `gateway.ts`, som er det eneste som skal kalle hit.
+ * HAPI owns the clinical data: storage, version history, search indexing,
+ * `$everything`, `$validate` and profile validation against the Norwegian base
+ * profiles. This client is deliberately thin - all business logic and access
+ * control sits in `gateway.ts`, which is the only thing that should call here.
  *
- * Alle kall går mot virksomhetens egen partisjon. Partisjonsnavnet hentes fra
- * virksomhetskonteksten, ikke fra kalleren: da kan ingen kodesti be om data fra
- * en annen virksomhet ved å sende med feil navn.
+ * Every call goes to the organisation's own partition. The partition name comes
+ * from the organisation context, not from the caller: no code path can then ask
+ * for another organisation's data by passing the wrong name.
  */
 
 export interface FhirRespons<T = FhirResource> {
@@ -25,7 +25,7 @@ export interface FhirRespons<T = FhirResource> {
 }
 
 export interface CallOpsjoner {
-	/** Videreføres som `X-Request-Id` for korrelering mellom EPJ-logg og HAPI-logg. */
+	/** Passed on as `X-Request-Id` to correlate the EPJ log with the HAPI log. */
 	requestId?: string;
 	ifMatch?: string;
 	ifNoneExist?: string;
@@ -34,8 +34,8 @@ export interface CallOpsjoner {
 }
 
 /**
- * Basen for virksomhetens partisjon. Uten partisjonering brukes serverens rot,
- * slik at enkeltvirksomhetsinstallasjoner virker uendret.
+ * The base for the organisation's partition. Without partitioning the server
+ * root is used, so single-organisation installations work unchanged.
  */
 export function tenantBase(): string {
 	const base = config.fhirServer.baseUrl;
@@ -126,12 +126,12 @@ export const fhirClient = {
 	},
 
 	async search(resourceType: string, query: URLSearchParams, o?: CallOpsjoner): Promise<Bundle> {
-		// POST mot /_search brukes framfor GET, slik at pasientidentifikatorer ikke
-		// havner i URL-er og dermed i mellomliggende tilgangslogger.
+		// POST to /_search is used rather than GET, so that patient identifiers do
+		// not end up in URLs and thereby in intermediate access logs.
 		return this.searchPost(resourceType, query, o);
 	},
 
-	/** Søk med POST og skjemakodet kropp (foretrukket for pasientnære søk). */
+	/** Search with POST and a form-encoded body (preferred for patient searches). */
 	async searchPost(resourceType: string, query: URLSearchParams, o?: CallOpsjoner): Promise<Bundle> {
 		const url = `${tenantBase()}/${resourceType}/_search`;
 		const response = await fetch(url, {
@@ -180,7 +180,7 @@ export const fhirClient = {
 		return (await call(parametre ? 'POST' : 'GET', path, parametre, o)).resource;
 	},
 
-	/** Pasientens samlede journal. HAPI implementerer $everything med paginering. */
+	/** The patient's complete record. HAPI implements $everything with paging. */
 	async everything(patientId: string, query = new URLSearchParams(), o?: CallOpsjoner): Promise<Bundle> {
 		const qs = query.toString();
 		return (await call('GET', `Patient/${encodeURIComponent(patientId)}/$everything${qs ? `?${qs}` : ''}`, undefined, o)).resource as Bundle;
@@ -200,7 +200,7 @@ export const fhirClient = {
 		return (await call('GET', 'metadata', undefined, o)).resource;
 	},
 
-	/** Enkel helsesjekk brukt av /api/helse og oppstartssekvensen. */
+	/** Simple health check used by /api/helse and the startup sequence. */
 	async isTilgjengelig(): Promise<boolean> {
 		try {
 			await call('GET', 'metadata?_summary=true');

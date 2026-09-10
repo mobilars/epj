@@ -2,8 +2,8 @@ import { SYSTEM, maskerNationalId } from './codesystems';
 import type { CodeableConcept, FhirResource } from './types';
 
 /**
- * Presentasjonshjelpere. Holdes på serversiden slik at klienten aldri trenger
- * å motta mer av ressursen enn den skal vise.
+ * Presentation helpers. Kept server-side so the client never needs to receive
+ * more of a resource than it is going to show.
  */
 
 export interface PatientDisplay {

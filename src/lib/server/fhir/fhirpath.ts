@@ -1,19 +1,19 @@
 /**
- * Hjelpefunksjoner for å navigere i FHIR-ressurser.
+ * Helpers for navigating FHIR resources.
  *
- * Selve indekseringen og søket utføres av HAPI FHIR. Disse funksjonene brukes av
- * tilgangskontrollen og integrasjonene, som må kunne plukke ut pasientreferanser,
- * identifikatorer og datoer fra en ressurs uten å gå veien om serveren.
+ * The indexing and searching itself is done by HAPI FHIR. These functions are
+ * used by access control and the integrations, which must be able to pick
+ * patient references, identifiers and dates out of a resource without going via
+ * the server.
  */
-
 /**
- * Normaliserer tekst for sammenlikning og søk.
+ * Normalises text for comparison and search.
  *
- * Unicode-dekomponering alene gir inkonsistent resultat på norsk: «å» brytes
- * opp i a + ring og mister ringen, mens «ø» og «æ» er egne bokstaver og blir
- * stående. Da ville «Håkon» matchet «Hakon», men «Søren» ikke «Soren». Vi
- * folder derfor de norske bokstavene eksplisitt først, slik at oppførselen er
- * den samme for alle tre.
+ * Unicode decomposition alone gives inconsistent results in Norwegian: "å"
+ * breaks into a + ring and loses the ring, while "ø" and "æ" are letters in
+ * their own right and survive. "Håkon" would then match "Hakon", but "Søren"
+ * would not match "Soren". So we fold the Norwegian letters explicitly first,
+ * making the behaviour the same for all three.
  */
 const NORWEGIAN_BOKSTAVER: Record<string, string> = { æ: 'ae', ø: 'o', å: 'a', Æ: 'ae', Ø: 'o', Å: 'a' };
 
@@ -26,7 +26,7 @@ export function normaliserText(v: string): string {
 		.trim();
 }
 
-/** Henter alle verdier på en punktseparert sti, og traverserer arrays underveis. */
+/** Gets every value at a dot-separated path, traversing arrays on the way. */
 export function getValues(objekt: unknown, path: string): unknown[] {
 	let current: unknown[] = [objekt];
 	for (const del of path.split('.')) {
@@ -47,7 +47,7 @@ function isObj(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
-/** Utvider en dato/periode til [lav, høy] i ISO-format for intervallsammenlikning. */
+/** Expands a date/period to [low, high] in ISO form for interval comparison. */
 export function dateIntervall(v: unknown): { lav: string; hoy: string } | null {
 	if (typeof v === 'string') {
 		const lav = utvidDate(v, 'lav');
@@ -84,9 +84,9 @@ export function utvidDate(v: string, ende: 'lav' | 'hoy'): string | null {
 }
 
 /**
- * Tolker en FHIR-referanse. Håndterer relative referanser (`Patient/123`),
- * absolutte URL-er, `urn:uuid:`-referanser og versjonsspesifikke referanser
- * (`Observation/9/_history/2`), som skal gi ressursens id - ikke versjonen.
+ * Parses a FHIR reference. Handles relative references (`Patient/123`),
+ * absolute URLs, `urn:uuid:` references and version-specific references
+ * (`Observation/9/_history/2`), which must yield the id - not the version.
  */
 export function parseReference(v: unknown): { type: string | null; id: string } | null {
 	let ref: string | undefined;
@@ -95,7 +95,7 @@ export function parseReference(v: unknown): { type: string | null; id: string } 
 	if (!ref) return null;
 	if (ref.startsWith('urn:uuid:')) return { type: null, id: ref.slice('urn:uuid:'.length) };
 
-	// Fjern versjonsdelen før vi plukker ut type og id.
+	// Strip the version part before picking out type and id.
 	const withoutVersion = ref.split('/_history/')[0];
 	const parts = withoutVersion.split('/').filter(Boolean);
 	if (parts.length >= 2) {

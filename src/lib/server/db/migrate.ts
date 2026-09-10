@@ -34,7 +34,7 @@ export function readMigrasjoner(): Migration[] {
 		});
 }
 
-/** Kjører alle migrasjoner som ikke er anvendt. Idempotent. */
+/** Runs every migration not yet applied. Idempotent. */
 export async function migrate(): Promise<number[]> {
 	const c = await getPool().connect();
 	try {

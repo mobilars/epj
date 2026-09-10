@@ -1,25 +1,25 @@
 /**
- * Sentral konfigurasjon. Alle sikkerhetsrelevante verdier hentes fra miljøvariabler
- * slik at ingen hemmeligheter ligger i kodebasen (Normen faktaark 14 - konfigurasjon).
+ * Central configuration. Every security-relevant value comes from an
+ * environment variable, so no secret sits in the codebase (Normen fact sheet 14).
  */
 /**
- * Leses fra `process.env`. SvelteKit eksponerer de samme variablene gjennom
- * `$env/dynamic/private`, men ved å gå direkte til `process.env` fungerer
- * konfigurasjonen også i migrasjons- og seed-skript og i enhetstestene.
+ * Read from `process.env`. SvelteKit exposes the same variables through
+ * `$env/dynamic/private`, but going straight to `process.env` means the
+ * configuration also works in the migration and seed scripts and in unit tests.
  */
 const env: Record<string, string | undefined> = process.env;
 
-// Laster .env i utvikling. I produksjon settes variablene av kjøremiljøet.
+// Loads .env in development. In production the runtime sets the variables.
 //
-// Variabler som allerede er satt i miljøet vinner over .env. Uten dette ville
-// en .env-fil i prosjektmappen overstyre verdiene testkjøringer og
-// containeroppsett setter eksplisitt - en feilkilde som er vanskelig å se.
+// Variables already set in the environment win over .env. Without that, a .env
+// file in the project folder would override values that test runs and container
+// setups set explicitly - a fault that is hard to see.
 if (process.env.NODE_ENV !== 'production' && typeof process.loadEnvFile === 'function') {
 	const eksplisitt = { ...process.env };
 	try {
 		process.loadEnvFile();
 	} catch {
-		/* .env er valgfri */
+		/* .env is optional */
 	}
 	Object.assign(process.env, eksplisitt);
 }
@@ -47,7 +47,7 @@ function bool(name: string, fallback: boolean): boolean {
 }
 
 export const config = {
-	/** Kanonisk utadvendt base-URL. Brukes som `issuer` i OAuth/OIDC-metadata. */
+	/** Canonical outward-facing base URL. Used as `issuer` in OAuth/OIDC metadata. */
 	baseUrl: (env.EPJ_BASE_URL ?? 'http://localhost:5173').replace(/\/$/, ''),
 	get fhirBaseUrl() {
 		return `${this.baseUrl}/fhir`;
@@ -55,13 +55,12 @@ export const config = {
 	get issuer() {
 		return this.baseUrl;
 	},
-
 	/**
-	 * PostgreSQL. Applikasjonsdata ligger i skjemaet `epj`.
+	 * PostgreSQL. Application data lives in the `epj` schema.
 	 *
-	 * Obligatoriske verdier leses som getters, ikke ved modullasting: byggetrinnet
-	 * importerer serverkoden uten at driftsmiljøet finnes, og skal ikke feile av
-	 * den grunn. Mangler variabelen i produksjon, feiler første faktiske bruk.
+	 * Required values are read as getters, not at module load: the build step
+	 * imports the server code without a runtime environment, and should not fail
+	 * for that. If the variable is missing in production, first use fails.
 	 */
 	get databaseUrl() {
 		return required('EPJ_DATABASE_URL', 'postgres://epj:epj@localhost:5432/epj');
@@ -70,40 +69,40 @@ export const config = {
 	dbSsl: bool('EPJ_DB_SSL', process.env.NODE_ENV === 'production'),
 
 	/**
-	 * HAPI FHIR JPA-server. Denne er journalens kliniske lager: den eier
-	 * FHIR-ressursene, versjonshistorikken, søkeindeksene og profilvalideringen.
-	 * Serveren skal aldri eksponeres direkte mot internett - all trafikk går
-	 * gjennom `/fhir` i denne applikasjonen, som håndhever tilgangskontroll og
-	 * skriver sikkerhetslogg.
+	 * HAPI FHIR JPA server. This is the record's clinical store: it owns the FHIR
+	 * resources, the version history, the search indexes and profile validation.
+	 * The server must never be exposed directly to the internet - all traffic
+	 * goes through `/fhir` in this application, which enforces access control and
+	 * writes the audit log.
 	 */
 	fhirServer: {
-		// Leses ved hvert oppslag, slik at testene kan peke på en server som
-		// først har fått tildelt port når prosessen kjører.
+		// Read on every lookup, so the tests can point at a server that is only
+		// assigned a port once the process is running.
 		get baseUrl() {
 			return (env.EPJ_HAPI_BASE_URL ?? 'http://localhost:8080/fhir').replace(/\/$/, '');
 		},
-		/** Delt hemmelighet mot HAPI (Basic auth i referanseoppsettet). */
+		/** Shared secret towards HAPI (Basic auth in the reference setup). */
 		username: env.EPJ_HAPI_USER ?? '',
 		password: env.EPJ_HAPI_PASSWORD ?? '',
 		timeoutMs: int('EPJ_HAPI_TIMEOUT_MS', 20_000),
 		/**
-		 * Partisjonering slått på. Da inngår virksomhetens partisjonsnavn i
-		 * FHIR-URL-en, og HAPI holder virksomhetenes kliniske data adskilt.
-		 * Kan slås av for enkeltvirksomhetsinstallasjoner.
+		 * Partitioning on. The organisation's partition name is then part of the
+		 * FHIR URL, and HAPI keeps the organisations' clinical data apart.
+		 * Can be turned off for single-organisation installations.
 		 */
 		multitenant: bool('EPJ_HAPI_MULTITENANT', true),
-		/** Slår på $validate mot HAPI før skriving. */
+		/** Turns on $validate against HAPI before writing. */
 		validateAtSkriving: bool('EPJ_HAPI_VALIDATE', false)
 	},
 
-	/** Nøkkel for kryptering av data at rest (TOTP-hemmeligheter, private signeringsnøkler). */
+	/** Key for encrypting data at rest (TOTP secrets, private signing keys). */
 	get dataEncryptionKey() {
 		return required('EPJ_DATA_KEY', 'utviklingsnokkel-kun-for-lokal-bruk-0000');
 	},
 
 	session: {
 		cookieName: 'epj_session',
-		/** Inaktivitetsgrense. Normen anbefaler automatisk utlogging ved inaktivitet. */
+		/** Idle limit. Normen recommends automatic sign-out on inactivity. */
 		idleSeconds: int('EPJ_SESSION_IDLE_SECONDS', 30 * 60),
 		absoluteSeconds: int('EPJ_SESSION_ABSOLUTE_SECONDS', 12 * 60 * 60),
 		/** Hvor lenge en re-autentisering (step-up) er gyldig, f.eks. for nødrettstilgang. */

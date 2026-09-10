@@ -1,9 +1,9 @@
 import { constants, createHash, createPrivateKey, createPublicKey, createSign, createVerify, generateKeyPairSync, type KeyObject } from 'node:crypto';
 
 /**
- * Kompakt JWS med ES256 (ECDSA P-256 + SHA-256), implementert direkte mot
- * node:crypto. Node signerer ECDSA i DER-format; JOSE krever rå R||S, så vi
- * konverterer begge veier.
+ * Compact JWS with ES256 (ECDSA P-256 + SHA-256), written directly against
+ * node:crypto. Node signs ECDSA in DER form; JOSE wants raw R||S, so we convert
+ * in both directions.
  */
 
 export type Algoritme = 'ES256' | 'RS256' | 'PS256';
@@ -15,9 +15,9 @@ export interface JwtHeader {
 }
 
 /**
- * ES256 brukes for tokens vi selv utsteder. RS256/PS256 må støttes fordi HelseID
- * signerer sine id_token med RS256, og forventer klientassertions signert med
- * RS256 eller PS256.
+ * ES256 is used for the tokens we issue ourselves. RS256/PS256 must be
+ * supported because HelseID signs its id_token with RS256, and expects client
+ * assertions signed with RS256 or PS256.
  */
 const ALLOWED_ALGORITMER: ReadonlySet<string> = new Set(['ES256', 'RS256', 'PS256']);
 
@@ -28,7 +28,7 @@ function signeringsopsjoner(alg: Algoritme): { hash: string; padding?: number; s
 	return { hash: 'SHA256' };
 }
 
-/** JWK med de feltene JOSE bruker. `JsonWebKey` i lib.dom mangler kid/alg/use. */
+/** JWK with the fields JOSE uses. `JsonWebKey` in lib.dom lacks kid/alg/use. */
 export type Jwk = JsonWebKey & { kid?: string; alg?: string; use?: string };
 
 export type JwtPayload = Record<string, unknown> & {
@@ -45,9 +45,9 @@ const b64u = (b: Buffer | string): string => Buffer.from(b as never).toString('b
 const fromB64u = (s: string): Buffer => Buffer.from(s, 'base64url');
 
 /**
- * Nøkkel-id som JWK-tommelavtrykk (RFC 7638): SHA-256 over en kanonisk JSON med
- * bare de påkrevde feltene, i leksikografisk rekkefølge. Da blir id-en både
- * unik per nøkkel og reproduserbar fra den offentlige nøkkelen alene.
+ * Key id as JWK thumbprint (RFC 7638): SHA-256 over a canonical JSON holding
+ * only the required fields, in lexicographic order. The id is then both unique
+ * per key and reproducible from the public key alone.
  */
 export function jwkTommelavtrykk(jwk: Jwk): string {
 	const kanonisk =
@@ -68,7 +68,7 @@ export function generateNokkelpar(): { privatePkcs8: string; publicJwk: Jwk; kid
 	};
 }
 
-/** DER (SEQUENCE av to INTEGER) -> rå R||S på 64 byte. */
+/** DER (SEQUENCE of two INTEGERs) -> raw R||S over 64 bytes. */
 function derToRaw(der: Buffer): Buffer {
 	let offset = 2;
 	if (der[1] & 0x80) offset += der[1] & 0x7f;
@@ -120,8 +120,8 @@ export function verify(jwt: string, publicJwks: Jwk[], expectedAlg?: Algoritme):
 	if (parts.length !== 3) throw new Error('Ugyldig JWT-struktur');
 	const [h, p, s] = parts;
 	const header = JSON.parse(fromB64u(h).toString('utf8')) as JwtHeader;
-	// `alg` leses fra headeren, men må stå på tillatelseslisten. «none» og
-	// bytte til HMAC med den offentlige nøkkelen som hemmelighet er dermed utelukket.
+	// `alg` is read from the header but must be on the allowlist. "none", and
+	// switching to HMAC with the public key as the secret, are thereby ruled out.
 	if (!ALLOWED_ALGORITMER.has(header.alg)) throw new Error(`Algoritmen ${header.alg} er ikke tillatt`);
 	if (expectedAlg && header.alg !== expectedAlg) throw new Error(`Forventet ${expectedAlg}, fikk ${header.alg}`);
 	const candidates = header.kid ? publicJwks.filter((k) => k.kid === header.kid) : publicJwks;
@@ -147,7 +147,7 @@ export function verify(jwt: string, publicJwks: Jwk[], expectedAlg?: Algoritme):
 	return payload;
 }
 
-/** Leser payload uten å verifisere. Kun for logging og feilsøking. */
+/** Reads the payload without verifying. For logging and debugging only. */
 export function decodeWithoutVerification(jwt: string): { header: JwtHeader; payload: JwtPayload } | null {
 	try {
 		const [h, p] = jwt.split('.');

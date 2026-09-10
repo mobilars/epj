@@ -3,8 +3,8 @@ import { SYSTEM } from '../../fhir/codesystems';
 import { buildMsgHead, ownPart, MESSAGETYPES, type Part, type PatientPart } from './msg-head';
 
 /**
- * Fagmeldingene et fastlegekontor sender og mottar:
- * dialogmelding, henvisning, epikrise og laboratorierekvisisjon.
+ * The clinical messages a general practice sends and receives:
+ * dialogue message, referral, discharge summary and laboratory order.
  */
 
 export const NS = {
@@ -32,7 +32,7 @@ export interface DialogueMessageIn {
 	refMsgId?: string;
 }
 
-/** Kodeverk 8127 - temakoder for helsefaglig dialog. */
+/** Code system 8127 - topic codes for clinical dialogue. */
 export const DIALOG_TEMA = {
 	REQUEST_HELSEOPPLYSNINGER: { code: '1', text: 'Forespørsel om pasient' },
 	RESPONSE_HELSEOPPLYSNINGER: { code: '2', text: 'Svar på forespørsel om pasient' },
@@ -86,7 +86,7 @@ export interface ReferralIn {
 	recipient: Part;
 	patient: PatientPart;
 	practitioner: { name: string; hpr: string };
-	/** ICPC-2 eller ICD-10. */
+	/** ICPC-2 or ICD-10. */
 	diagnosis?: { code: string; text: string; system?: string };
 	problem: string;
 	anamnese?: string;

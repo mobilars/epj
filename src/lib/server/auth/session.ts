@@ -17,11 +17,11 @@ export interface Session {
 }
 
 /**
- * Innloggingssesjoner for journalens eget grensesnitt.
+ * Sign-in sessions for the record's own UI.
  *
- * Cookien er HttpOnly, SameSite=Strict og Secure utenfor lokal utvikling, og
- * inneholder kun et tilfeldig token - aldri brukerdata. Sesjonen har både en
- * inaktivitetsgrense og en absolutt levetid.
+ * The cookie is HttpOnly, SameSite=Strict and Secure outside local development,
+ * and holds only a random token - never user data. The session has both an idle
+ * limit and an absolute lifetime.
  */
 export async function createSession(
 	userId: string,
@@ -55,8 +55,8 @@ export async function getSession(cookies: Cookies): Promise<Session | null> {
 	const id = raw.slice(0, skille);
 	const token = raw.slice(skille + 1);
 
-	// Sesjonen må tilhøre en bruker i virksomheten forespørselen gjelder. En
-	// gyldig sesjonscookie fra ett legekontor skal ikke virke hos et annet.
+	// The session must belong to a user in the organisation the request concerns.
+	// A valid session cookie from one practice must not work at another.
 	const row = await one<Session & { token_hash: string }>(
 		`SELECT s.id, s.user_id, s.created_at, s.last_active, s.expires_at, s.amr, s.elevated_until, s.ip, s.token_hash
 		 FROM user_session s
@@ -66,7 +66,7 @@ export async function getSession(cookies: Cookies): Promise<Session | null> {
 	);
 	if (!row) return null;
 	if (!likeStrenger(row.token_hash, tokenHash(token))) {
-		// Gyldig sesjons-id med feil token: mulig tyveri av cookie. Avslutt sesjonen.
+		// Valid session id with the wrong token: possible cookie theft. End it.
 		await exec('UPDATE user_session SET ended = true WHERE id = $1', [id]);
 		return null;
 	}
@@ -92,7 +92,7 @@ export async function endSession(cookies: Cookies): Promise<void> {
 	cookies.delete(config.session.cookieName, { path: '/' });
 }
 
-/** Markerer sesjonen som nylig reautentisert (step-up), f.eks. før nødrett. */
+/** Marks the session as recently re-authenticated (step-up), e.g. before emergency access. */
 export async function elevateSession(sessionId: string): Promise<string> {
 	const to = new Date(Date.now() + config.session.elevationSeconds * 1000).toISOString();
 	await exec('UPDATE user_session SET elevated_until = $2 WHERE id = $1', [sessionId, to]);
@@ -103,7 +103,7 @@ export async function endAllSessions(userId: string): Promise<number> {
 	return exec('UPDATE user_session SET ended = true WHERE user_id = $1 AND ended = false', [userId]);
 }
 
-/** Vedlikehold. Går bevisst på tvers av virksomheter: sletter bare utløpte rader. */
+/** Maintenance. Deliberately across organisations: deletes only expired rows. */
 export async function purgeUtlopteSessions(): Promise<number> {
 	return exec("DELETE FROM user_session WHERE expires_at < now() - interval '30 days'");
 }

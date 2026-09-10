@@ -20,14 +20,14 @@ interface KeyRow {
 }
 
 /**
- * Signeringsnøkler for access tokens og id_token.
+ * Signing keys for access tokens and id_token.
  *
- * Nøklene lagres kryptert med EPJ_DATA_KEY og roteres etter en konfigurerbar
- * periode. Gammel nøkkel blir liggende i JWKS til allerede utstedte tokens er
- * utløpt, slik at rotasjon ikke gir nedetid for SMART-apper.
+ * Keys are stored encrypted with EPJ_DATA_KEY and rotated after a configurable
+ * period. The old key stays in the JWKS until already-issued tokens have
+ * expired, so rotation causes no downtime for SMART apps.
  *
- * Nøklene er per virksomhet, siden hver virksomhet har sin egen `issuer`.
- * De holdes i minnet mellom kall for å slippe dekryptering per forespørsel.
+ * Keys are per organisation, since each has its own `issuer`. They are held in
+ * memory between calls to avoid decrypting on every request.
  */
 
 const cached = new Map<string, { key: ActiveKey; to: number }>();
@@ -72,7 +72,7 @@ export async function rotateKey(): Promise<ActiveKey> {
 	return key;
 }
 
-/** Alle offentlige nøkler som fortsatt kan verifisere utstedte tokens. */
+/** Every public key that can still verify an issued token. */
 export async function jwks(): Promise<{ keys: Jwk[] }> {
 	const tenantId = requireTenant().id;
 	const fromCache = jwksCache.get(tenantId);
@@ -93,13 +93,13 @@ export async function jwks(): Promise<{ keys: Jwk[] }> {
 	return { keys };
 }
 
-/** Vedlikehold. Går bevisst på tvers av virksomheter: sletter bare utfasede nøkler. */
+/** Maintenance. Deliberately across organisations: deletes only retired keys. */
 export async function removeUtdaterteKeys(): Promise<number> {
 	jwksCache.clear();
 	return exec("DELETE FROM signing_key WHERE active = false AND phased_out_after IS NOT NULL AND phased_out_after < now() - interval '1 day'");
 }
 
-/** Brukes av testene. */
+/** Used by the tests. */
 export function emptyKeyCache(): void {
 	cached.clear();
 	jwksCache.clear();

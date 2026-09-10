@@ -5,18 +5,18 @@ import { config } from '../config';
 const { Pool } = pg;
 
 /**
- * PostgreSQL-tilgang. Alle spørringer bruker parametriserte uttrykk ($1, $2 ...)
- * - ingen brukerdata settes noen gang inn i SQL som tekst.
+ * PostgreSQL access. Every query uses parameterised expressions ($1, $2 ...)
+ * - no user data is ever put into SQL as text.
  *
- * Transaksjoner spores i AsyncLocalStorage slik at `query()` inne i en
- * `transaction()` automatisk bruker samme klient som transaksjonen.
+ * Transactions are tracked in AsyncLocalStorage so that `query()` inside a
+ * `transaction()` automatically uses the transaction's client.
  */
 
 let pool: pg.Pool | null = null;
 const transaksjonsContext = new AsyncLocalStorage<pg.PoolClient>();
 
-// PostgreSQL returnerer BIGINT som streng for å unngå tap av presisjon.
-// Beløp lagres i øre og holder seg trygt innenfor Number.MAX_SAFE_INTEGER.
+// PostgreSQL returns BIGINT as a string to avoid losing precision. Amounts are
+// stored in ore and stay comfortably inside Number.MAX_SAFE_INTEGER.
 pg.types.setTypeParser(20, (v: string) => Number.parseInt(v, 10));
 
 export function getPool(): pg.Pool {
@@ -38,7 +38,7 @@ export function getPool(): pg.Pool {
 	return pool;
 }
 
-/** Brukes av integrasjonstestene til å injisere en egen pool. */
+/** Used by the integration tests to inject their own pool. */
 export function setPool(newValue: pg.Pool | null): void {
 	pool = newValue;
 }
@@ -76,8 +76,8 @@ export async function exec(sql: string, params: unknown[] = []): Promise<number>
 }
 
 /**
- * Kjører `fn` i en databasetransaksjon. Nøstede kall bruker savepoints, slik at
- * en indre feil kan rulles tilbake uten å avbryte hele den ytre transaksjonen.
+ * Runs `fn` in a database transaction. Nested calls use savepoints, so an inner
+ * failure can be rolled back without aborting the whole outer transaction.
  */
 export async function transaction<T>(fn: () => Promise<T>): Promise<T> {
 	const existing = transaksjonsContext.getStore();
@@ -104,7 +104,7 @@ export async function transaction<T>(fn: () => Promise<T>): Promise<T> {
 		try {
 			await c.query('ROLLBACK');
 		} catch {
-			/* tilkoblingen kan allerede være borte */
+			/* the connection may already be gone */
 		}
 		throw err;
 	} finally {
@@ -112,7 +112,7 @@ export async function transaction<T>(fn: () => Promise<T>): Promise<T> {
 	}
 }
 
-/** Rådgivende lås brukt av bakgrunnsjobbene så bare én instans kjører av gangen. */
+/** Advisory lock used by the background jobs so only one instance runs at a time. */
 export async function withLock<T>(key: number, fn: () => Promise<T>): Promise<T | null> {
 	const c = await getPool().connect();
 	try {

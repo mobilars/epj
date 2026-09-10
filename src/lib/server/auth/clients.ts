@@ -24,7 +24,7 @@ export interface OAuthClient {
 	logo_url: string | null;
 	tenant_id: string;
 	databehandleravtale: string | null;
-	/** URL journalen sender brukeren til ved EHR launch. */
+	/** URL the record sends the user to on EHR launch. */
 	launch_url: string | null;
 	status: string;
 	created_at: string;
@@ -91,7 +91,7 @@ export async function setKlientstatus(clientId: string, status: 'aktiv' | 'sperr
 	}
 }
 
-/** Eksakt sammenlikning av redirect_uri, uten mønstertolkning (OAuth 2.1). */
+/** Exact comparison of redirect_uri, with no pattern matching (OAuth 2.1). */
 export function validRedirectUri(client: OAuthClient, uri: string): boolean {
 	return client.redirect_uris.some((r) => likeStrenger(r, uri));
 }
@@ -101,11 +101,11 @@ export type ClientAutentisering =
 	| { ok: false; error: string };
 
 /**
- * Autentiserer klienten på token-endepunktet.
+ * Authenticates the client at the token endpoint.
  *
- * For tjeneste-til-tjeneste-tilgang (SMART Backend Services) er `private_key_jwt`
- * påkrevd - det er også kravet i HelseID for virksomhetssertifikat-baserte
- * integrasjoner, og gjør at ingen delt hemmelighet trenger å ligge hos klienten.
+ * For service-to-service access (SMART Backend Services) `private_key_jwt` is
+ * required - that is also HelseID's requirement for organisation-certificate
+ * integrations, and means no shared secret has to sit with the client.
  */
 export async function authenticateClient(
 	form: URLSearchParams,
@@ -123,7 +123,7 @@ export async function authenticateClient(
 			clientId = decodeURIComponent(dekodet.slice(0, skille));
 			clientSecret = decodeURIComponent(dekodet.slice(skille + 1));
 		} catch {
-			// Feil prosentkoding skal gi 401, ikke en uhåndtert feil og 500.
+			// Bad percent-encoding should give 401, not an unhandled error and 500.
 			return { ok: false, error: 'Ugyldig Basic-header' };
 		}
 		method = 'client_secret_basic';
@@ -151,8 +151,8 @@ export async function authenticateClient(
 		try {
 			const payload = verifyJws(assertion as string, keys);
 			if (payload.iss !== clientId || payload.sub !== clientId) return { ok: false, error: 'Ugyldig iss/sub i client_assertion' };
-			// Tokenendepunktet er virksomhetens eget. En assertion utstedt mot én
-			// virksomhet skal ikke kunne brukes mot en annen.
+			// The token endpoint belongs to the organisation. An assertion issued
+			// against one organisation must not work against another.
 			const issuer = issuerFor(requireTenant());
 			const aud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
 			if (!aud.includes(`${issuer}/oauth/token`) && !aud.includes(issuer)) {
@@ -161,9 +161,9 @@ export async function authenticateClient(
 			if (typeof payload.jti !== 'string' || await jtiBrukt(payload.jti)) {
 				return { ok: false, error: 'client_assertion mangler jti eller er gjenbrukt' };
 			}
-			// RFC 7523 krever `exp`. Uten den er assertionen gyldig for alltid, og
-			// en lekket assertion blir en evig legitimasjon. `verifiser` avviser en
-			// utløpt `exp`, men godtar at den mangler - her er den påkrevd.
+			// RFC 7523 requires `exp`. Without it the assertion is valid forever, and
+			// a leaked one becomes a permanent credential. `verify` rejects an
+			// expired `exp` but accepts a missing one - here it is mandatory.
 			const now = Math.floor(Date.now() / 1000);
 			if (typeof payload.exp !== 'number') {
 				return { ok: false, error: 'client_assertion mangler exp' };
@@ -185,7 +185,7 @@ export async function authenticateClient(
 		return { ok: true, client, method };
 	}
 
-	// Offentlige klienter autentiseres ikke; PKCE er da påkrevd.
+	// Public clients are not authenticated; PKCE is required instead.
 	return { ok: true, client, method: 'none' };
 }
 
@@ -193,10 +193,10 @@ async function clientKeys(client: OAuthClient): Promise<Jwk[]> {
 	if (client.jwks?.keys?.length) return client.jwks.keys;
 	if (!client.jwks_uri) return [];
 	try {
-		// `jwks_uri` er et skjemafelt, ikke driftskonfigurasjon. Uten kontrollen i
-		// `sjekkUtgaendeUrl` ville den som registrerer en app kunne få journalen
-		// til å hente vilkårlige interne adresser - HAPI, databasen, API-tjeneren
-		// eller skyens metadatatjeneste.
+		// `jwks_uri` is a form field, not deployment configuration. Without the
+		// check in `checkOutboundUrl`, whoever registers an app could make the
+		// record fetch arbitrary internal addresses - HAPI, the database, the API
+		// server, or the cloud metadata service.
 		const jwks = (await getJsonUtenfra(client.jwks_uri)) as { keys?: Jwk[] };
 		return jwks.keys ?? [];
 	} catch (err) {
@@ -207,7 +207,7 @@ async function clientKeys(client: OAuthClient): Promise<Jwk[]> {
 	}
 }
 
-/** Kontroll av `jwks_uri` ved registrering, slik at feilen oppdages der den gjøres. */
+/** Checks `jwks_uri` at registration, so the mistake surfaces where it is made. */
 export async function validJwksUri(uri: string): Promise<string | null> {
 	try {
 		await checkOutboundUrl(uri);
@@ -217,7 +217,7 @@ export async function validJwksUri(uri: string): Promise<string | null> {
 	}
 }
 
-// jti-er lagres kortvarig for å hindre gjenbruk av client_assertion.
+// jti values are kept briefly to stop a client_assertion being reused.
 async function jtiBrukt(jti: string): Promise<boolean> {
 	const row = await one<{ n: string }>(
 		"SELECT 1 AS n FROM oauth_token WHERE token_hash = $1 AND kind = 'jti' AND tenant_id = $2 AND expires_at > now()",

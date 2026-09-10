@@ -8,20 +8,20 @@ import { canSeeAllPatients } from './roles';
 import { checkScope, type Operation } from './scopes';
 
 /**
- * Tilgangsbeslutningen.
+ * The access decision.
  *
- * Fire lag må alle gi grønt lys før en forespørsel slipper gjennom:
+ * Four layers must all agree before a request gets through:
  *
- *  1. Scope       - hva appen har bedt om og fått (SMART on FHIR)
- *  2. Rolle       - hva stillingskategorien kan gjøre (EPJ-standarden)
- *  3. Tjenstlig behov - om det finnes en dokumentert behandlingsrelasjon til
- *                   nettopp denne pasienten (helsepersonelloven § 21 a)
- *  4. Sperring    - om pasienten har sperret journalen mot denne brukeren
+ *  1. Scope        - what the app asked for and was granted (SMART on FHIR)
+ *  2. Role         - what the staff category may do (the EPJ standard)
+ *  3. Legitimate need - whether a documented care relationship exists with
+ *                    this particular patient (helsepersonelloven § 21 a)
+ *  4. Restriction  - whether the patient has blocked the record for this user
  *
- * Nødrett ("break the glass") kan overstyre lag 3 og 4, men aldri lag 1 og 2,
- * og alltid med begrunnelse, tidsbegrensning og eget innslag i sikkerhetsloggen.
+ * Emergency access ("break the glass") can override layers 3 and 4, but never
+ * 1 and 2, and always with a justification, a time limit and its own entry in
+ * the audit log.
  */
-
 export type Basis =
 	| 'behandlingsrelasjon'
 	| 'egen-journal'
@@ -33,11 +33,11 @@ export interface Decision {
 	allowed: boolean;
 	reason?: string;
 	basis?: Basis;
-	/** `TREAT` normalt, `ETREAT` ved nødrett - går i AuditEvent.purposeOfUse. */
+	/** `TREAT` normally, `ETREAT` under emergency access - goes in AuditEvent.purposeOfUse. */
 	purposeOfUse: string;
-	/** Søkebegrensninger fra scope som må tvinges inn i spørringen. */
+	/** Search limitations from scope that must be forced into the query. */
 	limitations: URLSearchParams[];
-	/** HTTP-status som bør returneres når `tillatt` er false. */
+	/** HTTP status to return when `allowed` is false. */
 	status: 401 | 403;
 }
 
@@ -46,13 +46,13 @@ const DENY = (reason: string, status: 401 | 403 = 403): Decision => ({
 });
 
 /**
- * Ressurstyper som ikke inneholder pasientopplysninger og derfor ikke krever
- * tjenstlig behov.
+ * Resource types that hold no patient data and therefore need no legitimate
+ * need.
  *
- * Listen skal være kort og lett å forsvare. En type hører bare hjemme her hvis
- * den ikke kan peke på en pasient i det hele tatt - `Group` sto her, men en
- * gruppe kan ha `member.entity` mot Patient, og et kohortuttrekk er nettopp en
- * liste over hvem som hører til.
+ * The list should stay short and easy to defend. A type belongs here only if it
+ * cannot point at a patient at all - `Group` used to be here, but a group can
+ * carry `member.entity` referencing Patient, and a cohort extract is precisely
+ * a list of who belongs to it.
  */
 const NOT_PASIENTNAERE = new Set([
 	'Practitioner', 'PractitionerRole', 'Organization', 'Location', 'Medication',
@@ -61,28 +61,28 @@ const NOT_PASIENTNAERE = new Set([
 ]);
 
 /**
- * Om tilgangskontrollen kan avgjøre hvilken pasient en ressurstype gjelder.
+ * Whether access control can determine which patient a resource type concerns.
  *
- * Både tjenstlig behov (lag 3) og sperring (lag 4) forutsetter at vi vet hvilken
- * pasient opplysningen hører til. For en type uten pasientreferanse i
- * kompartmentdefinisjonen kan ingen av delene håndheves - og da skal typen ikke
- * være tilgjengelig, uansett hva scopet sier.
+ * Both legitimate need (layer 3) and restriction (layer 4) assume we know which
+ * patient the information belongs to. For a type with no patient reference in
+ * the compartment definition neither can be enforced - and then the type should
+ * not be available at all, whatever the scope says.
  *
- * Dette er en strukturell sperre, ikke en liste å vedlikeholde: en ny
- * ressurstype i SEARCH_PARAMS uten `patient`/`subject`-parameter blir avvist
- * inntil noen har tatt stilling til hvordan pasienten skal utledes.
+ * This is a structural bar, not a list to maintain: a new resource type in
+ * SEARCH_PARAMS without a `patient`/`subject` parameter is refused until
+ * somebody has decided how its patient is to be derived.
  */
 export function canDeterminePatient(resourceType: string): boolean {
 	if (resourceType === 'Patient') return true;
 	return (PATIENTCOMPARTMENT[resourceType]?.length ?? 0) > 0;
 }
 
-/** Om en ressurstype i det hele tatt inneholder pasientopplysninger. */
+/** Whether a resource type carries patient data at all. */
 export function isPatientRelated(resourceType: string): boolean {
 	return !NOT_PASIENTNAERE.has(resourceType);
 }
 
-/** Finner pasienten en ressurs gjelder, ut fra kompartmentdefinisjonen. */
+/** Finds the patient a resource concerns, from the compartment definition. */
 export function patientIdFromResource(resource: FhirResource): string | null {
 	if (resource.resourceType === 'Patient') return (resource.id as string) ?? null;
 	for (const param of PATIENTCOMPARTMENT[resource.resourceType] ?? []) {
@@ -100,21 +100,21 @@ export interface AccessQuestion {
 	ctx: AuthContext;
 	resourceType: string;
 	operation: Operation;
-	/** Settes når forespørselen gjelder én kjent pasient. */
+	/** Set when the request concerns one known patient. */
 	patientId?: string | null;
-	/** Ressursen som leses eller skrives, når den er kjent. */
+	/** The resource being read or written, when it is known. */
 	resource?: FhirResource | null;
-	/** Ressurs-id for kall som ennå ikke har hentet innholdet. */
+	/** Resource id for calls that have not fetched the content yet. */
 	resourceId?: string | null;
 }
 
 export async function evaluate(question: AccessQuestion): Promise<Decision> {
 	const { ctx, resourceType, operation } = question;
 
-	// --- Lag 1: scope -------------------------------------------------------
+	// --- Layer 1: scope -----------------------------------------------------
 	const patientId = question.patientId ?? (question.resource ? patientIdFromResource(question.resource) : null);
-	// For en innbygger som er logget inn i egen journal er pasientkonteksten
-	// personen selv, også når det ikke finnes en SMART-launch.
+	// For a citizen logged into their own record the patient context is the
+	// person themselves, even when there is no SMART launch.
 	const contextPatient = ctx.launch.patientId ?? ownPatientId(ctx);
 	const scopeResponse = checkScope(ctx.scopes, {
 		resource: resourceType,
@@ -137,14 +137,14 @@ export async function evaluate(question: AccessQuestion): Promise<Decision> {
 		return { allowed: true, basis: 'ikke-pasientdata', purposeOfUse: 'HOPERAT', limitations: scopeResponse.limitations, status: 403 };
 	}
 
-	// Typen er pasientnær, men vi har ingen måte å finne ut hvilken pasient den
-	// gjelder. Da kan verken tjenstlig behov eller sperring vurderes, og eneste
-	// forsvarlige svar er nei.
+	// The type carries patient data, but we have no way to find out which
+	// patient. Neither legitimate need nor restriction can be judged, and the
+	// only defensible answer is no.
 	if (!canDeterminePatient(resourceType)) {
 		return DENY(`Tilgangen til ${resourceType} kan ikke vurderes: ressurstypen har ingen pasientreferanse`);
 	}
 
-	// Innbygger som ser sin egen journal.
+	// A citizen viewing their own record.
 	if (isPatient(ctx)) {
 		const own = ownPatientId(ctx);
 		if (!own) return DENY('Innbyggerbrukeren mangler kobling til pasientjournal');
@@ -154,19 +154,19 @@ export async function evaluate(question: AccessQuestion): Promise<Decision> {
 	}
 
 	if (!patientId) {
-		// Søk har ingen pasient på forhånd. Tilgangen avgjøres per treff, ved at
-		// `sokRessurser` avgrenser spørringen med `tillattePasienter()`.
+		// A search has no patient up front. Access is decided per hit, by
+		// `searchResources` narrowing the query with `allowedPatients()`.
 		if (operation === 's') {
 			return { allowed: true, basis: 'behandlingsrelasjon', purposeOfUse: 'TREAT', limitations: scopeResponse.limitations, status: 403 };
 		}
-		// Et enkeltoppslag på en pasientnær ressurs uten pasientreferanse kan
-		// ikke vurderes mot verken behandlingsrelasjon eller sperring. Tidligere
-		// slapp slike kall gjennom; det gjorde tjenstlig behov omgåelig for enhver
-		// ressurs der referansen manglet eller ikke ble gjenkjent.
+		// A single lookup of a patient-bearing resource with no patient
+		// reference can be judged against neither care relationship nor
+		// restriction. Such calls used to pass, which made legitimate need
+		// evadable for any resource whose reference was missing or unrecognised.
 		return DENY(`Fant ingen pasientreferanse i ${resourceType}, og tilgangen kan derfor ikke vurderes`);
 	}
 
-	// --- Lag 3: tjenstlig behov --------------------------------------------
+	// --- Layer 3: legitimate need -------------------------------------------
 	const emergencyAccess = await activeEmergencyAccess(ctx.userId, patientId);
 	const hasRelationship = canSeeAllPatients(ctx.roles) || (await hasCareRelationship(ctx.userId, patientId));
 
@@ -246,9 +246,9 @@ export async function isBlocked(
 }
 
 /**
- * Pasientene brukeren har tjenstlig behov for akkurat nå. Brukes til å tvinge
- * inn et `patient=`-filter i søk, slik at et bredt søk aldri kan lekke pasienter
- * brukeren ikke har relasjon til.
+ * The patients this user has a legitimate need for right now. Used to force a
+ * `patient=` filter into searches, so that a broad search can never leak
+ * patients the user has no relationship with.
  */
 export async function allowedPatients(ctx: AuthContext, max = 2000): Promise<string[] | 'alle'> {
 	if (canSeeAllPatients(ctx.roles)) return 'alle';
@@ -271,7 +271,7 @@ export async function allowedPatients(ctx: AuthContext, max = 2000): Promise<str
 	return rows.map((r) => r.patient_id);
 }
 
-/** Pasienter som har sperret journalen for denne brukeren, og som må filtreres bort. */
+/** Patients who have blocked the record for this user, and must be filtered out. */
 export async function blockedPatients(ctx: AuthContext): Promise<Set<string>> {
 	const rows = await query<{ patient_id: string; scope_extent: string; target_user_id: string | null; target_role: string | null }>(
 		`SELECT patient_id, scope_extent, target_user_id, target_role FROM record_restriction
@@ -286,7 +286,7 @@ export async function blockedPatients(ctx: AuthContext): Promise<Set<string>> {
 		else if (s.scope_extent === 'rolle' && s.target_role && ctx.roles.includes(s.target_role as never)) blocked.add(s.patient_id);
 	}
 	if (blocked.size === 0 || !ctx.userId) return blocked;
-	// Nødrett opphever sperringen for de pasientene den gjelder.
+	// Emergency access lifts the restriction for the patients it covers.
 	const emergencyAccess = await query<{ patient_id: string }>(
 		'SELECT patient_id FROM break_glass WHERE tenant_id = $1 AND user_id = $2 AND expires_at > now()',
 		[requireTenant().id, ctx.userId]

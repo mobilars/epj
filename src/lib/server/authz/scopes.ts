@@ -1,22 +1,22 @@
 /**
- * SMART on FHIR scopes, versjon 2 (`patient/Observation.rs`) med bakoverkompatibel
- * tolkning av versjon 1 (`patient/Observation.read`).
+ * SMART on FHIR scopes, version 2 (`patient/Observation.rs`) with backward
+ * compatible reading of version 1 (`patient/Observation.read`).
  *
- * Helsedirektoratets anbefaling HITR 1225 om bruk av SMART on FHIR legger til
- * grunn SMART App Launch. Scope er *ytre* ramme for hva en app kan be om;
- * den endelige avgjørelsen tas i `tilgang.ts`, som i tillegg krever tjenstlig
- * behov og tar hensyn til sperringer. En app kan aldri få mer enn brukeren har.
+ * The Directorate of Health's recommendation HITR 1225 on using SMART on FHIR
+ * builds on SMART App Launch. Scope is the *outer* bound on what an app may ask
+ * for; the final decision is made in `access.ts`, which additionally requires
+ * legitimate need and honours restrictions. An app can never get more than the
+ * user has.
  */
-
 export type Operation = 'c' | 'r' | 'u' | 'd' | 's';
 export type Context = 'patient' | 'user' | 'system';
 
 export interface ParsedScope {
 	context: Context;
-	/** `*` betyr alle ressurstyper. */
+	/** `*` means every resource type. */
 	resource: string;
 	operations: Set<Operation>;
-	/** Valgfri søkebegrensning, f.eks. `category=vital-signs`. */
+	/** Optional search limitation, e.g. `category=vital-signs`. */
 	limitation?: URLSearchParams;
 	raw: string;
 }
@@ -39,7 +39,7 @@ export function parseScope(raw: string): ParsedScope | null {
 		operations = V1_KART[opsDel];
 	} else if (/^[cruds]+$/.test(opsDel)) {
 		operations = [...new Set(opsDel.split('') as Operation[])];
-		// Rekkefølgen c-r-u-d-s er normativ i SMART v2.
+		// The order c-r-u-d-s is normative in SMART v2.
 		const expected = ['c', 'r', 'u', 'd', 's'].filter((o) => operations.includes(o as Operation)).join('');
 		if (opsDel !== expected) return null;
 	} else {
@@ -85,22 +85,22 @@ export function parseScopes(scopeString: string): ScopeSet {
 export interface ScopeQuestion {
 	resource: string;
 	operation: Operation;
-	/** Settes for kall som gjelder én bestemt pasient. */
+	/** Set for calls concerning one particular patient. */
 	contextPatientId?: string | null;
-	/** Pasienten som er i launch-kontekst for tokenet. */
+	/** The patient in launch context for the token. */
 	tokenPatientId?: string | null;
 }
 
 export interface ScopeResponse {
 	allowed: boolean;
 	reason?: string;
-	/** Søkebegrensninger som må tvinges inn i spørringen. */
+	/** Search limitations that must be forced into the query. */
 	limitations: URLSearchParams[];
-	/** True når tilgangen kun er innvilget for launch-pasienten. */
+	/** True when access is granted only for the launch patient. */
 	onlyLaunchPatient: boolean;
 }
 
-/** Avgjør om scope-settet dekker en operasjon. */
+/** Decides whether the scope set covers an operation. */
 export function checkScope(set: ScopeSet, question: ScopeQuestion): ScopeResponse {
 	const relevante = set.clinical.filter(
 		(s) => (s.resource === '*' || s.resource === question.resource) && s.operations.has(question.operation)
@@ -136,8 +136,8 @@ export function checkScope(set: ScopeSet, question: ScopeQuestion): ScopeRespons
 		}
 	}
 
-	// Er alle treffende scopes begrenset, må begrensningene håndheves. Finnes det
-	// minst ett ubegrenset scope, gjelder ingen begrensning.
+	// If every matching scope is limited, the limitations must be enforced. If at
+	// least one is unlimited, no limitation applies.
 	const allBegrenset = relevante.every((s) => s.limitation !== undefined);
 	const limitations = allBegrenset
 		? relevante.map((s) => s.limitation as URLSearchParams)
@@ -147,8 +147,8 @@ export function checkScope(set: ScopeSet, question: ScopeQuestion): ScopeRespons
 }
 
 /**
- * Snevrer inn et forespurt scope-sett til det brukeren faktisk har lov til.
- * Brukes på autorisasjonsendepunktet: en app kan ikke få tilgang brukeren mangler.
+ * Narrows a requested scope set to what the user is actually allowed.
+ * Used at the authorisation endpoint: an app cannot get access the user lacks.
  */
 export function narrowIn(forespurt: string, allowedForClient: string[], allowedForUser: Set<string>): string {
 	const clientAllowed = new Set(allowedForClient);
@@ -161,14 +161,14 @@ export function narrowIn(forespurt: string, allowedForClient: string[], allowedF
 }
 
 /**
- * Avgjør om et scope dekkes av et sett andre scope.
+ * Decides whether a scope is covered by a set of other scopes.
  *
- * `*` dekker alle ressurstyper, og et scope med flere operasjoner dekker et med
- * færre. `patient/` dekkes også av tilsvarende `user/`, fordi patient-varianten
- * er en innsnevring til én pasient: har rollen lov til å lese målinger for alle
- * pasientene sine, har den også lov til å la en app lese målinger for én av dem.
- * Motsatt vei gjelder ikke, og `system/` dekker ingenting av dette - det er
- * forbeholdt tjeneste-til-tjeneste-tilgang uten bruker.
+ * `*` covers every resource type, and a scope with more operations covers one
+ * with fewer. `patient/` is also covered by the matching `user/`, because the
+ * patient variant is a narrowing to one patient: if the role may read
+ * observations for all its patients, it may also let an app read observations
+ * for one of them. The reverse does not hold, and `system/` covers none of
+ * this - it is reserved for service-to-service access without a user.
  */
 export function coveredOf(scope: string, allowed: Set<string>): boolean {
 	const parsed = parseScope(scope);
@@ -189,7 +189,7 @@ function contextDekker(has: Context, ber: Context): boolean {
 	return has === 'user' && ber === 'patient';
 }
 
-/** Menneskelig forklaring til samtykkedialogen. */
+/** Human-readable explanation for the consent dialog. */
 export function describeScope(scope: string): string {
 	if (scope === 'openid' || scope === 'profile') return 'Vite hvem du er';
 	if (scope === 'fhirUser') return 'Se hvilken behandler du er registrert som';

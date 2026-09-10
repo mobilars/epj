@@ -8,12 +8,12 @@ import { oreToKroner } from './tariffs';
 import type { BillingCard, BillingLine } from './billing';
 
 /**
- * Oppgjør mot Helfo (KUHR).
+ * Settlement against Helfo (KUHR).
  *
- * Legen sender periodiske oppgjørskrav med regningskortene fra perioden.
- * Helfo kontrollerer og avregner, og returnerer en oppgjørsrapport der enkelte
- * kort kan være avvist. Avviste kort må rettes og sendes på nytt - derfor
- * beholder vi koblingen mellom kort, innsending og avvisningsårsak.
+ * The doctor sends periodic settlement claims with the period's billing cards.
+ * Helfo checks and settles them, returning a settlement report in which some
+ * cards may be rejected. Rejected cards must be corrected and resubmitted -
+ * which is why we keep the link between card, submission and rejection reason.
  */
 
 export type Oppgjorstatus = 'generert' | 'sendt' | 'mottatt' | 'avregnet' | 'avvist';
@@ -63,7 +63,7 @@ export async function forhandsvis(from: string, to: string): Promise<Forhandsvis
 	};
 }
 
-/** Bygger oppgjørsfilen og markerer kortene som sendt. */
+/** Builds the settlement file and marks the cards as sent. */
 export async function generateSettlement(from: string, to: string, actor: AuditActor): Promise<{ ok: boolean; id?: string; error?: string }> {
 	const tenantId = requireTenant().id;
 	const card = await query<BillingCard>(
@@ -153,8 +153,8 @@ function mockInnsending(settlement: Settlement): { reference: string; received: 
 }
 
 /**
- * Registrerer oppgjørsrapporten fra Helfo: hvilke kort som er godkjent og
- * hvilke som er avvist, med årsak.
+ * Records the settlement report from Helfo: which cards were approved and which
+ * were rejected, with the reason.
  */
 export async function registerSettlementRun(
 	settlementId: string,
@@ -184,12 +184,12 @@ export async function registerSettlementRun(
 }
 
 /**
- * Oppgjørsfil.
+ * Settlement file.
  *
- * KUHR tar imot regningskort i et fastsatt XML-format. Strukturen under følger
- * hovedelementene (konto, regningskort, takstlinjer), men feltnavn og
- * kodeverksreferanser må kontrolleres mot Helfos gjeldende meldingsbeskrivelse
- * før produksjonssetting.
+ * KUHR accepts billing cards in a fixed XML format. The structure below follows
+ * the main elements (account, billing card, tariff lines), but field names and
+ * code system references must be checked against Helfo's current message
+ * specification before going to production.
  */
 export function buildSettlementFile(
 	id: string,

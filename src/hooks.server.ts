@@ -15,7 +15,7 @@ import { getTenant, getTenantOnHostname, ensureDefaultOrganisation } from '$srv/
 
 let migrertOk: Promise<unknown> | null = null;
 
-/** Kjører migrasjoner én gang ved oppstart. */
+/** Runs migrations once at startup. */
 function ensureSchema(): Promise<unknown> {
 	if (!migrertOk) {
 		migrertOk = migrate()
@@ -29,7 +29,7 @@ function ensureSchema(): Promise<unknown> {
 	return migrertOk;
 }
 
-/** Bygger tilgangskontekst for en innlogget sesjon i journalens eget grensesnitt. */
+/** Builds the auth context for a signed-in session in the record's own UI. */
 async function contextFromSession(event: Parameters<Handle>[0]['event'], requestId: string): Promise<AuthContext | null> {
 	const session = await getSession(event.cookies);
 	if (!session) return null;
@@ -43,7 +43,7 @@ async function contextFromSession(event: Parameters<Handle>[0]['event'], request
 		name: user.name,
 		roles,
 		permissions: permissionsForRoles(roles),
-		// Journalens eget grensesnitt får alle scopes rollen tillater.
+		// The record's own UI gets every scope the role permits.
 		scopes: parseScopes([...scopesForRoles(roles)].join(' ')),
 		clientId: null,
 		clientName: 'EPJ',
@@ -65,11 +65,11 @@ async function contextFromBearer(authorization: string, event: Parameters<Handle
 }
 
 /**
- * Finner hvilken virksomhet forespørselen gjelder.
+ * Finds which organisation a request concerns.
  *
- * Utledes av vertsnavnet, aldri av noe klienten kan velge. Ukjent vertsnavn
- * avvises i produksjon; i utvikling faller vi tilbake på standardvirksomheten,
- * slik at localhost virker uten oppsett.
+ * Derived from the hostname, never from anything the client can choose. An
+ * unknown hostname is refused in production; in development we fall back to the
+ * default organisation, so localhost works without setup.
  */
 async function resolveTenant(hostname: string): Promise<{ tenant: Tenant; isPlatform: boolean } | { error: string; status: number }> {
 	if (config.tenant.platformHostname && hostname === config.tenant.platformHostname) {
@@ -104,8 +104,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.tenant = resolution.tenant;
 	event.locals.isPlatform = resolution.isPlatform;
 
-	// Resten av forespørselen kjører i virksomhetens kontekst. Spørringer som
-	// glemmer avgrensningen feiler dermed høylytt i stedet for å hente andres data.
+	// The rest of the request runs in the organisation's context. Queries that
+	// forget the boundary then fail loudly instead of fetching someone else's data.
 	return withTenant(resolution.tenant, () => handleIContext(event, resolve, resolution.isPlatform));
 };
 
@@ -122,8 +122,8 @@ async function handleIContext(
 	const path = event.url.pathname;
 	const isFhirApi = path.startsWith('/fhir') || path.startsWith('/api') || path.startsWith('/oauth');
 
-	// Plattformadministrasjonen nås bare på plattformens eget vertsnavn, og
-	// virksomhetens sider nås ikke derfra.
+	// Platform administration is reached only on the platform's own hostname,
+	// and the organisation's pages are not reachable from there.
 	if (config.tenant.platformHostname) {
 		if (path.startsWith('/systemadmin') && !isPlatform) {
 			return new Response('Plattformadministrasjon nås på et eget vertsnavn.', { status: 404 });
@@ -133,7 +133,7 @@ async function handleIContext(
 		}
 	}
 
-	// Ratebegrensning. Autentiseringsendepunktene er strengere enn resten.
+	// Rate limiting. The authentication endpoints are stricter than the rest.
 	const strengt = path.startsWith('/oauth/token') || path === '/logg-inn';
 	const limit = await rateLimit(
 		`${strengt ? 'auth' : 'alm'}:${event.locals.clientIp}`,
@@ -181,8 +181,8 @@ async function handleIContext(
 
 export const handleError: HandleServerError = ({ error, event }) => {
 	const requestId = event.locals?.requestId ?? 'ukjent';
-	// Detaljer logges på serveren; klienten får bare en korrelasjons-id, slik at
-	// interne feilmeldinger ikke lekker informasjon om systemet.
+	// Details are logged on the server; the client gets only a correlation id, so
+	// that internal error messages do not leak information about the system.
 	console.error(`[feil] ${requestId} ${event.url.pathname}`, error);
 	return {
 		message: 'Det oppsto en uventet feil. Kontakt systemansvarlig og oppgi referansen.',

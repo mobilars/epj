@@ -31,18 +31,18 @@ export interface UtstedelseIn {
 	userId: string | null;
 	scope: string;
 	launch: LaunchContext;
-	/** Utsted refresh token (krever `offline_access` eller `online_access`). */
+	/** Issue a refresh token (requires `offline_access` or `online_access`). */
 	withRefresh: boolean;
 	nonce?: string | null;
 }
 
 /**
- * Utsteder access token som signert JWT (ES256).
+ * Issues an access token as a signed JWT (ES256).
  *
- * Tokenet er selvbeskrivende slik at ressursserveren kan validere det uten
- * databaseoppslag, men vi lagrer likevel en hash av det: uten det kan vi ikke
- * trekke tilbake tokens ved mistanke om misbruk, og tilbakekalling er et krav
- * i Normen ved avslutning av arbeidsforhold.
+ * The token is self-describing so the resource server can validate it without a
+ * database lookup, but we store a hash of it anyway: without that we cannot
+ * revoke tokens on suspicion of misuse, and revocation is required by Normen
+ * when an employment ends.
  */
 export async function issueTokens(inValue: UtstedelseIn): Promise<IssuedToken> {
 	const tenant = requireTenant();
@@ -61,8 +61,8 @@ export async function issueTokens(inValue: UtstedelseIn): Promise<IssuedToken> {
 		iss: issuerFor(tenant),
 		sub: inValue.userId ?? inValue.clientId,
 		aud: fhirBaseFor(tenant),
-		// Virksomheten tokenet gjelder. Kontrolleres ved validering, slik at et
-		// token fra én virksomhet ikke kan brukes mot en annen.
+		// The organisation the token is for. Checked on validation, so that a
+		// token from one organisation cannot be used against another.
 		tenant: tenant.id,
 		client_id: inValue.clientId,
 		scope: inValue.scope,
@@ -93,7 +93,7 @@ export async function issueTokens(inValue: UtstedelseIn): Promise<IssuedToken> {
 		result.refresh_token = await issueRefreshToken(inValue, familie);
 	}
 
-	// SMART launch-parametere returneres sammen med tokenet.
+	// SMART launch parameters are returned alongside the token.
 	if (inValue.launch.patientId) result.patient = inValue.launch.patientId;
 	if (inValue.launch.encounterId) result.encounter = inValue.launch.encounterId;
 	if (fhirUser) result.fhirUser = fhirUser;
@@ -139,8 +139,8 @@ export interface RefreshResult {
 }
 
 /**
- * Bytter inn et refresh token. Tokenet roteres, og gjenbruk av et allerede
- * innbyttet token tolkes som tyveri: hele token-familien trekkes tilbake.
+ * Exchanges a refresh token. The token is rotated, and reuse of one already
+ * exchanged is read as theft: the whole token family is revoked.
  */
 export async function renewWithRefreshToken(refreshToken: string, clientId: string, newScope?: string): Promise<RefreshResult> {
 	const hash = tokenHash(refreshToken);
@@ -167,7 +167,7 @@ export async function renewWithRefreshToken(refreshToken: string, clientId: stri
 		await exec("UPDATE oauth_token SET revoked = true, revoked_reason = 'rotert' WHERE id = $1 AND tenant_id = $2", [row.id, requireTenant().id]);
 	}
 
-	// Scope kan snevres inn, aldri utvides.
+	// Scope may be narrowed, never widened.
 	const opprinnelige = new Set(row.scope.split(/\s+/));
 	const scope = newScope
 		? newScope.split(/\s+/).filter((s) => opprinnelige.has(s)).join(' ')
@@ -203,7 +203,7 @@ export interface TokenValidation {
 	payload?: Record<string, unknown>;
 }
 
-/** Validerer et Bearer-token og bygger tilgangskonteksten. */
+/** Validates a Bearer token and builds the auth context. */
 export async function validateAccessToken(token: string): Promise<TokenValidation> {
 	let payload: Record<string, unknown>;
 	try {
@@ -213,7 +213,7 @@ export async function validateAccessToken(token: string): Promise<TokenValidatio
 	}
 	const tenant = requireTenant();
 	if (payload.iss !== issuerFor(tenant)) return { valid: false, error: 'Ugyldig utsteder' };
-	// Tokenet må være utstedt for virksomheten forespørselen gjelder.
+	// The token must have been issued for the organisation the request concerns.
 	if (payload.tenant && payload.tenant !== tenant.id) {
 		return { valid: false, error: 'Tokenet er utstedt for en annen virksomhet' };
 	}
@@ -231,8 +231,8 @@ export async function validateAccessToken(token: string): Promise<TokenValidatio
 	const scope = String(payload.scope ?? '');
 	const launch = row.launch_context ?? {};
 
-	// Backend-tjenester har ingen bruker; rettighetene styres da av scope alene,
-	// og de kan aldri få `patient/`-scope.
+	// Backend services have no user; permissions are then governed by scope
+	// alone, and they can never hold a `patient/` scope.
 	const permissions = userId
 		? permissionsForRoles(roles)
 		: new Set<never>(['journal:les', 'journal:skriv'] as never[]);
@@ -279,7 +279,7 @@ export async function introspiser(token: string): Promise<Record<string, unknown
 	};
 }
 
-/** Vedlikehold. Går bevisst på tvers av virksomheter: sletter bare utløpte rader. */
+/** Maintenance. Deliberately across organisations: deletes only expired rows. */
 export async function purgeUtlopteTokens(): Promise<number> {
 	return exec("DELETE FROM oauth_token WHERE expires_at < now() - interval '7 days'");
 }

@@ -5,16 +5,16 @@ import { newId } from '../../util/ids';
 import { log, type AuditActor } from '../../audit';
 
 /**
- * Oppslag mot Helfos egenandels- og frikorttjeneste.
+ * Lookups against Helfo's copayment and exemption card service.
  *
- * Egenandelstak 1 gjelder blant annet lege, psykolog, poliklinikk, røntgen,
- * reiser og legemidler på blå resept. Når taket er nådd, utsteder Helfo frikort
- * automatisk, og videre egenandeler kreves ikke inn av behandleren.
+ * Copayment ceiling 1 covers doctors, psychologists, outpatient clinics,
+ * radiology, travel and medicines on blue prescription. When the ceiling is
+ * reached Helfo issues an exemption card automatically, and the practitioner
+ * collects no further copayment.
  *
- * Selve oppslaget er en behandling av personopplysninger og logges særskilt.
+ * The lookup is itself processing of personal data and is logged separately.
  */
-
-/** Egenandelstak 1. Fastsettes årlig i statsbudsjettet - må oppdateres. */
+/** Copayment ceiling 1. Set annually in the national budget - must be updated. */
 export const EGENANDELSTAK_ORE = 327_800;
 export const EGENANDELSTAK_AR = 2026;
 
@@ -95,8 +95,8 @@ async function getFromHelfo(fnr: string): Promise<Omit<CopaymentStatus, 'patient
 }
 
 /**
- * Deterministisk simulering: siste siffer i fødselsnummeret avgjør status, slik
- * at testdata gir forutsigbare og gjentakbare resultater.
+ * Deterministic simulation: the last digit of the national identity number
+ * decides the status, so test data gives predictable, repeatable results.
  */
 function mockStatus(fnr: string): Omit<CopaymentStatus, 'patientId' | 'remainingOre' | 'fetchedAt'> {
 	const siffer = Number(fnr.slice(-1)) || 0;

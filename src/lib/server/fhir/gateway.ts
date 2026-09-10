@@ -11,18 +11,18 @@ import type { Operation } from '../authz/scopes';
 import { actorFromContext, log } from '../audit';
 
 /**
- * Vokteren foran HAPI FHIR.
+ * The guard in front of HAPI FHIR.
  *
- * Alle FHIR-kall - fra journalens eget grensesnitt, fra SMART-apper og fra
- * backend-tjenester - går gjennom denne modulen. Her, og bare her, håndheves:
+ * Every FHIR call - from the record's own UI, from SMART apps and from backend
+ * services - goes through this module. Here, and only here, we enforce:
  *
- *  - SMART-scope og rolle (`authz/tilgang.ts`)
- *  - tjenstlig behov: søk avgrenses til pasienter brukeren har relasjon til
- *  - sperring: pasienter som har sperret journalen filtreres bort
- *  - sikkerhetslogg: hvert kall gir et AuditEvent, også de som avvises
+ *  - SMART scope and role (`authz/access.ts`)
+ *  - legitimate need: searches are narrowed to patients the user relates to
+ *  - restriction: patients who have blocked the record are filtered out
+ *  - audit log: every call yields an AuditEvent, refused ones included
  *
- * HAPI selv er ikke eksponert. Skulle noen få nettverkstilgang til HAPI direkte,
- * er det et brudd på nettverksdesignet, ikke en omgåelse av denne koden.
+ * HAPI itself is not exposed. If someone reaches HAPI directly over the
+ * network, that is a breach of the network design, not a bypass of this code.
  */
 
 export interface GatewayResponse {
@@ -35,7 +35,7 @@ const METHOD_TO_OPERATION: Record<string, Operation> = {
 	GET: 'r', HEAD: 'r', POST: 'c', PUT: 'u', PATCH: 'u', DELETE: 'd'
 };
 
-/** Søkeparametere som brukes til å avgrense på pasient per ressurstype. */
+/** Search parameters used to narrow by patient, per resource type. */
 function patientParam(resourceType: string): string | null {
 	if (resourceType === 'Patient') return '_id';
 	const candidates = PATIENTCOMPARTMENT[resourceType] ?? [];
@@ -45,7 +45,7 @@ function patientParam(resourceType: string): string | null {
 export interface Request {
 	ctx: AuthContext;
 	method: string;
-	/** Sti under /fhir, f.eks. `Patient/123` eller `Observation/_search`. */
+	/** Path under /fhir, e.g. `Patient/123` or `Observation/_search`. */
 	path: string;
 	search: URLSearchParams;
 	body?: unknown;
@@ -70,7 +70,7 @@ export async function execute(f: Request): Promise<GatewayResponse> {
 		throw FhirError.notStottet(`Ressurstypen ${resourceType} er ikke støttet`);
 	}
 
-	// [type]/_search  og  [type]?...  -> søk
+	// [type]/_search  and  [type]?...  -> search
 	if ((parts.length === 2 && parts[1] === '_search') || parts.length === 1) {
 		if (f.method === 'POST' && parts.length === 1) return createResource(f, resourceType);
 		if (f.method === 'DELETE') throw FhirError.notStottet('Betinget sletting er slått av');
@@ -178,8 +178,8 @@ async function updateResource(f: Request, resourceType: string, id: string): Pro
 	const findings = validate({ ...newValue, id }, resourceType).filter((i) => i.severity === 'error' || i.severity === 'fatal');
 	if (findings.length > 0) throw new FhirError(422, findings);
 
-	// Tilgang må vurderes både mot den nye og den eksisterende versjonen: en
-	// bruker skal ikke kunne flytte en ressurs over på «sin» pasient.
+	// Access must be judged against both the new and the existing version: a user
+	// must not be able to move a resource onto "their" patient.
 	const existing = await fhirClient.read(resourceType, id, { requestId: f.ctx.requestId }).catch(() => null);
 	for (const candidate of [newValue, existing].filter(Boolean) as FhirResource[]) {
 		const decision = await evaluate({ ctx: f.ctx, resourceType, operation: 'u', resource: candidate, patientId: patientIdFromResource(candidate) });
@@ -222,9 +222,9 @@ async function deleteResource(f: Request, resourceType: string, id: string): Pro
 		await log({ type: 'rest', subtype: 'delete', action: 'D', outcome: '4', outcomeDescription: decision.reason, patientId, entityRef: `${resourceType}/${id}` }, actorFromContext(f.ctx));
 		throw new FhirError(decision.status, [issue('error', 'forbidden', decision.reason ?? 'Ingen tilgang')]);
 	}
-	// Journalinnhold skal ikke slettes uten vedtak; markering som feilført er
-	// hovedveien (`entered-in-error`). Sletting her fjerner ressursen fra søk,
-	// mens HAPI beholder versjonshistorikken.
+	// Record content should not be deleted without a decision; marking it
+	// entered-in-error is the main route. Deleting here removes the resource from
+	// search, while HAPI keeps the version history.
 	const response = await fhirClient.deleteValue(resourceType, id, { requestId: f.ctx.requestId });
 	await log(
 		{ type: 'rest', subtype: 'delete', action: 'D', outcome: '0', patientId, entityRef: `${resourceType}/${id}`, purposeOfUse: decision.purposeOfUse },
@@ -249,18 +249,18 @@ async function searchResources(f: Request, resourceType: string): Promise<Gatewa
 		for (const [k, v] of f.body) search.append(k, v);
 	}
 
-	// Tvinger inn scope-begrensninger, f.eks. `patient/Observation.rs?category=vital-signs`.
+	// Forces in scope limitations, e.g. `patient/Observation.rs?category=vital-signs`.
 	for (const limitation of decision.limitations) {
 		for (const [k, v] of limitation) search.append(k, v);
 	}
 
-	// Avgrensning til pasienter brukeren faktisk har tjenstlig behov for.
+	// Narrowing to the patients the user actually has a legitimate need for.
 	const allowed = await allowedPatients(f.ctx);
 	const param = patientParam(resourceType);
 	if (allowed !== 'alle') {
-		// Uten et parameter å avgrense på ville spørringen gått ufiltrert til HAPI
-		// og returnert hele virksomhetens data for typen. `vurder` skal allerede ha
-		// avvist slike typer; dette er den andre låsen på samme dør.
+		// With no parameter to narrow on, the query would go unfiltered to HAPI and
+		// return the organisation's entire data for that type. `evaluate` should
+		// already have refused such types; this is the second lock on the same door.
 		if (!param && isPatientRelated(resourceType)) {
 			throw new FhirError(403, [
 				issue('error', 'forbidden', `Søk i ${resourceType} kan ikke avgrenses til pasientene du har tjenstlig behov for`)
@@ -279,8 +279,8 @@ async function searchResources(f: Request, resourceType: string): Promise<Gatewa
 
 	const bundle = await fhirClient.search(resourceType, search, { requestId: f.ctx.requestId });
 
-	// Etterfilter for sperringer. Sperring kan endres mellom to kall, og HAPI
-	// kjenner ikke sperringsmodellen, så filteret gjøres her.
+	// Post-filter for restrictions. A restriction can change between two calls,
+	// and HAPI does not know the restriction model, so the filter is applied here.
 	const blocked = await blockedPatients(f.ctx);
 	const kept = (bundle.entry ?? []).filter((e) => {
 		if (!e.resource) return true;
@@ -305,7 +305,7 @@ async function searchResources(f: Request, resourceType: string): Promise<Gatewa
 	};
 }
 
-/** Fjerner identifikatorer fra spørringen før den lagres i loggen. */
+/** Removes identifiers from the query before it is written to the log. */
 function renseForLog(search: URLSearchParams): string {
 	const kopi = new URLSearchParams(search);
 	for (const key of ['identifier', 'name', 'family', 'given', 'phone', 'email', 'telecom', 'address']) {
@@ -319,7 +319,7 @@ function emptyBundle(): FhirResource {
 }
 
 // ---------------------------------------------------------------------------
-// Historikk, operasjoner og transaksjoner
+// History, operations and transactions
 // ---------------------------------------------------------------------------
 
 async function ressurshistorikk(f: Request, resourceType: string, id: string): Promise<GatewayResponse> {
@@ -364,7 +364,7 @@ async function instansOperation(f: Request, resourceType: string, id: string, op
 	throw FhirError.notStottet(`Operasjonen ${operation} er ikke tilgjengelig`);
 }
 
-/** Fjerner ressurstyper appen ikke har lesescope for fra en samlebundle. */
+/** Removes resource types the app has no read scope for from a collected bundle. */
 function filterBundleOnScope(bundle: Bundle, ctx: AuthContext): FhirResource {
 	const allowed = (type: string) =>
 		ctx.scopes.clinical.some((s) => (s.resource === '*' || s.resource === type) && (s.operations.has('r') || s.operations.has('s')));
@@ -379,8 +379,8 @@ async function transaction(f: Request): Promise<GatewayResponse> {
 		throw FhirError.invalid('Bundle.type må være «transaction» eller «batch»');
 	}
 
-	// Hver oppføring vurderes for seg. En transaksjon skal ikke kunne brukes til
-	// å omgå tilgangskontrollen ved å pakke inn kall brukeren ikke har lov til.
+	// Each entry is judged on its own. A transaction must not become a way to
+	// bypass access control by wrapping up calls the user is not allowed to make.
 	for (const entry of bundle.entry ?? []) {
 		const method = entry.request?.method ?? 'POST';
 		const url = entry.request?.url ?? '';
@@ -464,9 +464,9 @@ function bodySomResource(body: unknown, expectedType: string): FhirResource {
 }
 
 /**
- * Merker ressursen med hvem som skrev den. HAPI fører versjonshistorikken;
- * denne taggen gjør at forfatteren også er synlig i selve ressursen, slik
- * EPJ-standarden krever for signering og kontrasignering.
+ * Tags the resource with who wrote it. HAPI keeps the version history; this tag
+ * makes the author visible in the resource itself as well, as the EPJ standard
+ * requires for signing and countersigning.
  */
 function withProvenance(resource: FhirResource, ctx: AuthContext): FhirResource {
 	const source = ctx.clientId ? `${ctx.actorRef} via ${ctx.clientId}` : ctx.actorRef;

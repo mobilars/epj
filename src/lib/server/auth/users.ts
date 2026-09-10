@@ -31,7 +31,7 @@ export async function getUser(id: string): Promise<User | null> {
 	]);
 }
 
-/** Slår opp en bruker uten virksomhetsavgrensning. Kun for plattformpålogging. */
+/** Looks a user up without the organisation boundary. Platform sign-in only. */
 export async function getUserOnTversOfOrganisations(id: string): Promise<User | null> {
 	return one<User>(`SELECT ${USERFIELDS} FROM user_account WHERE id = $1`, [id]);
 }
@@ -65,7 +65,7 @@ export async function listUsers(): Promise<(User & { roles: Role[] })[]> {
 }
 
 export async function rolesFor(userId: string): Promise<Role[]> {
-	// Rollen henger på brukeren, som allerede er virksomhetsavgrenset.
+	// The role hangs off the user, which is already bounded by organisation.
 	const rows = await query<{ role: string }>(
 		`SELECT role FROM role_assignment
 		 WHERE user_id = $1 AND valid_from <= now() AND (valid_until IS NULL OR valid_until > now())`,
@@ -83,7 +83,7 @@ export interface NewUser {
 	password?: string;
 	roles: Role[];
 	createdOf?: string;
-	/** `null` gir en plattformadministrator uten virksomhet. */
+	/** `null` gives a platform administrator with no organisation. */
 	tenantId?: string | null;
 }
 
@@ -121,8 +121,8 @@ export async function setRoles(userId: string, roles: Role[], tildeltOf: string)
 }
 
 /**
- * Kontrollerer at brukeren tilhører virksomheten i konteksten. Kalles før
- * endringer som tar en bruker-id utenfra.
+ * Checks that the user belongs to the organisation in context. Called before
+ * changes that take a user id from outside.
  */
 async function requireSammeOrganisation(userId: string): Promise<void> {
 	const user = await getUser(userId);
@@ -154,11 +154,11 @@ export type Innloggingsresultat =
 	| { outcome: 'ukjent-bruker' };
 
 /**
- * Verifiserer brukernavn, passord og engangskode.
+ * Verifies username, password and one-time code.
  *
- * Normen krever totrinnsverifisering for tilgang til helseopplysninger utenfor
- * virksomhetens eget nett. Vi krever det som standard, og teller feilede forsøk
- * per konto med midlertidig utestengelse.
+ * Normen requires two-factor authentication for access to health data outside
+ * the organisation's own network. We require it by default, and count failed
+ * attempts per account with a temporary lockout.
  */
 export async function logIn(username: string, password: string, totp?: string): Promise<Innloggingsresultat> {
 	const row = await one<User & { password_hash: string | null; totp_secret_enc: string | null }>(
@@ -167,8 +167,8 @@ export async function logIn(username: string, password: string, totp?: string): 
 		[username, requireTenant().id]
 	);
 	if (!row || !row.password_hash) {
-		// Bruk samme arbeidsmengde som ved gyldig bruker, for å ikke avsløre
-		// om brukernavnet finnes.
+		// Do the same amount of work as for a valid user, so as not to reveal
+		// whether the username exists.
 		verifyPassword(password, hashPassword('dummy'));
 		return { outcome: 'ukjent-bruker' };
 	}
@@ -177,10 +177,10 @@ export async function logIn(username: string, password: string, totp?: string): 
 		return { outcome: 'laast', to: row.locked_until };
 	}
 
-	// Et mislykket forsøk teller likt enten det var passordet eller engangskoden
-	// som var feil. Teller vi bare passordet, får den som allerede har passordet
-	// fritt spillerom til å gjette seksifret engangskode, og totrinnsverifiseringen
-	// er da bare et forsinkende ledd.
+	// A failed attempt counts the same whether the password or the one-time code
+	// was wrong. Counting only the password would give whoever already has the
+	// password free rein to guess a six-digit code, and two-factor would be
+	// nothing but a delay.
 	const registerError = async (): Promise<Innloggingsresultat> => {
 		const attempts = row.failed_attempts + 1;
 		const lock = attempts >= config.security.maxFailedLogins;
@@ -227,7 +227,7 @@ export async function hasMfa(userId: string): Promise<boolean> {
 	return row?.mfa_aktivert ?? false;
 }
 
-/** Verifiserer engangskode på nytt, f.eks. før nødrettstilgang. */
+/** Verifies the one-time code again, e.g. before emergency access. */
 export async function confirmTotp(userId: string, code: string): Promise<boolean> {
 	const row = await one<{ totp_secret_enc: string | null }>(
 		'SELECT totp_secret_enc FROM user_account WHERE id = $1 AND tenant_id IS NOT DISTINCT FROM $2',

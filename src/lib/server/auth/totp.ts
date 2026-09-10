@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
-/** TOTP etter RFC 6238 med SHA-1, 6 siffer og 30 sekunders vindu (Google Authenticator-kompatibelt). */
+/** TOTP per RFC 6238 with SHA-1, 6 digits and a 30 second window (Google Authenticator compatible). */
 
 const ALFABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
@@ -52,7 +52,7 @@ export function totpCode(secret: string, tidssteg = Math.floor(Date.now() / 3000
 	return String(binary % 1_000_000).padStart(6, '0');
 }
 
-/** Godtar koder inntil `vindu` tidssteg bakover og framover (klokkeavvik). */
+/** Accepts codes up to `window` time steps back and forward (clock drift). */
 export function verifyTotp(secret: string, code: string, window = 1): boolean {
 	const sanitise = code.replace(/\s/g, '');
 	if (!/^\d{6}$/.test(sanitise)) return false;

@@ -8,12 +8,12 @@ import { pkceChallenge, issueTokens, type IssuedToken } from './tokens';
 import { validRedirectUri, type OAuthClient } from './clients';
 
 /**
- * Autorisasjonskodeflyt etter OAuth 2.1 og SMART App Launch 2.x.
+ * Authorisation code flow per OAuth 2.1 and SMART App Launch 2.x.
  *
- * PKCE (S256) er påkrevd for alle klienter, også konfidensielle. Koden er
- * engangsbruk og kortlivet, og bindes til klient, redirect_uri og bruker.
+ * PKCE (S256) is required for every client, confidential ones included. The
+ * code is single-use and short-lived, and is bound to client, redirect_uri and
+ * user.
  */
-
 export interface CodeIn {
 	clientId: string;
 	userId: string;
@@ -61,7 +61,7 @@ export async function exchangeInCode(
 
 		if (!row) return { ok: false as const, error: 'invalid_grant', description: 'Ukjent autorisasjonskode' };
 		if (row.used) {
-			// Gjenbruk av kode: trekk tilbake alt som er utstedt til klienten for brukeren.
+			// Code reuse: revoke everything issued to the client for that user.
 			await exec(
 				"UPDATE oauth_token SET revoked = true, revoked_reason = 'gjenbruk av autorisasjonskode' WHERE client_id = $1 AND user_id = $2 AND tenant_id = $3",
 				[row.client_id, row.user_id, requireTenant().id]
@@ -100,7 +100,7 @@ export async function exchangeInCode(
 	});
 }
 
-/** EHR launch: journalen oppretter kontekst før SMART-appen åpnes. */
+/** EHR launch: the record creates context before the SMART app opens. */
 export async function createLaunch(inValue: {
 	clientId: string;
 	userId: string;
@@ -148,10 +148,10 @@ export type Validation =
 	| { ok: false; error: string; description: string; canRedirect: boolean; redirectUri?: string; state?: string };
 
 /**
- * Validerer autorisasjonsforespørselen.
+ * Validates the authorisation request.
  *
- * Feil i `client_id`/`redirect_uri` skal aldri omdirigeres tilbake - da kunne en
- * angriper bruke journalen som åpen omdirigering.
+ * Errors in `client_id`/`redirect_uri` must never be redirected back - that
+ * would let an attacker use the record as an open redirector.
  */
 export function validateAuthorisationRequest(
 	search: URLSearchParams,
@@ -204,7 +204,7 @@ export function errorRedirect(redirectUri: string, error: string, description: s
 	return url.toString();
 }
 
-/** Vedlikehold. Går bevisst på tvers av virksomheter: sletter bare utløpte rader. */
+/** Maintenance. Deliberately across organisations: deletes only expired rows. */
 export async function purgeUtlopteCodes(): Promise<number> {
 	const a = await exec("DELETE FROM oauth_authorization_code WHERE expires_at < now() - interval '1 day'");
 	const b = await exec("DELETE FROM smart_launch WHERE expires_at < now() - interval '1 day'");

@@ -1,47 +1,47 @@
 /**
- * Norske identifikatorsystemer og kodeverk.
+ * Norwegian identifier systems and code systems.
  *
- * OID-ene under er hentet fra Volven/HL7 Norway sine basisprofiler. De som er
- * merket `verifisert: false` MÅ kontrolleres mot volven.no før produksjonssetting
- * - de er lagt inn som plassholdere for å gjøre datamodellen komplett.
+ * The OIDs below come from Volven/HL7 Norway's base profiles. Those marked
+ * `verified: false` MUST be checked against volven.no before going to
+ * production - they are placeholders to make the data model complete.
  */
 
 export const SYSTEM = {
-	// Personidentifikatorer
+	// Person identifiers
 	FNR: 'urn:oid:2.16.578.1.12.4.1.4.1',
 	DNR: 'urn:oid:2.16.578.1.12.4.1.4.2',
 	HNR: 'urn:oid:2.16.578.1.12.4.1.4.3',
-	// Helsepersonell og virksomhet
+	// Health personnel and organisation
 	HPR: 'urn:oid:2.16.578.1.12.4.1.4.4',
 	ORGNR: 'urn:oid:2.16.578.1.12.4.1.4.101',
 	RESH: 'urn:oid:2.16.578.1.12.4.1.4.102',
 	HER: 'urn:oid:2.16.578.1.12.4.1.2',
-	// Kliniske kodeverk
+	// Clinical code systems
 	ICPC2: 'urn:oid:2.16.578.1.12.4.1.1.7170',
 	ICD10: 'urn:oid:2.16.578.1.12.4.1.1.7110',
 	NCMP: 'urn:oid:2.16.578.1.12.4.1.1.7280',
 	SNOMED: 'http://snomed.info/sct',
 	LOINC: 'http://loinc.org',
-	// Legemidler
+	// Medicines
 	ATC: 'urn:oid:2.16.578.1.12.4.1.1.7180',
 	LEGEMIDDELVERK_VARENR: 'urn:oid:2.16.578.1.12.4.1.1.7424',
-	// Takster (Normaltariff for privat allmennpraksis)
+	// Tariffs (Normaltariff for private general practice)
 	TARIFF: 'urn:oid:2.16.578.1.12.4.1.1.8214',
-	// Meldingstyper
+	// Message types
 	MESSAGETYPE: 'urn:oid:2.16.578.1.12.4.1.1.8279',
-	// Helsepersonells kategori (kodeverk 9060)
+	// Health personnel category (code system 9060)
 	HELSEPERSONELLKATEGORI: 'urn:oid:2.16.578.1.12.4.1.1.9060'
 } as const;
 
-/** Systemer vi ikke har kunnet verifisere mot Volven i denne leveransen. */
+/** Systems we have not been able to verify against Volven in this delivery. */
 export const NOT_VERIFISERTE_SYSTEMER = new Set<string>([SYSTEM.TARIFF, SYSTEM.MESSAGETYPE, SYSTEM.NCMP]);
 
 const MOD11_VEKT_1 = [3, 7, 6, 1, 8, 9, 4, 5, 2];
 const MOD11_VEKT_2 = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
 
 /**
- * Validerer fødselsnummer/D-nummer/H-nummer etter Skatteetatens mod11-regler.
- * Godtar D-nummer (dag + 40) og H-nummer (måned + 40).
+ * Validates national identity numbers (fnr/D-number/H-number) per the Tax
+ * Administration's mod11 rules. Accepts D-numbers and H-numbers.
  */
 export function validNorwegianNationalId(nr: string): boolean {
 	if (!/^\d{11}$/.test(nr)) return false;
@@ -55,7 +55,7 @@ export function validNorwegianNationalId(nr: string): boolean {
 	return validDateDel(nr) !== null;
 }
 
-/** Returnerer fødselsdato som ISO-dato, eller null hvis datodelen er ugyldig. */
+/** Returns the date of birth as an ISO date, or null if the date part is invalid. */
 export function validDateDel(nr: string): string | null {
 	if (!/^\d{11}$/.test(nr)) return null;
 	let dag = Number(nr.slice(0, 2));
@@ -85,7 +85,7 @@ export function isDNumber(nr: string): boolean {
 	return /^\d{11}$/.test(nr) && Number(nr.slice(0, 2)) > 40;
 }
 
-/** Organisasjonsnummer: 9 siffer med mod11-kontrollsiffer. */
+/** Organisation number: 9 digits with a mod11 check digit. */
 export function validOrganisationNumber(nr: string): boolean {
 	if (!/^\d{9}$/.test(nr)) return false;
 	const vekt = [3, 2, 7, 6, 5, 4, 3, 2];
@@ -95,12 +95,12 @@ export function validOrganisationNumber(nr: string): boolean {
 	return kontroll !== 10 && kontroll === s[8];
 }
 
-/** HPR-nummer er 1-9 siffer uten kontrollsiffer. */
+/** HPR number is 1-9 digits with no check digit. */
 export function validHprNumber(nr: string): boolean {
 	return /^\d{1,9}$/.test(nr);
 }
 
-/** Kjønn utledet fra individsiffer (partall = kvinne). Kun for testdata. */
+/** Gender derived from the individual digit (even = female). Test data only. */
 export function genderFromNationalId(nr: string): 'male' | 'female' | 'unknown' {
 	if (!/^\d{11}$/.test(nr)) return 'unknown';
 	return Number(nr[8]) % 2 === 0 ? 'female' : 'male';

@@ -3,12 +3,12 @@ import { newId } from '../../util/ids';
 import { config } from '../../config';
 
 /**
- * Applikasjonskvittering (AppRec).
+ * Application receipt (AppRec).
  *
- * Etter at en helsemelding er mottatt og lest inn i journalsystemet, skal
- * mottakeren sende en AppRec tilbake. Statusen forteller avsender om meldingen
- * ble tatt imot (1), tatt imot med merknad (2), eller avvist (3). Uten AppRec
- * vet ikke avsender om henvisningen faktisk kom fram.
+ * Once a health message has been received and read into the record system, the
+ * recipient must send an AppRec back. The status tells the sender whether the
+ * message was accepted (1), accepted with a remark (2), or rejected (3).
+ * Without an AppRec the sender does not know the referral actually arrived.
  */
 
 export const APPREC_NS = 'http://www.kith.no/xmlstds/apprec/2004-11-21';
@@ -32,13 +32,13 @@ export const APPREC_ERROR = {
 } as const;
 
 export interface ApprecIn {
-	/** MsgId på meldingen det kvitteres for. */
+	/** MsgId of the message being acknowledged. */
 	refMsgId: string;
 	refGenDate: string;
 	refType: { code: string; name: string };
 	status: ApprecStatus;
 	error?: { code: string; text: string; details?: string }[];
-	/** Avsender av originalmeldingen - blir mottaker av kvitteringen. */
+	/** Sender of the original message - becomes recipient of the receipt. */
 	originalSender: { name: string; her: string; orgnr?: string };
 	patientFnr?: string;
 }
@@ -105,7 +105,7 @@ export function readApprec(xml: string): ReadApprec | null {
 	}
 }
 
-/** Leser nøkkelfeltene fra en innkommende hodemelding. */
+/** Reads the key fields from an incoming MsgHead. */
 export interface ReadMsgHead {
 	msgId: string;
 	genDate: string;

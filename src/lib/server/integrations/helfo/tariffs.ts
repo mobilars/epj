@@ -1,13 +1,13 @@
 /**
- * Takstregister basert på Normaltariff for privat allmennpraksis.
+ * Tariff register based on Normaltariff for private general practice.
  *
- * VIKTIG: Beløpene nedenfor er et arbeidsgrunnlag, ikke en autoritativ kilde.
- * Normaltariffen forhandles årlig og trer i kraft 1. juli, med enkelte endringer
- * fra 1. januar. Før produksjonssetting må `belop` og `egenandel` oppdateres fra
- * gjeldende normaltariff (Den norske legeforening / Helfo), og `gyldigFra` settes.
- * `verifisert: false` markerer at koden ennå ikke er kontrollert mot tariffen.
+ * IMPORTANT: the amounts below are a working basis, not an authoritative
+ * source. The tariff is negotiated annually and takes effect on 1 July, with
+ * some changes from 1 January. Before production, `amount` and `copayment` must
+ * be updated from the current tariff (Den norske legeforening / Helfo), and
+ * `validFrom` set. `verified: false` marks a code not yet checked against it.
  *
- * Alle beløp er i øre for å unngå avrundingsfeil.
+ * All amounts are in ore to avoid rounding errors.
  */
 
 export type Takstgruppe =
@@ -26,29 +26,29 @@ export interface Tariff {
 	code: string;
 	text: string;
 	group: Takstgruppe;
-	/** Refusjon fra Helfo, i øre. */
+	/** Reimbursement from Helfo, in ore. */
 	reimbursementOre: number;
-	/** Egenandel pasienten betaler, i øre. Teller mot frikortgrensen. */
+	/** Copayment the patient pays, in ore. Counts towards the exemption ceiling. */
 	copaymentOre: number;
-	/** Takster som ikke kan kombineres med denne. */
+	/** Tariffs that cannot be combined with this one. */
 	utelukker?: string[];
-	/** Takster som må være med for at denne kan brukes. */
+	/** Tariffs that must be present for this one to be usable. */
 	requires?: string[];
-	/** Kan repeteres, f.eks. per påbegynt tidsenhet. */
+	/** Can be repeated, e.g. per started time unit. */
 	repeterbar?: boolean;
 	maxCount?: number;
-	/** Krever spesialist i allmennmedisin. */
+	/** Requires a specialist in general medicine. */
 	requiresSpesialist?: boolean;
 	note?: string;
 	verified: boolean;
 }
 
-/** Datoen registeret nedenfor er ment å gjelde fra. Oppdateres ved tariffendring. */
+/** The date the register below is meant to apply from. Updated on tariff change. */
 export const TAKSTREGISTER_VALID_FROM = '2025-07-01';
 export const TAKSTREGISTER_SOURCE = 'Normaltariff for privat allmennpraksis (arbeidsgrunnlag - må verifiseres)';
 
 export const TARIFFS: Tariff[] = [
-	// Konsultasjoner
+	// Consultations
 	{ code: '2ad', text: 'Konsultasjon hos allmennpraktiserende lege', group: 'konsultasjon', reimbursementOre: 19_600, copaymentOre: 24_500, utelukker: ['1ad', '1ak', '2ae', '11ad'], verified: false },
 	{ code: '2ae', text: 'Konsultasjon hos spesialist i allmennmedisin', group: 'konsultasjon', reimbursementOre: 27_700, copaymentOre: 24_500, utelukker: ['1ad', '1ak', '2ad', '11ad'], requiresSpesialist: true, verified: false },
 	{ code: '2ak', text: 'E-konsultasjon hos allmennpraktiserende lege', group: 'konsultasjon', reimbursementOre: 19_600, copaymentOre: 24_500, utelukker: ['2ad', '2ae', '1ad', '1ak'], note: 'Skriftlig eller video, journalføres som e-konsultasjon', verified: false },
@@ -76,17 +76,17 @@ export const TARIFFS: Tariff[] = [
 	{ code: '111', text: 'Gynekologisk undersøkelse med celleprøve', group: 'prosedyre', reimbursementOre: 11_200, copaymentOre: 0, verified: false },
 	{ code: '116', text: 'Innsetting eller fjerning av spiral eller p-stav', group: 'prosedyre', reimbursementOre: 18_700, copaymentOre: 0, verified: false },
 
-	// Laboratorie
+	// Laboratory
 	{ code: '701a', text: 'Enkel laboratorieprøve (CRP, glukose, Hb, urinstiks)', group: 'laboratorie', reimbursementOre: 6_100, copaymentOre: 0, repeterbar: true, maxCount: 8, verified: false },
 	{ code: '701b', text: 'Blodprøvetaking (venepunksjon)', group: 'laboratorie', reimbursementOre: 5_400, copaymentOre: 0, verified: false },
 	{ code: '702', text: 'Hurtigtest for streptokokker, mononukleose eller influensa', group: 'laboratorie', reimbursementOre: 6_800, copaymentOre: 0, repeterbar: true, maxCount: 3, verified: false },
 	{ code: '707', text: 'INR-måling', group: 'laboratorie', reimbursementOre: 7_200, copaymentOre: 0, verified: false },
 
-	// Reise og attest
+	// Travel and certificates
 	{ code: '21k', text: 'Reisetillegg ved sykebesøk', group: 'reise', reimbursementOre: 9_400, copaymentOre: 0, requires: ['11ad', '11ak'], verified: false },
 	{ code: 'L1', text: 'Legeerklæring til NAV', group: 'attest', reimbursementOre: 0, copaymentOre: 0, note: 'Faktureres NAV, ikke Helfo', verified: false },
 
-	// Tillegg
+	// Supplements
 	{ code: '2hd', text: 'Tillegg for kveld, natt, helg og høytid', group: 'tillegg', reimbursementOre: 11_900, copaymentOre: 0, verified: false }
 ];
 
@@ -101,7 +101,7 @@ export function tariffAfterGroup(group: Takstgruppe): Tariff[] {
 }
 
 // ---------------------------------------------------------------------------
-// Fritak for egenandel
+// Exemption from copayment
 // ---------------------------------------------------------------------------
 
 export type ExemptionReason =
@@ -125,7 +125,7 @@ export const FRITAKSGRUNNER: Record<ExemptionReason, string> = {
 	'minstepensjonist-mv': 'Fritak etter særskilt hjemmel'
 };
 
-/** Alderen der egenandel begynner å påløpe. */
+/** The age at which copayment starts to apply. */
 export const COPAYMENT_ALDERSGRENSE = 16;
 
 export interface BillingLine {
@@ -143,7 +143,7 @@ export interface Calculation {
 	}[];
 	sumReimbursementOre: number;
 	sumCopaymentOre: number;
-	/** Egenandel som faktisk kreves inn, etter fritak. */
+	/** Copayment actually collected, after exemptions. */
 	requiresCopaymentOre: number;
 	exemption: ExemptionReason | null;
 	error: string[];
@@ -158,9 +158,9 @@ export interface CalculationContext {
 }
 
 /**
- * Beregner refusjon og egenandel for et sett takster, og kontrollerer
- * kombinasjonsreglene. Regelbrudd stoppes her, ikke først i Helfos avregning -
- * det er forskjellen på å oppdage feilen i dag og å oppdage den om seks uker.
+ * Computes reimbursement and copayment for a set of tariffs, and checks the
+ * combination rules. Rule breaches are stopped here, not first in Helfo's
+ * settlement - finding the mistake today rather than in six weeks.
  */
 export function compute(lines: BillingLine[], context: CalculationContext = {}): Calculation {
 	const error: string[] = [];
@@ -215,7 +215,7 @@ export function compute(lines: BillingLine[], context: CalculationContext = {}):
 		lines: resultLines,
 		sumReimbursementOre,
 		sumCopaymentOre,
-		// Ved frikort dekker Helfo egenandelen; ved øvrige fritak bortfaller den.
+		// With an exemption card Helfo covers the copayment; other exemptions waive it.
 		requiresCopaymentOre: exemption ? 0 : sumCopaymentOre,
 		exemption,
 		error,

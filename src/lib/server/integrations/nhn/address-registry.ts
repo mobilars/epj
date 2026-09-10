@@ -2,12 +2,12 @@ import { config } from '../../config';
 import type { Part } from './msg-head';
 
 /**
- * Adresseregisteret i Norsk helsenett.
+ * The address registry in Norsk helsenett.
  *
- * Registeret kobler HER-id til virksomhet, kommunikasjonsparter og hvilke
- * meldingstyper mottakeren faktisk kan ta imot. Å slå opp før sending er det
- * som hindrer at en henvisning havner hos en mottaker som ikke støtter
- * meldingstypen - en av de vanligste feilkildene i meldingsutvekslingen.
+ * The registry links HER id to organisation, communication parties and which
+ * message types the recipient can actually accept. Looking up before sending is
+ * what stops a referral landing with a recipient that does not support the
+ * message type - one of the commonest faults in message exchange.
  */
 
 export interface CommunicationParty {
@@ -16,15 +16,15 @@ export interface CommunicationParty {
 	orgnr?: string;
 	type: 'fastlege' | 'sykehus' | 'kommune' | 'laboratorium' | 'rontgen' | 'avtalespesialist' | 'annet';
 	overordnet?: string;
-	/** Meldingstyper mottakeren kan ta imot. */
+	/** Message types the recipient can accept. */
 	supportsMessages: string[];
 	address?: { line?: string; postalCode?: string; poststed?: string };
 	active: boolean;
 }
 
 /**
- * Testregister brukt i `mock`-modus. I `live`-modus slås oppslag mot
- * Adresseregisterets API på Helsenettet.
+ * Test registry used in `mock` mode. In `live` mode lookups go against the
+ * address registry's API on the health network.
  */
 const TESTREGISTER: CommunicationParty[] = [
 	{
@@ -87,7 +87,7 @@ async function searchLive(search: string): Promise<CommunicationParty[]> {
 	return (await response.json()) as CommunicationParty[];
 }
 
-/** Sjekker at mottakeren kan ta imot meldingstypen før vi sender. */
+/** Checks the recipient can accept the message type before we send. */
 export async function canReceive(herId: string, message_type: string): Promise<{ ok: boolean; reason?: string }> {
 	const part = await getRecipient(herId);
 	if (!part) return { ok: false, reason: `HER-id ${herId} finnes ikke i Adresseregisteret` };

@@ -2,17 +2,17 @@ import { document, el, type XmlNode } from '../../util/xml';
 import { config } from '../../config';
 
 /**
- * Hodemelding (MsgHead) etter KITH-standarden.
+ * MsgHead per the KITH standard.
  *
- * Alle helsefaglige meldinger som sendes over Norsk helsenett pakkes i en
- * hodemelding: den identifiserer avsender, mottaker, pasient og meldingstype,
- * og bærer selve fagmeldingen som `RefDoc/Content`. Mottakeren kvitterer med en
- * applikasjonskvittering (AppRec) som refererer `MsgId`.
+ * Every clinical message sent over Norsk helsenett is wrapped in a MsgHead: it
+ * identifies sender, recipient, patient and message type, and carries the
+ * clinical message itself as `RefDoc/Content`. The recipient acknowledges with
+ * an application receipt (AppRec) referencing `MsgId`.
  */
 
 export const MSGHEAD_NS = 'http://www.kith.no/xmlstds/msghead/2006-05-24';
 
-/** Kodeverk 9051 - identifikatortyper for organisasjon og person. */
+/** Code system 9051 - identifier types for organisation and person. */
 const CODESYSTEM_IDENT = '2.16.578.1.12.4.1.1.9051';
 
 export type IdentType = 'ENH' | 'HER' | 'HPR' | 'FNR' | 'DNR' | 'RSH';
@@ -29,7 +29,7 @@ const IDENT_NAME: Record<IdentType, string> = {
 export interface Part {
 	name: string;
 	identifier: { id: string; type: IdentType }[];
-	/** Underliggende avdeling eller helsepersonell. */
+	/** Subordinate department or health professional. */
 	underPart?: Part;
 	role?: string;
 	address?: { line?: string; postalCode?: string; poststed?: string; land?: string };
@@ -93,7 +93,7 @@ function partNode(name: string, part: Part): XmlNode {
 }
 
 function underPartNode(part: Part): XmlNode {
-	// HealthcareProfessional brukes for navngitt helsepersonell, ellers Organisation.
+	// HealthcareProfessional is used for a named professional, otherwise Organisation.
 	const isPerson = part.identifier.some((i) => i.type === 'HPR' || i.type === 'FNR');
 	if (isPerson) {
 		const [givenName, ...resten] = part.name.split(' ');
@@ -134,15 +134,15 @@ export interface MsgHeadIn {
 	msgId: string;
 	type: MessageType;
 	genDate?: string;
-	/** Ber om applikasjonskvittering fra mottaker. */
+	/** Asks the recipient for an application receipt. */
 	requireReceipt?: boolean;
 	sender: Part;
 	recipient: Part;
 	patient?: PatientPart;
-	/** Fagmeldingen som legges i RefDoc/Content. */
+	/** The clinical message placed in RefDoc/Content. */
 	clinicalMessage: XmlNode;
 	clinicalMessageDescription: string;
-	/** Referanse til melding det svares på. */
+	/** Reference to the message being answered. */
 	refMsgId?: string;
 }
 

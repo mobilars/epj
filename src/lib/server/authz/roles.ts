@@ -1,10 +1,10 @@
 /**
- * Rollemodell for et fastlegekontor.
+ * Role model for a general practice.
  *
- * EPJ-standarden (Tilgangsstyring, retting og sletting) krever at tilgang gis ut
- * fra rolle og tjenstlig behov, ikke ut fra hvem som tilfeldigvis er pålogget.
- * Rollene her definerer *hva slags* opplysninger en stillingskategori kan se;
- * `tilgang.ts` avgjør deretter *hvilke pasienter* det gjelder.
+ * The EPJ standard (access control, correction and deletion) requires access to
+ * be granted from role and legitimate need, not from whoever happens to be
+ * signed in. The roles here define *what kind of* information a staff category
+ * may see; `access.ts` then decides *which patients* it covers.
  */
 
 export const ROLES = [
@@ -20,7 +20,7 @@ export const ROLES = [
 	'personvernombud',
 	'regnskap',
 	'pasient',
-	// Plattformnivå: tilhører ingen virksomhet, og har aldri klinisk tilgang.
+	// Platform level: belongs to no organisation, and never has clinical access.
 	'systemeier'
 ] as const;
 
@@ -29,13 +29,13 @@ export type Role = (typeof ROLES)[number];
 export interface RoleDefinisjon {
 	name: string;
 	description: string;
-	/** Scopes rollen maksimalt kan tildeles gjennom en SMART-app. */
+	/** The most a role can be granted through a SMART app. */
 	scopes: string[];
-	/** Systemfunksjoner utenfor FHIR-API-et. */
+	/** System functions outside the FHIR API. */
 	permissions: Permission[];
-	/** Rollen kan bruke nødrettstilgang (break the glass). */
+	/** The role may use emergency access (break the glass). */
 	canEmergencyAccess: boolean;
-	/** Rollen kan se journalinnhold uten registrert behandlingsrelasjon. */
+	/** The role may see record content without a registered care relationship. */
 	canSeeAllPatients: boolean;
 }
 
@@ -194,7 +194,7 @@ export function isRole(v: string): v is Role {
 	return (ROLES as readonly string[]).includes(v);
 }
 
-/** Samlede scopes for et sett roller. */
+/** Combined scopes for a set of roles. */
 export function scopesForRoles(roles: Role[]): Set<string> {
 	const set = new Set<string>();
 	for (const r of roles) for (const s of ROLE_DEFINISJONER[r]?.scopes ?? []) set.add(s);

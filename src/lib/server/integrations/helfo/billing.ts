@@ -8,13 +8,13 @@ import type { FhirResource } from '../../fhir/types';
 import { compute, oreToKroner, TARIFF_KART, type ExemptionReason } from './tariffs';
 
 /**
- * Regningskort: kravet fastlegen sender til Helfo for én pasientkontakt.
+ * Billing card: the claim the GP sends to Helfo for one patient encounter.
  *
- * Kortet bygges under konsultasjonen, valideres mot takstreglene, og speiles
- * som FHIR Claim slik at oppgjørsdata er tilgjengelige på samme API som resten
- * av journalen. Flere kort samles i en oppgjørsinnsending (KUHR).
+ * The card is built during the consultation, validated against the tariff
+ * rules, and mirrored as a FHIR Claim so that settlement data is available on
+ * the same API as the rest of the record. Several cards are collected into one
+ * settlement submission (KUHR).
  */
-
 export type Kontakttype = 'kontor' | 'sykebesok' | 'e-konsultasjon' | 'telefon' | 'enkel';
 export type CardStatus = 'kladd' | 'klar' | 'sendt' | 'godkjent' | 'avvist' | 'delvis';
 
@@ -184,7 +184,7 @@ async function mirrorSomClaim(
 export async function getCard(id: string): Promise<{ card: BillingCard; lines: BillingLine[] } | null> {
 	const card = await one<BillingCard>('SELECT * FROM billing_card WHERE id = $1 AND tenant_id = $2', [id, requireTenant().id]);
 	if (!card) return null;
-	// Linjene arver virksomhet gjennom kortet, som allerede er avgrenset.
+	// Lines inherit the organisation through the card, which is already bounded.
 	const lines = await query<BillingLine>('SELECT * FROM billing_line WHERE billing_card_id = $1 ORDER BY tariff_code', [id]);
 	return { card, lines };
 }
