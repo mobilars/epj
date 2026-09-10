@@ -2,7 +2,7 @@ import { randomUUID, randomBytes } from 'node:crypto';
 
 export const newId = (): string => randomUUID();
 
-/** Kryptografisk tilfeldig token i base64url, egnet for cookies og OAuth-koder. */
+/** Cryptographically random token in base64url, suited to cookies and OAuth codes. */
 export function newToken(bytes = 32): string {
 	return randomBytes(bytes).toString('base64url');
 }

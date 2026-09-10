@@ -2,34 +2,33 @@ import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
 /**
- * Kontroll av utgående HTTP-kall som styres av data, ikke av konfigurasjon.
+ * Control of outbound HTTP calls that are driven by data, not configuration.
  *
- * Adressene til HelseID, SFM, NHN og Helfo settes av den som drifter systemet
- * og er derfor til å stole på. `jwks_uri` på en registrert app er noe annet:
- * den kommer fra et skjemafelt, og lagres i databasen. Uten kontroll blir
- * journalen en maskin som henter vilkårlige adresser på vegne av den som fylte
- * ut skjemaet - inkludert adresser bare journalen selv kan nå:
- * metadatatjenesten til skyleverandøren, Kubernetes-API-et, HAPI FHIR, eller
- * databasen. Det er SSRF (OWASP A10).
+ * The addresses of HelseID, SFM, NHN and Helfo are set by whoever operates the
+ * system and are therefore trustworthy. `jwks_uri` on a registered app is
+ * another matter: it comes from a form field and is stored in the database.
+ * Unchecked, the record becomes a machine that fetches arbitrary addresses on
+ * behalf of whoever filled in the form - including addresses only the record
+ * itself can reach: the cloud provider's metadata service, the Kubernetes API,
+ * HAPI FHIR, or the database. That is SSRF (OWASP A10).
  *
- * Kontrollen er derfor:
+ * So the check is:
  *
- *   1. bare https
- *   2. ingen omdirigeringer - ellers kan et lovlig navn sende oss videre til et
- *      ulovlig et
- *   3. navnet slås opp, og adressen må være offentlig; det stenger både
- *      `http://127.0.0.1` og et navn som med vilje peker på 169.254.169.254
- *   4. kort tidsavbrudd og tak på svarstørrelsen
+ *   1. https only
+ *   2. no redirects - otherwise a permitted name can send us on to a forbidden one
+ *   3. the name is resolved, and the address must be public; that closes both
+ *      `http://127.0.0.1` and a name deliberately pointing at 169.254.169.254
+ *   4. a short timeout and a cap on the response size
  */
 
-/** Adresseområder som aldri skal nås fra et datastyrt kall. */
+/** Address ranges that must never be reached from a data-driven call. */
 function isPrivateAddress(ip: string): boolean {
 	if (isIP(ip) === 6) {
 		const v = ip.toLowerCase();
 		if (v === '::1' || v === '::') return true;
 		if (v.startsWith('fe80') || v.startsWith('fc') || v.startsWith('fd')) return true;
-		// IPv4-mappet IPv6. `new URL()` normaliserer `::ffff:127.0.0.1` til
-		// `::ffff:7f00:1`, så begge skrivemåtene må gjenkjennes.
+		// IPv4-mapped IPv6. `new URL()` normalises `::ffff:127.0.0.1` to
+		// `::ffff:7f00:1`, so both spellings must be recognised.
 		const mappet = /^::ffff:(.+)$/.exec(v);
 		if (mappet) {
 			const rest = mappet[1];
@@ -40,7 +39,7 @@ function isPrivateAddress(ip: string): boolean {
 				const lav = Number.parseInt(hex[2], 16);
 				return isPrivateAddress(`${hoy >> 8}.${hoy & 255}.${lav >> 8}.${lav & 255}`);
 			}
-			// Ukjent form på en mappet adresse: vi vet ikke hvor den peker.
+			// Unknown form of a mapped address: we do not know where it points.
 			return true;
 		}
 		return false;
@@ -59,7 +58,7 @@ function isPrivateAddress(ip: string): boolean {
 
 export class OutboundError extends Error {}
 
-/** Kontrollerer at adressen er lovlig som mål for et datastyrt kall. */
+/** Checks that the address is a legal target for a data-driven call. */
 export async function checkOutboundUrl(raw: string): Promise<URL> {
 	let url: URL;
 	try {
@@ -82,8 +81,8 @@ export async function checkOutboundUrl(raw: string): Promise<URL> {
 		throw new OutboundError('Navnet kunne ikke slås opp');
 	}
 	if (addresses.length === 0) throw new OutboundError('Navnet kunne ikke slås opp');
-	// Alle adressene må være offentlige. Peker én av dem innover, avvises navnet:
-	// vi kan ikke styre hvilken av dem tilkoblingen ender på.
+	// Every address must be public. If one points inward the name is refused:
+	// we cannot control which of them the connection ends up on.
 	for (const a of addresses) {
 		if (isPrivateAddress(a.address)) throw new OutboundError('Navnet peker inn i et internt nett');
 	}
@@ -91,8 +90,8 @@ export async function checkOutboundUrl(raw: string): Promise<URL> {
 }
 
 /**
- * Henter JSON fra en datastyrt adresse. Følger ikke omdirigeringer, og leser
- * aldri mer enn `maksBytes`.
+ * Fetches JSON from a data-driven address. Does not follow redirects, and never
+ * reads more than `maxBytes`.
  */
 export async function getJsonUtenfra(
 	raw: string,

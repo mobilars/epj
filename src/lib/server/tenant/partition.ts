@@ -2,20 +2,20 @@ import { config } from '../config';
 import type { FhirResource } from '../fhir/types';
 
 /**
- * Partisjoner i HAPI FHIR.
+ * Partitions in HAPI FHIR.
  *
- * HAPI skiller virksomhetenes kliniske data med partisjonering. Med
- * `URL_BASED` tenantidentifikasjon inngår partisjonsnavnet i FHIR-URL-en:
+ * HAPI separates the organisations' clinical data by partitioning. With
+ * request-tenant partitioning the partition name is part of the FHIR URL:
  *
- *     /fhir/<partisjonsnavn>/Patient/123
+ *     /fhir/<partition name>/Patient/123
  *
- * Partisjonene administreres gjennom operasjoner på standardpartisjonen. Denne
- * modulen er den eneste som snakker med den; alt annet går gjennom en
- * virksomhets egen partisjon.
+ * Partitions are administered through operations on the default partition. This
+ * module is the only one that talks to it; everything else goes through an
+ * organisation's own partition.
  *
- * Referanser på tvers av partisjoner er slått av i serverkonfigurasjonen. En
- * ressurs i én virksomhet kan da ikke peke inn i en annen, selv ikke ved en feil
- * i vår kode.
+ * References across partitions are turned off in the server configuration. A
+ * resource in one organisation cannot then point into another, not even through
+ * a mistake in our code.
  */
 
 const ADMIN_PARTITION = 'DEFAULT';
@@ -87,8 +87,8 @@ export async function listPartitions(): Promise<
 	const response = await callOperation('partition-management-list-partitions');
 	if (!response.ok) return response;
 
-	// HAPI svarer med Parameters der hver `partition` har `id`, `name` og
-	// `description` som deler.
+	// HAPI answers with Parameters where each `partition` has `id`, `name` and
+	// `description` as parts.
 	const parts = (response.response.parameter as { name: string; part?: { name: string; valueInteger?: number; valueString?: string }[] }[] | undefined) ?? [];
 	const partitions: Partition[] = parts
 		.filter((d) => d.part)
@@ -111,7 +111,7 @@ export async function deletePartition(id: number): Promise<{ ok: boolean; error?
 	return response.ok ? { ok: true } : { ok: false, error: response.error };
 }
 
-/** Kontrollerer at HAPI er konfigurert for partisjonering. */
+/** Checks that HAPI is configured for partitioning. */
 export async function partitioningWorks(): Promise<{ ok: boolean; error?: string }> {
 	const response = await listPartitions();
 	if (!response.ok) {

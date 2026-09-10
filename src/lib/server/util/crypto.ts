@@ -12,30 +12,30 @@ import { config } from '../config';
 const KEY_LEN = 32;
 
 /**
- * Utledet nøkkel, bufret per EPJ_DATA_KEY.
+ * Derived key, cached per EPJ_DATA_KEY.
  *
- * scrypt er med vilje kostbar - det er poenget med den for passord. Men denne
- * nøkkelen utledes fra en konfigurasjonsverdi, ikke fra noe en angriper gjetter
- * på, og `tokenHash()` bruker den ved *hvert* sesjonsoppslag, altså ved hver
- * eneste forespørsel. Uten bufring betaler serveren en full scrypt-runde per
- * kall, og ratebegrensningen på 600 kall i minuttet blir i praksis en oppskrift
- * på å spise opp CPU-en.
+ * scrypt is deliberately expensive - that is the point of it for passwords. But
+ * this key is derived from a configuration value, not from something an
+ * attacker guesses, and `tokenHash()` uses it on *every* session lookup, which
+ * means on every single request. Without caching the server pays a full scrypt
+ * round per call, and the rate limit of 600 requests a minute becomes a recipe
+ * for burning the CPU.
  *
- * Nøkkelen bufres på verdien den er utledet fra, slik at en nøkkelrotasjon i
- * samme prosess gir en ny utledning.
+ * The key is cached against the value it was derived from, so rotating the key
+ * within the same process produces a fresh derivation.
  */
 let bufretKey: { from: string; key: Buffer } | null = null;
 
 function masterKey(): Buffer {
 	const from = config.dataEncryptionKey;
 	if (bufretKey?.from === from) return bufretKey.key;
-	// EPJ_DATA_KEY strekkes til 32 byte med en fast, applikasjonsspesifikk salt.
+	// EPJ_DATA_KEY is stretched to 32 bytes with a fixed, application-specific salt.
 	const key = scryptSync(from, 'epj-data-key-v1', KEY_LEN);
 	bufretKey = { from, key };
 	return key;
 }
 
-/** AES-256-GCM. Format: v1.<iv>.<tag>.<ciphertext>, alle deler base64url. */
+/** AES-256-GCM. Format: v1.<iv>.<tag>.<ciphertext>, every part base64url. */
 export function encrypt(klartekst: string): string {
 	const iv = randomBytes(12);
 	const cipher = createCipheriv('aes-256-gcm', masterKey(), iv);
@@ -51,7 +51,7 @@ export function decrypt(chiffertekst: string): string {
 	return Buffer.concat([decipher.update(Buffer.from(ctB64, 'base64url')), decipher.final()]).toString('utf8');
 }
 
-/** Passordhashing med scrypt. Format: scrypt$N$r$p$salt$hash */
+/** Password hashing with scrypt. Format: scrypt$N$r$p$salt$hash */
 export function hashPassword(password: string): string {
 	const N = 16384, r = 8, p = 1;
 	const salt = randomBytes(16);
@@ -74,7 +74,7 @@ export function verifyPassword(password: string, stored: string): boolean {
 	}
 }
 
-/** Hash for oppslag av tokens. Tokens lagres aldri i klartekst. */
+/** Hash used to look tokens up. Tokens are never stored in the clear. */
 export function tokenHash(token: string): string {
 	return createHmac('sha256', masterKey()).update(token).digest('base64url');
 }

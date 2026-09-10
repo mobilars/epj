@@ -1,16 +1,16 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 /**
- * Virksomhetskontekst.
+ * Organisation context.
  *
- * Én installasjon betjener flere legekontorer. Hvilken virksomhet en
- * forespørsel gjelder utledes av vertsnavnet i `hooks.server.ts`, og legges her
- * for resten av forespørselen. Brukeren velger aldri virksomhet selv - da ville
- * valget vært en angrepsflate.
+ * One installation serves several practices. Which organisation a request
+ * concerns is derived from the hostname in `hooks.server.ts`, and placed here
+ * for the rest of the request. The user never picks the organisation - that
+ * choice would be an attack surface.
  *
- * `krevTenant()` kaster hvis konteksten mangler. Det er med vilje: en spørring
- * som skulle vært avgrenset til én virksomhet skal feile høylytt i test, ikke
- * stille returnere andres data.
+ * `requireTenant()` throws if the context is missing. That is deliberate: a
+ * query that should have been bounded to one organisation must fail loudly in
+ * tests, not quietly return someone else's data.
  */
 
 export interface Tenant {
@@ -21,30 +21,30 @@ export interface Tenant {
 	municipality_code: string | null;
 	hostname: string | null;
 	base_url: string;
-	/** Partisjonen i HAPI FHIR. NULL for systemvirksomheter uten kliniske data. */
+	/** The partition in HAPI FHIR. NULL for system organisations with no clinical data. */
 	partition_id: number | null;
 	status: 'aktiv' | 'suspendert' | 'avviklet';
 	note: string | null;
 	created_at: string;
 }
 
-/** Virksomheten plattformadministrasjonens egne handlinger loggføres på. */
+/** The organisation platform administration's own actions are logged against. */
 export const PLATFORM_TENANT = 'plattform';
 
 const store = new AsyncLocalStorage<Tenant>();
 
-/** Kjører `fn` med virksomheten satt i konteksten. */
+/** Runs `fn` with the organisation set in context. */
 export function withTenant<T>(t: Tenant, fn: () => T): T {
 	return store.run(t, fn);
 }
 
 /**
- * Setter virksomheten for gjeldende utførelseskontekst og alt som springer ut
- * av den, uten en omsluttende funksjon.
+ * Sets the organisation for the current execution context and everything that
+ * springs from it, without an enclosing function.
  *
- * Finnes for testoppsett og for skript som kjører i én virksomhet fra start til
- * slutt. Applikasjonen bruker `medTenant`, som avgrenser konteksten til én
- * forespørsel.
+ * Exists for test setup and for scripts that run in one organisation from start
+ * to finish. The application uses `withTenant`, which bounds the context to a
+ * single request.
  */
 export function setTenant(t: Tenant): void {
 	store.enterWith(t);
@@ -64,12 +64,12 @@ export function requireTenant(): Tenant {
 	return t;
 }
 
-/** Virksomhets-id for bruk i spørringer. */
+/** Organisation id for use in queries. */
 export function time(): string {
 	return requireTenant().id;
 }
 
-/** Utadvendt FHIR-base for virksomheten. Brukes som `aud` i tokens. */
+/** Outward-facing FHIR base for the organisation. Used as `aud` in tokens. */
 export function fhirBaseFor(t: Tenant): string {
 	return `${t.base_url.replace(/\/$/, '')}/fhir`;
 }

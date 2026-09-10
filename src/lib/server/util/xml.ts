@@ -1,10 +1,10 @@
 /**
- * Minimal XML-byggeklosser for helsemeldingene (hodemelding, dialogmelding,
- * epikrise, henvisning) og oppgjørsfiler. Bevisst uten tredjepartsavhengigheter:
- * hele leveransen har null runtime-avhengigheter, noe som fjerner en hel klasse
- * av forsyningskjederisiko i et system som behandler helseopplysninger.
+ * Minimal XML building blocks for the health messages (MsgHead, dialogue
+ * message, discharge summary, referral) and settlement files. Deliberately
+ * without third-party dependencies: the whole delivery has zero runtime
+ * dependencies, which removes a class of supply-chain risk in a system that
+ * processes health data.
  */
-
 export function escapeXml(v: string): string {
 	return v
 		.replace(/&/g, '&amp;')
@@ -52,14 +52,14 @@ export function document(root: XmlNode): string {
 }
 
 /**
- * Parser som gir et tre av noder. Brukes til å lese innkommende meldinger og
- * applikasjonskvitteringer.
+ * Parser producing a tree of nodes. Used to read incoming messages and
+ * application receipts.
  *
- * Den kaster på ugyldig input i stedet for å tolke den «så godt den kan»: en
- * melding som ikke lar seg lese skal gi en applikasjonskvittering med feilkode,
- * ikke en halvveis tolket melding. DTD og andre entiteter enn de fem
- * predefinerte støttes ikke - innkommende meldinger valideres mot XSD i
- * produksjonsoppsettet.
+ * It throws on invalid input rather than interpreting it "as best it can": a
+ * message that cannot be read must produce an application receipt with an error
+ * code, not a half-interpreted message. DTD and entities other than the five
+ * predefined ones are unsupported - incoming messages are validated against XSD
+ * in the production setup.
  */
 export type ParsedNode = {
 	name: string;

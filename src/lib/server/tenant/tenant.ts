@@ -8,29 +8,29 @@ import { createUser } from '../auth/users';
 import { newToken } from '../util/ids';
 
 /**
- * Virksomhetsregister.
+ * Organisation registry.
  *
- * Dette er den eneste modulen som leser og skriver på tvers av virksomheter.
- * Den brukes bare av oppslaget som utleder virksomhet fra vertsnavn, og av
- * plattformadministrasjonen.
+ * This is the only module that reads and writes across organisations. It is
+ * used only by the lookup that derives the organisation from the hostname, and
+ * by platform administration.
  */
 
 const FIELD = `id, name, organisation_number, her_id, municipality_code, hostname, base_url,
 	partition_id, status, note, created_at`;
 
 /**
- * Holder standardvirksomheten i takt med konfigurasjonen.
+ * Keeps the default organisation in step with the configuration.
  *
- * Migrasjonen legger inn standardvirksomheten med en plassholderadresse, siden
- * SQL ikke kan lese miljøvariabler. Uten dette ville en installasjon på en
- * annen adresse enn utviklingsmiljøets fått feil `issuer` i OAuth-metadata, og
- * feil `iss` ved app-oppstart - noe som gir avvisning i `aud`-kontrollen.
+ * The migration inserts it with a placeholder address, since SQL cannot read
+ * environment variables. Without this, an installation on a different address
+ * than the development environment would get the wrong `issuer` in its OAuth
+ * metadata, and the wrong `iss` at app launch - which the `aud` check rejects.
  *
- * Synkroniseringen stopper i det øyeblikket noen redigerer virksomheten i
- * plattformadministrasjonen: da er `oppdatert` nyere enn `opprettet`, og
- * konfigurasjonen skal ikke overstyre et bevisst valg.
+ * Syncing stops the moment somebody edits the organisation in platform
+ * administration: `updated_at` is then newer than `created_at`, and the
+ * configuration must not override a deliberate choice.
  *
- * Kjøres ved oppstart, etter migrasjonene.
+ * Runs at startup, after the migrations.
  */
 export async function ensureDefaultOrganisation(): Promise<void> {
 	const issuer = config.baseUrl.replace(/\/$/, '');
@@ -49,8 +49,8 @@ export async function ensureDefaultOrganisation(): Promise<void> {
 			issuer
 		]
 	);
-	// Plattformadministrasjonen nås på sitt eget vertsnavn når det er satt.
-	// Porten beholdes, slik at et testmiljø på en annen port virker.
+	// Platform administration is reached on its own hostname when one is set.
+	// The port is kept, so a test environment on another port works.
 	let platformUrl = issuer;
 	if (config.tenant.platformHostname) {
 		const address = new URL(issuer);
@@ -64,13 +64,13 @@ export async function ensureDefaultOrganisation(): Promise<void> {
 		[PLATFORM_TENANT, platformUrl, config.tenant.platformHostname || null]
 	);
 
-	// Standardvirksomheten trenger sin partisjon i HAPI på samme måte som
-	// virksomheter opprettet fra plattformadministrasjonen. Migrasjonen kan ikke
-	// opprette den - den ligger i en annen tjeneste.
+	// The default organisation needs its partition in HAPI just as organisations
+	// created from platform administration do. The migration cannot create it -
+	// it lives in another service.
 	//
-	// Best effort: er FHIR-serveren nede ved oppstart, skal ikke journalen nekte
-	// å starte. Avviket vises i plattformoversikten, og retter seg selv ved neste
-	// oppstart når serveren er tilbake.
+	// Best effort: if the FHIR server is down at startup, the record should not
+	// refuse to start. The discrepancy shows in the platform overview, and
+	// corrects itself at the next startup once the server is back.
 	if (config.fhirServer.multitenant) {
 		const defaultValue = await getTenant(config.tenant.defaultValue);
 		if (defaultValue?.partition_id) {
@@ -117,12 +117,12 @@ export type CreateResult =
 	| { ok: false; error: string };
 
 /**
- * Oppretter en virksomhet.
+ * Creates an organisation.
  *
- * Rekkefølgen er viktig: partisjonen i HAPI opprettes *før* raden lagres. Feiler
- * partisjonen, får vi ingen virksomhet som peker på en partisjon som ikke
- * finnes - og en virksomhet uten fungerende klinisk lager er verre enn ingen
- * virksomhet.
+ * The order matters: the partition in HAPI is created *before* the row is
+ * stored. If the partition fails we end up with no organisation pointing at a
+ * partition that does not exist - and an organisation without a working
+ * clinical store is worse than no organisation.
  */
 export async function createTenant(inValue: NewTenant, actor: AuditActor): Promise<CreateResult> {
 	if (!/^[a-z][a-z0-9-]{1,30}$/.test(inValue.id)) {
@@ -143,8 +143,8 @@ export async function createTenant(inValue: NewTenant, actor: AuditActor): Promi
 		return { ok: false, error: 'Ugyldig adresse (base_url).' };
 	}
 
-	// Partisjons-id er et heltall i HAPI. Systemvirksomheter har NULL og teller
-	// ikke med, slik at nummereringen ikke løper fra seg.
+	// Partition id is an integer in HAPI. System organisations have NULL and do
+	// not count, so the numbering does not run away.
 	const next = await one<{ n: number }>('SELECT COALESCE(MAX(partition_id), 0) + 1 AS n FROM tenant');
 	const partitionId = next?.n ?? 1;
 	if (partitionId > 2147483646) {
@@ -174,7 +174,7 @@ export async function createTenant(inValue: NewTenant, actor: AuditActor): Promi
 	let temporaryPassword: string | undefined;
 	if (inValue.adminUsername) {
 		temporaryPassword = newToken(9);
-		// Brukeren opprettes i den nye virksomhetens kontekst.
+		// The user is created in the new organisation's context.
 		await withTenant(tenant, async () => {
 			await createUser({
 				username: inValue.adminUsername as string,
@@ -208,7 +208,7 @@ export async function setTenantstatus(
 	await transaction(async () => {
 		await exec('UPDATE tenant SET status = $2, updated_at = now() WHERE id = $1', [id, status]);
 		if (status !== 'aktiv') {
-			// Suspensjon skal virke umiddelbart, ikke ved neste utløp.
+			// Suspension must take effect immediately, not at the next expiry.
 			await exec('UPDATE user_session SET ended = true WHERE user_id IN (SELECT id FROM user_account WHERE tenant_id = $1)', [id]);
 			await exec(
 				"UPDATE oauth_token SET revoked = true, revoked_reason = $2 WHERE tenant_id = $1 AND revoked = false",
@@ -260,7 +260,7 @@ export interface TenantOverview extends Tenant {
 	partitionExists: boolean | null;
 }
 
-/** Oversikt for plattformadministrasjonen, med kontroll mot HAPI. */
+/** Overview for platform administration, checked against HAPI. */
 export async function tenantOverview(): Promise<TenantOverview[]> {
 	const tenanter = await listTenanter();
 	const partitions = await listPartitions();
@@ -279,7 +279,7 @@ export async function tenantOverview(): Promise<TenantOverview[]> {
 		countUsers: map.get(t.id)?.users ?? 0,
 		countAuditEntry: map.get(t.id)?.entry ?? 0,
 		lastAktivitet: map.get(t.id)?.last ?? null,
-		// Systemvirksomheter har ingen partisjon, og skal ikke meldes som avvik.
+	// System organisations have no partition, and must not be reported as a discrepancy.
 		partitionExists:
 			t.partition_id === null ? null : partitions.ok ? partitions.partitions.some((p) => p.name === t.id) : null
 	}));

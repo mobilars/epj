@@ -8,29 +8,29 @@ import type { AuthContext } from '../authz/context';
 import type { Bundle, FhirResource } from '../fhir/types';
 
 /**
- * Utlevering av journal.
+ * Disclosure of the record.
  *
- * Pasienten har rett til innsyn i og kopi av sin egen journal (pasient- og
- * brukerrettighetsloven § 5-1), og journalen skal kunne overføres til en annen
- * behandler (pasientjournalforskriften § 12). EPJ-standarden krever i tillegg
- * at en utlevering er sporbar: hvem som utleverte, til hvem, når, hvorfor, og
- * hva som faktisk ble utlevert.
+ * The patient has a right to see and to receive a copy of their own record
+ * (pasient- og brukerrettighetsloven § 5-1), and the record must be
+ * transferable to another practitioner (pasientjournalforskriften § 12). The
+ * EPJ standard additionally requires a disclosure to be traceable: who
+ * disclosed, to whom, when, why, and what was actually handed over.
  *
- * Derfor to formater av det samme innholdet:
+ * Hence two formats of the same content:
  *
- *  - Et FHIR-dokument (Bundle av typen `document` med en Composition først).
- *    Det er formatet en annen journal kan lese maskinelt, og det er signerbart
- *    som en helhet.
- *  - En lesbar utgave - HTML for utskrift, og ren tekst - for pasienten selv,
- *    for advokater, og for NAV.
+ *  - A FHIR document (a Bundle of type `document` with a Composition first).
+ *    That is the format another record system can read mechanically, and it can
+ *    be signed as a whole.
+ *  - A readable edition - HTML for printing, and plain text - for the patient
+ *    themselves, for lawyers, and for NAV.
  *
- * Begge bygges av det samme uttrekket, slik at de ikke kan si forskjellige ting.
- * Uttrekket hentes gjennom vokteren, så en utlevering gir aldri mer enn den som
- * utleverer selv har tilgang til: sperret materiale faller bort på samme måte
- * som ellers, og det står i dokumentet at det kan ha skjedd.
+ * Both are built from the same extract, so they cannot say different things.
+ * The extract goes through the guard, so a disclosure never yields more than
+ * the discloser has access to themselves: restricted material drops out just as
+ * it does elsewhere, and the document says that it may have happened.
  */
 
-/** Hjemmelen utleveringen skjer på. Styrer purposeOfUse i sikkerhetsloggen. */
+/** The legal basis for the disclosure. Governs purposeOfUse in the audit log. */
 export type Utleveringsgrunn =
 	| 'pasient-innsyn'
 	| 'overforing-behandler'
@@ -39,11 +39,11 @@ export type Utleveringsgrunn =
 	| 'egen-dokumentasjon';
 
 const PURPOSE_OF_USE: Record<Utleveringsgrunn, string> = {
-	// v3-ActReason: pasienten ber om egne opplysninger
+	// v3-ActReason: the patient asks for their own information
 	'pasient-innsyn': 'PATRQT',
-	// Behandling hos ny behandler
+	// Treatment by a new practitioner
 	'overforing-behandler': 'TREAT',
-	// Rettslig krav
+	// Legal claim
 	rettslig: 'HLEGAL',
 	forskning: 'HRESCH',
 	// Virksomhetens egen dokumentasjon
@@ -60,27 +60,27 @@ const REASON_TEXT: Record<Utleveringsgrunn, string> = {
 
 export interface Utleveringsvalg {
 	reason: Utleveringsgrunn;
-	/** Hvem journalen utleveres til. Skrives i dokumentet og i loggen. */
+	/** Who the record is disclosed to. Written in the document and in the log. */
 	recipient?: string;
-	/** Ta bare med opplysninger fra og med denne datoen (ISO). */
+	/** Include only information from this date onwards (ISO). */
 	fromDate?: string;
-	/** Ta bare med opplysninger til og med denne datoen (ISO). */
+	/** Include only information up to and including this date (ISO). */
 	toDate?: string;
-	/** Hvor mange ressurser som hentes fra journalen. */
+	/** How many resources are fetched from the record. */
 	maxResources?: number;
 }
 
 export interface RecordExtract {
-	/** FHIR-dokumentet. Dette er den maskinlesbare utleveringen. */
+	/** The FHIR document. This is the machine-readable disclosure. */
 	document: Bundle;
-	/** Identifikator som går igjen i dokument, lesbar utgave og logg. */
+	/** Identifier recurring in document, readable edition and log. */
 	disclosureId: string;
 	patient: ReturnType<typeof toPatientDisplay>;
 	timestamp: string;
 	reason: Utleveringsgrunn;
 	recipient: string | null;
 	period: { from?: string; to?: string };
-	/** Antall ressurser per type, slik det står i kvitteringen. */
+	/** Number of resources per type, as stated in the receipt. */
 	content: { type: string; count: number }[];
 	countResources: number;
 }
@@ -89,17 +89,17 @@ interface Section {
 	title: string;
 	code: { system: string; code: string; display: string };
 	types: string[];
-	/** Én linje per ressurs, slik den vises i den lesbare utgaven. */
+	/** One line per resource, as shown in the readable edition. */
 	line(r: FhirResource): { date: string; hovedtekst: string; details: string[] } | null;
 }
 
 const LOINC = SYSTEM.LOINC;
 
 /**
- * Seksjonene i dokumentet.
+ * The sections of the document.
  *
- * Rekkefølgen og kodene følger IPS/LOINC der det finnes en etablert kode, slik
- * at et mottakersystem kan kjenne seksjonene igjen uten å tolke overskriftene.
+ * Order and codes follow IPS/LOINC where an established code exists, so that a
+ * receiving system can recognise the sections without interpreting the headings.
  */
 const SEKSJONER: Section[] = [
 	{
@@ -214,13 +214,13 @@ const SEKSJONER: Section[] = [
 	}
 ];
 
-/** Ressurstyper som ikke skal med i en utlevering. */
+/** Resource types that must not appear in a disclosure. */
 const UTELATT = new Set([
-	// Sikkerhetsloggen utleveres for seg, gjennom innsyn i logg.
+	// The audit log is disclosed separately, through log access.
 	'AuditEvent',
-	// Sperringer er metadata om tilgangsstyring, ikke helseopplysninger.
+	// Restrictions are access-control metadata, not health information.
 	'Consent',
-	// Pasienten selv er hentet ut separat, som dokumentets subject.
+	// The patient themselves is fetched separately, as the document's subject.
 	'Patient'
 ]);
 
@@ -242,8 +242,8 @@ function dateringOf(r: FhirResource): string {
 function innenforPeriod(r: FhirResource, from?: string, to?: string): boolean {
 	if (!from && !to) return true;
 	const date = dateringOf(r).slice(0, 10);
-	// Uten datering tas ressursen med: en utlevering skal heller inneholde for
-	// mye enn å utelate noe i stillhet.
+	// Undated resources are included: a disclosure should rather hold too much
+	// than quietly leave something out.
 	if (!date) return true;
 	if (from && date < from) return false;
 	if (to && date > to) return false;
@@ -251,11 +251,11 @@ function innenforPeriod(r: FhirResource, from?: string, to?: string): boolean {
 }
 
 /**
- * Henter journalen og bygger FHIR-dokumentet.
+ * Fetches the record and builds the FHIR document.
  *
- * Uttrekket går gjennom vokteren, som avgjør tilgang og skriver til
- * sikkerhetsloggen. Selve utleveringen loggføres i tillegg som en egen hendelse
- * med hjemmelen som purposeOfUse - det er den linjen et tilsyn ser etter.
+ * The extract goes through the guard, which decides access and writes to the
+ * audit log. The disclosure itself is additionally logged as its own event with
+ * the legal basis as purposeOfUse - that is the line an inspection looks for.
  */
 export async function buildRecordExtract(
 	ctx: AuthContext,
@@ -284,8 +284,8 @@ export async function buildRecordExtract(
 		return { section: s, resources: match };
 	}).filter((s) => s.resources.length > 0);
 
-	// Alt som ikke passer i en seksjon havner til slutt, slik at ingenting
-	// forsvinner bare fordi vi ikke hadde en overskrift til det.
+	// Anything that fits no section ends up last, so nothing disappears merely
+	// because we had no heading for it.
 	const ovrige = withValue.filter((r) => !used.has(r));
 
 	const composition: FhirResource = {
@@ -425,10 +425,10 @@ function sectionHtml(section: Section, rs: FhirResource[]): string {
 }
 
 /**
- * Lesbar utgave av det samme uttrekket.
+ * Readable edition of the same extract.
  *
- * Selvstendig HTML uten skript og uten eksterne ressurser: den skal kunne åpnes
- * fra en minnepinne om ti år, og skrives ut uten at noe forsvinner.
+ * Self-contained HTML with no scripts and no external resources: it should open
+ * from a memory stick in ten years, and print without losing anything.
  */
 export function toHtml(extract: RecordExtract): string {
 	const { patient } = extract;
@@ -514,7 +514,7 @@ innsyn i loggen for å se hvem som har hentet opplysninger fra journalen.
 </html>`;
 }
 
-/** Ren tekst, for arkivering og for lesere som ikke tar imot HTML. */
+/** Plain text, for archiving and for readers that do not accept HTML. */
 export function toText(extract: RecordExtract): string {
 	const composition = (extract.document.entry ?? [])[0]?.resource as FhirResource | undefined;
 	const seksjoner = (composition?.section as { title?: string; entry?: { reference?: string }[] }[] | undefined) ?? [];
@@ -566,7 +566,7 @@ export function toText(extract: RecordExtract): string {
 	return lines.join('\n');
 }
 
-/** Filnavn som tåler å bli lagret og sendt videre. */
+/** A filename that survives being stored and passed on. */
 export function filnavn(extract: RecordExtract, extension: 'json' | 'html' | 'txt'): string {
 	const name = extract.patient.name
 		.toLowerCase()
