@@ -46,7 +46,14 @@ data:
   EPJ_HELSEID_ISSUER: https://helseid-sts.test.nhn.no
   EPJ_HELSEID_KEY_ID: oUMPVNSLU4Xj5LiEJ_X1vzVZF5iLM5C1GqUYAMlEs9U
   EPJ_HELSEID_ALG: PS256
-  EPJ_HELSEID_REDIRECT_URI: https://epj.apps.apus.no/logg-inn/helseid/tilbake
+  # No fixed redirect URI. The callback has to sit on the hostname the sign-in
+  # started from, because that is where the session cookie is set and which
+  # organisation the request resolves to. Pinning it to one hostname sent a
+  # sign-in at epj-admin back to the practice, where the platform
+  # administrator's account does not exist. Both callbacks must be registered
+  # in HelseID:
+  #   https://epj.apps.apus.no/logg-inn/helseid/tilbake
+  #   https://epj-admin.apps.apus.no/logg-inn/helseid/tilbake
   EPJ_INTEGRATION_MODE: mock
 
   EPJ_ORG_NAME: Storgata Legesenter

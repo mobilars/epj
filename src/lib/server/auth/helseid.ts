@@ -201,8 +201,15 @@ export async function startLogin(cookies: Cookies, returnTo: string): Promise<st
 }
 
 export function redirectUri(): string {
-	// The callback address must sit on the organisation's own hostname, since
-	// that is where the session is created.
+	// The callback address must sit on the organisation's own hostname: that is
+	// where the session cookie is set, and the hostname is what says which
+	// organisation the request concerns. Every hostname the record answers on
+	// therefore needs its own callback registered in HelseID.
+	//
+	// EPJ_HELSEID_REDIRECT_URI overrides that, and only makes sense for an
+	// installation serving a single organisation. Set on a multi-tenant
+	// installation it sends every sign-in back to one organisation, whichever
+	// one the user started at.
 	return config.integrations.healthId.redirectUri || `${issuerFor(requireTenant())}/logg-inn/helseid/tilbake`;
 }
 
