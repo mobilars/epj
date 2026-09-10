@@ -1,6 +1,6 @@
 import type { Cookies } from '@sveltejs/kit';
 import * as oidc from 'openid-client';
-import { importJWK, importPKCS8, type JWK } from 'jose';
+import { exportJWK, importJWK, importPKCS8, type JWK } from 'jose';
 import { config } from '../config';
 import { decrypt, encrypt } from '../util/crypto';
 import { one, exec, transaction } from '../db';
@@ -45,6 +45,19 @@ export const CLAIM = {
 
 /** HelseID refuses a client assertion valid for more than ten seconds. */
 const HELSEID_ASSERTION_LIFETIME = 10;
+
+/**
+ * A client holding API scopes must bind its tokens to a key with DPoP (RFC
+ * 9449). Without it HelseID answers `invalid_request: Client requires DPoP and
+ * a DPoP header value was not provided`.
+ *
+ * The key pair belongs to the sign-in attempt, not to the process: the
+ * authorization request announces the key as `dpop_jkt`, and the token request
+ * that follows - possibly served by another instance - must prove possession of
+ * the same key. It therefore travels with the rest of the flow state, in the
+ * encrypted cookie.
+ */
+const DPOP_ALG = 'ES256';
 
 let cachedConfiguration: { value: oidc.Configuration; expiresAt: number } | null = null;
 
@@ -127,6 +140,26 @@ interface FlowState {
 	codeVerifier: string;
 	returnTo: string;
 	created_at: number;
+	/** The DPoP key pair for this attempt, as JWKs so it survives the cookie. */
+	dpop?: { privateJwk: JWK; publicJwk: JWK };
+}
+
+async function newDPoPKeys(): Promise<{ privateJwk: JWK; publicJwk: JWK }> {
+	const { privateKey, publicKey } = await oidc.randomDPoPKeyPair(DPOP_ALG, { extractable: true });
+	return {
+		privateJwk: (await exportJWK(privateKey)) as JWK,
+		publicJwk: (await exportJWK(publicKey)) as JWK
+	};
+}
+
+async function dpopHandle(
+	configuration: oidc.Configuration,
+	keys: { privateJwk: JWK; publicJwk: JWK }
+): Promise<oidc.DPoPHandle> {
+	// The public key is embedded in every proof, so it has to stay extractable.
+	const privateKey = (await importJWK(keys.privateJwk, DPOP_ALG, { extractable: true })) as oidc.CryptoKey;
+	const publicKey = (await importJWK(keys.publicJwk, DPOP_ALG, { extractable: true })) as oidc.CryptoKey;
+	return oidc.getDPoPHandle(configuration, { privateKey, publicKey });
 }
 
 /** Builds the authorisation URL and puts the flow state in an encrypted cookie. */
@@ -137,7 +170,8 @@ export async function startLogin(cookies: Cookies, returnTo: string): Promise<st
 	const codeVerifier = oidc.randomPKCECodeVerifier();
 	const codeChallenge = await oidc.calculatePKCECodeChallenge(codeVerifier);
 
-	const flowState: FlowState = { state, nonce, codeVerifier, returnTo, created_at: Date.now() };
+	const dpop = await newDPoPKeys();
+	const flowState: FlowState = { state, nonce, codeVerifier, returnTo, created_at: Date.now(), dpop };
 	cookies.set(STATE_COOKIE, encrypt(JSON.stringify(flowState)), {
 		path: '/',
 		httpOnly: true,
@@ -159,7 +193,9 @@ export async function startLogin(cookies: Cookies, returnTo: string): Promise<st
 	// first (RFC 9126), so the parameters never travel through the browser. The
 	// push is authenticated with the same client assertion as the token call.
 	const url = configuration.serverMetadata().pushed_authorization_request_endpoint
-		? await oidc.buildAuthorizationUrlWithPAR(configuration, parameters)
+		? await oidc.buildAuthorizationUrlWithPAR(configuration, parameters, {
+				DPoP: await dpopHandle(configuration, dpop)
+			})
 		: oidc.buildAuthorizationUrl(configuration, parameters);
 	return url.toString();
 }
@@ -214,12 +250,19 @@ export async function completeLogin(cookies: Cookies, currentUrl: URL): Promise<
 	let claims: Record<string, unknown>;
 	try {
 		const configuration = await helseIdConfiguration();
-		const tokens = await oidc.authorizationCodeGrant(configuration, currentUrl, {
-			pkceCodeVerifier: flowState.codeVerifier,
-			expectedState: flowState.state,
-			expectedNonce: flowState.nonce,
-			idTokenExpected: true
-		});
+		const DPoP = flowState.dpop ? await dpopHandle(configuration, flowState.dpop) : undefined;
+		const tokens = await oidc.authorizationCodeGrant(
+			configuration,
+			currentUrl,
+			{
+				pkceCodeVerifier: flowState.codeVerifier,
+				expectedState: flowState.state,
+				expectedNonce: flowState.nonce,
+				idTokenExpected: true
+			},
+			undefined,
+			{ DPoP }
+		);
 		const verified = tokens.claims();
 		if (!verified) return { ok: false, error: 'HelseID returnerte ikke id_token' };
 		// HelseID does not necessarily put pid, HPR number and security level in
@@ -228,10 +271,10 @@ export async function completeLogin(cookies: Cookies, currentUrl: URL): Promise<
 		// still wins where the two overlap, since that is the signed document.
 		let fromUserinfo: Record<string, unknown> = {};
 		try {
-			fromUserinfo = (await oidc.fetchUserInfo(configuration, tokens.access_token, verified.sub)) as unknown as Record<
-				string,
-				unknown
-			>;
+			// The access token is bound to the DPoP key, so userinfo needs the proof too.
+			fromUserinfo = (await oidc.fetchUserInfo(configuration, tokens.access_token, verified.sub, {
+				DPoP
+			})) as unknown as Record<string, unknown>;
 		} catch {
 			/* userinfo is a bonus; the id_token is what authenticates */
 		}
