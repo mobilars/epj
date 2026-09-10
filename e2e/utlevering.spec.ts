@@ -2,11 +2,11 @@ import { expect, test } from '@playwright/test';
 import { openFirstPatient, logIn, waitOnHydration } from './hjelpere';
 
 /**
- * Utlevering av journal, sett fra brukeren.
+ * Disclosure of the record, seen from the user.
  *
- * Det som prøves her er hele veien fra skjemaet til den ferdige filen: at
- * legen finner funksjonen, at nedlastingen faktisk kommer, at innholdet er
- * pasientens eget, og at utleveringen etterpå står i sikkerhetsloggen.
+ * What is exercised is the whole way from the form to the finished file: that
+ * the doctor finds the function, that the download arrives, that the content is
+ * the patient's own, and that the disclosure afterwards appears in the log.
  */
 test.describe('utlevering av journal', () => {
 	test('legen kan laste ned en lesbar journalutskrift', async ({ page }) => {
@@ -34,10 +34,10 @@ test.describe('utlevering av journal', () => {
 		expect(html).toContain('Pasienten selv');
 		expect(html).toContain('Hypertensjon ukomplisert');
 		expect(html).toContain('Innsyn etter pasient- og brukerrettighetsloven § 5-1');
-		// Utskriften skal kunne åpnes hvor som helst, uten å hente noe utenfra.
+		// The printout must open anywhere, without fetching anything externally.
 		expect(html).not.toMatch(/<script/i);
 
-		// Utleveringen skal stå i pasientens innsynslogg.
+		// The disclosure must appear in the patient's access log.
 		await page.goto(`/pasienter/${patientId}/logg`);
 		await expect(page.getByText('utlevering').first()).toBeVisible();
 	});
@@ -71,7 +71,7 @@ test.describe('utlevering av journal', () => {
 		await logIn(page, 'lege');
 		const patientId = await openFirstPatient(page);
 
-		// Første utlevering.
+		// First disclosure.
 		const response = await page.request.get(
 			`/pasienter/${patientId}/utlevering/last-ned?format=txt&grunn=rettslig&mottaker=Tingretten`
 		);

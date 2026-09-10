@@ -1,8 +1,8 @@
 /**
- * Sletter og oppretter databasen som ende-til-ende-testene bruker.
+ * Drops and creates the database the end-to-end tests use.
  *
- * Kjøres før Playwright starter applikasjonen, slik at appen har en database å
- * migrere inn i ved første forespørsel.
+ * Runs before Playwright starts the application, so the app has a database to
+ * migrate into on its first request.
  */
 import pg from 'pg';
 

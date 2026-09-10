@@ -2,29 +2,29 @@ import { expect, test } from '@playwright/test';
 import { logIn, logInPlatform, PLATFORM_URL, waitOnHydration } from './hjelpere';
 
 /**
- * Plattformadministrasjonen.
+ * Platform administration.
  *
- * Testene her prøver den delen som ikke lar seg dekke av enhetstestene: at
- * grensesnittet faktisk oppretter en virksomhet med partisjon, at det avviser
- * det som skal avvises, og - viktigst - at ingen andre enn systemeier kommer inn.
+ * These tests exercise the part the unit tests cannot reach: that the UI really
+ * does create an organisation with a partition, that it refuses what should be
+ * refused, and - most importantly - that nobody but the platform owner gets in.
  *
- * Plattformen har sitt eget vertsnavn. I testmiljøet peker `localhost` og
- * `127.0.0.1` på den samme serveren, slik at begge virksomhetene kan nås uten
- * at testene trenger DNS.
+ * The platform has its own hostname. In the test environment `localhost` and
+ * `127.0.0.1` point at the same server, so both organisations can be reached
+ * without the tests needing DNS.
  */
 test.describe('plattformadministrasjon', () => {
 	test('systemeier ser virksomhetene og partisjonstilstanden', async ({ page }) => {
 		await logInPlatform(page);
 
-		// Systemeier har ingen klinisk arbeidsflate, og sendes rett til plattformen.
+		// The platform owner has no clinical surface, and goes straight to the platform.
 		await expect(page).toHaveURL(/\/systemadmin$/);
 		await expect(page.getByRole('heading', { name: 'Plattformadministrasjon' })).toBeVisible();
 
-		// Standardvirksomheten har fått navn og adresse fra konfigurasjonen.
+		// The default organisation took its name and address from the configuration.
 		const table = page.getByRole('table');
 		await expect(table).toContainText('Storgata Legesenter');
 		await expect(table).toContainText('Plattformadministrasjon');
-		// Plattformvirksomheten har ingen FHIR-partisjon, og skal ikke meldes som avvik.
+		// The platform organisation has no FHIR partition, and is not a discrepancy.
 		await expect(table).not.toContainText('mangler i HAPI');
 	});
 
@@ -44,16 +44,16 @@ test.describe('plattformadministrasjon', () => {
 
 		const receipt = page.getByRole('status').filter({ hasText: 'legekontor-nytt' });
 		await expect(receipt).toContainText('er opprettet med egen FHIR-partisjon');
-		// Det midlertidige passordet vises én gang, og bare her.
+		// The temporary password is shown once, and only here.
 		await expect(receipt).toContainText('sjefen');
 
-		// Virksomheten er nå i oversikten, med en partisjon som finnes i HAPI.
+		// The organisation is now in the overview, with a partition that exists in HAPI.
 		const row = page.getByRole('row').filter({ hasText: 'Nytt Legekontor AS' });
 		await expect(row).toContainText('nytt.epj.test');
 		await expect(row).toContainText('Aktiv');
 		await expect(row).not.toContainText('mangler i HAPI');
 
-		// Detaljsiden viser virksomhetens egne adresser.
+		// The detail page shows the organisation's own addresses.
 		await page.getByRole('link', { name: 'Nytt Legekontor AS' }).click();
 		await expect(page.getByText('https://nytt.epj.test/fhir')).toBeVisible();
 		await expect(
@@ -66,8 +66,8 @@ test.describe('plattformadministrasjon', () => {
 		await page.goto(`${PLATFORM_URL}/systemadmin`);
 		await waitOnHydration(page);
 
-		// Nettleseren stopper et ugyldig maskinnavn; serveren kontrollerer
-		// organisasjonsnummeret med mod11.
+		// The browser stops an invalid machine name; the server checks the
+		// organisation number with mod11.
 		await page.getByLabel('Maskinnavn').fill('feilorgnr');
 		await page.getByLabel("Virksomhetens navn").fill('Feil Orgnr AS');
 		await page.getByLabel('Organisasjonsnummer').fill('123456789');
@@ -89,7 +89,7 @@ test.describe('plattformadministrasjon', () => {
 			page.getByRole('row').filter({ hasText: 'Storgata Legesenter' })
 		).toContainText('Suspendert');
 
-		// Aktiver igjen, slik at de andre testene ikke arver en stengt virksomhet.
+		// Reactivate, so the other tests do not inherit a closed organisation.
 		await page
 			.getByRole('row')
 			.filter({ hasText: 'Storgata Legesenter' })
@@ -110,14 +110,14 @@ test.describe('plattformadministrasjon', () => {
 		await logIn(page, 'lege');
 		await expect(page.getByRole('link', { name: 'Plattform' })).toHaveCount(0);
 
-		// To sperrer: vertsnavnet, og rettigheten.
+		// Two bars: the hostname, and the permission.
 		const paaOrganisation = await page.request.get('/systemadmin');
 		expect(paaOrganisation.status()).toBe(404);
 		expect(await paaOrganisation.text()).toContain('eget vertsnavn');
 	});
 
 	test('en vanlig bruker uten plattformrettighet blir avvist', async ({ page }) => {
-		// Legen finnes bare i legekontorets virksomhet, ikke på plattformen.
+		// The doctor exists only in the practice's organisation, not on the platform.
 		await page.goto(`${PLATFORM_URL}/logg-inn`);
 		await waitOnHydration(page);
 		await page.getByLabel('Brukernavn').fill('lege');
@@ -130,14 +130,14 @@ test.describe('plattformadministrasjon', () => {
 	test('systemeier har ingen klinisk tilgang', async ({ page }) => {
 		await logInPlatform(page);
 
-		// Ingen journalfaner i menyen, og de kliniske sidene finnes ikke på
-		// plattformens vertsnavn i det hele tatt.
+		// No record tabs in the menu, and the clinical pages do not exist on the
+		// platform hostname at all.
 		await expect(page.getByRole('link', { name: 'Pasienter' })).toHaveCount(0);
 
 		const patients = await page.request.get(`${PLATFORM_URL}/pasienter`);
 		expect(patients.status()).toBe(404);
 
-		// Og rollen har ikke ett eneste scope, så FHIR-fasaden gir ingenting.
+		// And the role holds not one single scope, so the FHIR facade gives nothing.
 		const fhir = await page.request.get(`${PLATFORM_URL}/fhir/Patient`);
 		expect(fhir.ok()).toBe(false);
 	});

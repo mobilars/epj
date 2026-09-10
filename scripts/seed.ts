@@ -1,10 +1,10 @@
 /**
- * Legger inn demodata: brukere med roller, pasienter med journalinnhold,
- * behandlingsrelasjoner, timeavtaler og en registrert SMART-app.
+ * Inserts demo data: users with roles, patients with record content, care
+ * relationships, appointments and a registered SMART app.
  *
- * Kjøres mot et tomt utviklings- eller testmiljø. Fødselsnumrene under er
- * gyldige mod11-numre fra Skatteetatens syntetiske testdatasett (Tenor) og
- * tilhører ingen virkelig person.
+ * Run against an empty development or test environment. The national identity
+ * numbers below are valid mod11 numbers from the Tax Administration's synthetic
+ * test set (Tenor) and belong to no real person.
  */
 import { exec, closePool, query } from '../src/lib/server/db/index';
 import { migrate } from '../src/lib/server/db/migrate';
@@ -21,7 +21,7 @@ import type { FhirResource } from '../src/lib/server/fhir/types';
 
 const PASSWORD = 'Testpassord1!';
 
-/** Fast TOTP-hemmelighet i demo, slik at koden alltid kan regnes ut. */
+/** Fixed TOTP secret in the demo, so the code can always be computed. */
 const DEMO_TOTP = 'JBSWY3DPEHPK3PXP';
 
 interface DemoPatient {
@@ -66,7 +66,7 @@ const PATIENTS: DemoPatient[] = [
 		malinger: [{ code: '29463-7', name: 'Vekt', value: 88, unit: 'kg' }]
 	},
 	{
-		// Barn under 16 - brukes til å vise fritak for egenandel i oppgjøret.
+		// Children under 16 - used to show copayment exemption in the settlement.
 		fnr: '11061550188', givenName: 'Emma', familyName: 'Vik', phone: '90011223',
 		address: { line: 'Trondheimsveien 100', postnr: '0565', sted: 'Oslo' },
 		diagnoses: [{ code: 'R74', text: 'Akutt øvre luftveisinfeksjon' }],
@@ -91,15 +91,15 @@ async function main(): Promise<void> {
 	await migrate();
 	await ensureDefaultOrganisation();
 
-	// Demodata legges i standardvirksomheten. Alt under kjøres i dens kontekst,
-	// slik at spørringene avgrenses på samme måte som i applikasjonen.
+	// Demo data goes into the default organisation. Everything below runs in its
+	// context, so queries are bounded exactly as they are in the application.
 	const tenantId = process.env.EPJ_SEED_TENANT ?? 'standard';
 	const tenant = await getTenant(tenantId);
 	if (!tenant) throw new Error(`Virksomheten «${tenantId}» finnes ikke. Kjør migrasjonene først.`);
 	await withTenant(tenant, () => seed(tenant));
 
-	// Plattformadministratoren hører hjemme i systemvirksomheten, ikke hos noen
-	// av legekontorene. Rollen `systemeier` har ingen kliniske scopes.
+	// The platform administrator belongs to the system organisation, not to any
+	// of the practices. The `systemeier` role holds no clinical scopes.
 	const platform = await getTenant(PLATFORM_TENANT);
 	if (platform) await withTenant(platform, () => seedPlatform(platform));
 }
@@ -130,7 +130,7 @@ async function seed(tenant: Tenant): Promise<void> {
 		return;
 	}
 
-	// --- Behandlere som FHIR Practitioner --------------------------------
+	// --- Practitioners as FHIR Practitioner --------------------------------
 	const doctorRes = await fhirClient.create({
 		resourceType: 'Practitioner',
 		identifier: [{ system: SYSTEM.HPR, value: '9144889' }],
@@ -165,7 +165,7 @@ async function seed(tenant: Tenant): Promise<void> {
 			roles: [...b.roles]
 		});
 		idPerUsername.set(b.username, user.id);
-		// Demo: fast TOTP-hemmelighet, og passordet trenger ikke byttes.
+		// Demo: fixed TOTP secret, and the password need not be changed.
 		await exec(
 			'UPDATE user_account SET totp_secret_enc = $2, mfa_aktivert = true, must_change_password = false WHERE id = $1',
 			[user.id, encrypt(DEMO_TOTP)]
@@ -173,7 +173,7 @@ async function seed(tenant: Tenant): Promise<void> {
 	}
 	console.log(`Opprettet ${users.length} brukere (passord: ${PASSWORD}).`);
 
-	// --- Pasienter med journalinnhold -------------------------------------
+	// --- Patients with record content ---------------------------------------
 	const doctorId = idPerUsername.get('lege') as string;
 	const nurseId = idPerUsername.get('sykepleier') as string;
 	const sekretaerId = idPerUsername.get('sekretaer') as string;
@@ -260,8 +260,8 @@ async function seed(tenant: Tenant): Promise<void> {
 			]
 		});
 
-		// Behandlingsrelasjoner: legen for alle, sykepleier for de to første,
-		// helsesekretær administrativt for alle.
+		// Care relationships: the doctor for everyone, the nurse for the first two,
+		// the medical secretary administratively for all.
 		const relationship = (userId: string, basis: string) =>
 			exec('INSERT INTO care_relationship (id, tenant_id, user_id, patient_id, basis) VALUES ($1,$2,$3,$4,$5)', [
 				newId(), tenant.id, userId, patientId, basis
@@ -273,7 +273,7 @@ async function seed(tenant: Tenant): Promise<void> {
 		console.log(`Pasient ${p.givenName} ${p.familyName} (${patientId}) opprettet.`);
 	}
 
-	// Én pasient sperrer journalen for sykepleieren, for å vise sperringsflyten.
+	// One patient blocks the record for the nurse, to show the restriction flow.
 	const blockedPatient = await fhirClient.search('Patient', new URLSearchParams({ identifier: `${SYSTEM.FNR}|${PATIENTS[2].fnr}` }));
 	const blockedId = blockedPatient.entry?.[0]?.resource?.id as string | undefined;
 	if (blockedId) {

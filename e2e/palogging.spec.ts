@@ -10,7 +10,7 @@ test.describe('pålogging', () => {
 		await page.getByRole('button', { name: 'Logg inn' }).click();
 
 		await expect(page.getByRole('alert')).toContainText('Skriv inn engangskoden');
-		// Ingen sesjon er opprettet uten engangskode.
+		// No session is created without a one-time code.
 		await page.goto('/');
 		await expect(page).toHaveURL(/\/logg-inn/);
 	});

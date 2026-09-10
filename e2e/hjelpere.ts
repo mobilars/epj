@@ -1,7 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 import { createHmac } from 'node:crypto';
 
-/** TOTP-koden for demobrukerne. Hemmeligheten settes av seed-skriptet. */
+/** The TOTP code for the demo users. The secret is set by the seed script. */
 const DEMO_TOTP = 'JBSWY3DPEHPK3PXP';
 const ALFABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
@@ -26,23 +26,23 @@ export function totp(secret = DEMO_TOTP): string {
 }
 
 /**
- * Venter til siden er hydrert.
+ * Waits until the page is hydrated.
  *
- * Grensesnittet virker uten JavaScript, men hydreringen skriver input-verdier
- * på nytt fra serverdataene. Skriver testen inn i et felt før den er ferdig,
- * blir teksten borte - akkurat som den ville gjort for en bruker som taster
- * svært raskt på en treg forbindelse.
+ * The UI works without JavaScript, but hydration rewrites input values from the
+ * server data. If the test types into a field before that finishes, the text
+ * disappears - exactly as it would for a user typing very fast on a slow
+ * connection.
  */
 export async function waitOnHydration(page: Page): Promise<void> {
 	await page.waitForFunction(() => document.documentElement.dataset.hydrert === 'ja');
 }
 
 /**
- * Adressen plattformadministrasjonen nås på.
+ * The address platform administration is reached on.
  *
- * Virksomheten utledes av vertsnavnet, så plattformbrukeren må logge inn på
- * plattformens eget vertsnavn - ikke på et legekontors. I testmiljøet peker
- * begge navnene på den samme serveren.
+ * The organisation is derived from the hostname, so the platform user must sign
+ * in on the platform's own hostname - not a practice's. In the test environment
+ * both names point at the same server.
  */
 export const PLATFORM_URL = `http://localhost:${process.env.E2E_PORT ?? 4173}`;
 
@@ -56,7 +56,7 @@ export async function logIn(page: Page, username: string, password = 'Testpassor
 	await expect(page.getByRole('navigation', { name: 'Hovedmeny' })).toBeVisible();
 }
 
-/** Logger inn som plattformadministrator, på plattformens vertsnavn. */
+/** Signs in as platform administrator, on the platform hostname. */
 export async function logInPlatform(page: Page, username = 'systemeier'): Promise<void> {
 	await page.goto(`${PLATFORM_URL}/logg-inn`);
 	await waitOnHydration(page);
@@ -72,7 +72,7 @@ export async function logOut(page: Page): Promise<void> {
 	await expect(page).toHaveURL(/\/logg-inn/);
 }
 
-/** Åpner første pasient i listen og returnerer id-en fra URL-en. */
+/** Opens the first patient in the list and returns the id from the URL. */
 export async function openFirstPatient(page: Page): Promise<string> {
 	await page.goto('/pasienter');
 	await waitOnHydration(page);

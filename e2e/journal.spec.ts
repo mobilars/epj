@@ -53,7 +53,7 @@ test.describe('journal', () => {
 		await expect(page.getByRole('heading', { name: 'Kontroll av blodtrykk' })).toBeVisible();
 		await expect(page.getByText('lett hodepine siste uke')).toBeVisible();
 
-		// Notatet er en del av journalen og vises i oversikten.
+		// The note is part of the record and appears in the overview.
 		await page.goto(`/pasienter/${id}`);
 		await expect(page.getByText('Kontroll av blodtrykk')).toBeVisible();
 	});
@@ -70,7 +70,7 @@ test.describe('journal', () => {
 		await page.getByRole('button', { name: 'Merk som feilført' }).first().click();
 
 		await expect(page.getByText('Feilført').first()).toBeVisible();
-		// Innholdet er fortsatt der - journalen skal ikke miste spor.
+		// The content is still there - the record must not lose its trail.
 		await expect(page.getByText('Ført på feil pasient.')).toBeVisible();
 	});
 

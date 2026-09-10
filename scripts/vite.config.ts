@@ -2,9 +2,9 @@ import { defineConfig } from 'vite';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Minimal Vite-oppsett for kommandolinjeskriptene (migrering, seeding,
- * bakgrunnsjobber). Uten SvelteKit-pluginen, som begrenser filtilgangen til
- * `src/` og dermed ikke kan kjøre skript utenfor rutetreet.
+ * Minimal Vite setup for the command line scripts (migration, seeding,
+ * background jobs). Without the SvelteKit plugin, which restricts file access
+ * to `src/` and therefore cannot run scripts outside the route tree.
  */
 export default defineConfig({
 	resolve: {

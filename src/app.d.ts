@@ -4,15 +4,15 @@ import type { Tenant } from '$srv/tenant/context';
 declare global {
 	namespace App {
 		interface Locals {
-			/** Autentisert kontekst for inneværende forespørsel (null for anonyme kall). */
+			/** Authenticated context for the current request (null for anonymous calls). */
 			auth: AuthContext | null;
-			/** Korrelasjons-ID som følger forespørselen gjennom logg og AuditEvent. */
+			/** Correlation id following the request through the log and AuditEvent. */
 			requestId: string;
-			/** Klientens IP slik den er utledet fra betrodde proxy-headere. */
+			/** The client's IP as derived from trusted proxy headers. */
 			clientIp: string;
-			/** Virksomheten forespørselen gjelder, utledet fra vertsnavnet. */
+			/** The organisation the request concerns, derived from the hostname. */
 			tenant: Tenant;
-			/** True når forespørselen kom til plattformens eget vertsnavn. */
+			/** True when the request arrived on the platform's own hostname. */
 			isPlatform: boolean;
 		}
 		interface Error {

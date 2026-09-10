@@ -3,12 +3,12 @@ import { createHash, randomBytes } from 'node:crypto';
 import { logIn, waitOnHydration } from './hjelpere';
 
 /**
- * SMART on FHIR fra ende til ende.
+ * SMART on FHIR end to end.
  *
- * Går gjennom hele flyten en tredjepartsapp faktisk bruker: oppslag i
- * .well-known, EHR launch fra journalen, samtykkedialog, innbytte av
- * autorisasjonskode med PKCE, og kall mot /fhir med tokenet - inkludert at
- * appen ikke kommer lenger enn scopene sine.
+ * Walks the whole flow a third-party app actually uses: .well-known discovery,
+ * EHR launch from the record, the consent dialog, exchanging the authorisation
+ * code with PKCE, and calls to /fhir with the token - including that the app
+ * gets no further than its scopes.
  */
 
 function pkce(): { verifier: string; challenge: string } {
@@ -18,7 +18,7 @@ function pkce(): { verifier: string; challenge: string } {
 
 const REDIRECT = 'http://localhost:4000/callback';
 
-/** Henter client_id for demoappen fra en pasients app-fane. */
+/** Fetches the client_id for the demo app from a patient's app tab. */
 async function getClientId(page: import('@playwright/test').Page): Promise<string> {
 	await page.goto('/pasienter');
 	await waitOnHydration(page);
@@ -71,14 +71,14 @@ test.describe('SMART on FHIR', () => {
 	test('hele autorisasjonsflyten, og appen får bare det den har scope for', async ({ page }) => {
 		await logIn(page, 'lege');
 
-		// Finn pasienten og den registrerte demoappen.
+		// Find the patient and the registered demo app.
 		await page.goto('/pasienter');
 		await waitOnHydration(page);
 		await page.getByRole('link', { name: /Bakken/ }).first().click();
 		await expect(page).toHaveURL(/\/pasienter\/[0-9a-fA-F-]{8,}/);
 		const patientId = page.url().split('/pasienter/')[1].split(/[/?]/)[0];
 
-		// Klinikeren starter appen fra journalen (EHR launch).
+		// The clinician launches the app from the record (EHR launch).
 		await page.goto(`/pasienter/${patientId}/apper`);
 		await expect(page.getByRole('heading', { name: 'Diabetesoversikt (demo)' })).toBeVisible();
 		const clientId = (await page.getByTestId('client-id').first().textContent())?.trim() as string;
@@ -92,7 +92,7 @@ test.describe('SMART on FHIR', () => {
 		const launch = launchUrl.searchParams.get('launch') as string;
 		expect(launch.length).toBeGreaterThan(10);
 
-		// Appen sender brukeren til autorisasjonsendepunktet.
+		// The app sends the user to the authorisation endpoint.
 		const { verifier, challenge } = pkce();
 		const state = randomBytes(8).toString('hex');
 		const search = new URLSearchParams({
@@ -108,13 +108,13 @@ test.describe('SMART on FHIR', () => {
 		});
 		await page.goto(`/oauth/authorize?${search}`);
 
-		// Samtykkedialogen forklarer tilgangen på norsk og navngir pasienten.
+		// The consent dialog explains the access in Norwegian and names the patient.
 		await expect(page.getByRole('heading', { name: /Gi tilgang til «Diabetesoversikt/ })).toBeVisible();
 		await expect(page.getByText('Anne Bakken')).toBeVisible();
 		await expect(page.getByText('målinger og prøvesvar')).toBeVisible();
 		await expect(page.getByText('Dr. Ingrid Fastlege')).toBeVisible();
 
-		// Brukeren godkjenner. Vi følger ikke omdirigeringen, men leser koden.
+		// The user approves. We do not follow the redirect, but read the code.
 		const response = await page.request.post('/oauth/authorize?/godkjenn', {
 			headers: { accept: 'text/html', 'content-type': 'application/x-www-form-urlencoded' },
 			form: {
@@ -154,12 +154,12 @@ test.describe('SMART on FHIR', () => {
 
 		const auth = { authorization: `Bearer ${tokens.access_token}` };
 
-		// Appen leser pasienten den har kontekst for.
+		// The app reads the patient it has context for.
 		const patient = await page.request.get(`/fhir/Patient/${patientId}`, { headers: auth });
 		expect(patient.ok(), `status ${patient.status()}: ${await patient.text()}`).toBe(true);
 		expect((await patient.json()).resourceType).toBe('Patient');
 
-		// Og målingene den har scope for.
+		// And the observations it has scope for.
 		const obs = await page.request.post('/fhir/Observation/_search', {
 			headers: { ...auth, 'content-type': 'application/x-www-form-urlencoded' },
 			form: { patient: `Patient/${patientId}` }
@@ -167,11 +167,11 @@ test.describe('SMART on FHIR', () => {
 		expect(obs.ok()).toBe(true);
 		expect((await obs.json()).entry.length).toBeGreaterThan(0);
 
-		// Men ikke diagnoser - de er utenfor scopet appen fikk.
+		// But not diagnoses - those are outside the scope the app was given.
 		const cond = await page.request.get(`/fhir/Condition?patient=Patient/${patientId}`, { headers: auth });
 		expect(cond.status()).toBe(403);
 
-		// Og ikke en annen pasient enn den i launch-konteksten.
+		// And not a patient other than the one in launch context.
 		await page.goto('/pasienter');
 		await waitOnHydration(page);
 		await page.getByRole('link', { name: /Nordli/ }).first().click();
@@ -180,7 +180,7 @@ test.describe('SMART on FHIR', () => {
 		const forbudt = await page.request.get(`/fhir/Patient/${annenPatient}`, { headers: auth });
 		expect(forbudt.status()).toBe(403);
 
-		// Kallet fra appen er loggført med appens identitet.
+		// The call from the app is logged with the app's identity.
 		await page.goto(`/pasienter/${patientId}/logg`);
 		await expect(page.getByText(clientId).first()).toBeVisible();
 	});
@@ -231,7 +231,7 @@ test.describe('SMART on FHIR', () => {
 			code_challenge_method: 'S256'
 		});
 		const response = await page.request.get(`/oauth/authorize?${search}`, { maxRedirects: 0 });
-		// Ingen omdirigering: journalen skal ikke kunne brukes som åpen viderekobling.
+		// No redirect: the record must not be usable as an open redirector.
 		expect(response.status()).toBe(400);
 	});
 });

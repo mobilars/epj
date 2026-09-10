@@ -2,12 +2,12 @@ import { defineConfig } from 'vite';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Bygger kommandolinjeverktøyene til frittstående filer i `build/verktoy/`.
+ * Builds the command line tools into standalone files in `build/verktoy/`.
  *
- * Migrering og seeding kjøres i utvikling med `vite-node`, men et
- * containerbilde skal ikke inneholde en byggekjede. Denne konfigurasjonen
- * pakker verktøyene til vanlig JavaScript, slik at driftsmiljøet kan kjøre
- * skjemaendringen som et eget, kontrollert steg før nye instanser rulles ut:
+ * Migration and seeding run under `vite-node` in development, but a container
+ * image should not contain a build chain. This configuration packs the tools
+ * into plain JavaScript, so the runtime can perform the schema change as its
+ * own controlled step before new instances are rolled out:
  *
  *     node build/verktoy/migrer.js
  */
@@ -29,7 +29,7 @@ export default defineConfig({
 				migrate: fileURLToPath(new URL('./migrer.ts', import.meta.url)),
 				seed: fileURLToPath(new URL('./seed.ts', import.meta.url))
 			},
-			// `pg` lastes fra node_modules i bildet.
+			// `pg` is loaded from node_modules in the image.
 			external: ['pg'],
 			output: { format: 'esm', entryFileNames: '[name].js' }
 		}

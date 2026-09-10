@@ -1,11 +1,11 @@
-/** Kjører databasemigrasjonene. Brukes av `npm run migrer` og i CI. */
+/** Runs the database migrations. Used by `npm run migrer` and in CI. */
 import { migrate, currentVersion } from '../src/lib/server/db/migrate';
 import { closePool } from '../src/lib/server/db/index';
 import { ensureDefaultOrganisation } from '../src/lib/server/tenant/tenant';
 
 const kjort = await migrate();
-// Standardvirksomheten får adresse og virksomhetsopplysninger fra
-// konfigurasjonen; SQL kan ikke lese miljøvariabler.
+// The default organisation gets its address and organisation details from the
+// configuration; SQL cannot read environment variables.
 await ensureDefaultOrganisation();
 console.log(
 	kjort.length > 0

@@ -2,10 +2,10 @@ import { expect, test } from '@playwright/test';
 import { logIn, totp, waitOnHydration } from './hjelpere';
 
 /**
- * Tilgangsstyring i praksis: tjenstlig behov, sperring og nødrett.
+ * Access control in practice: legitimate need, restriction and emergency access.
  *
- * Demodataene gir legen behandlingsrelasjon til alle pasientene, sykepleieren
- * til de to første, og Sofie Lie har sperret journalen for sykepleieren.
+ * The demo data gives the doctor a care relationship with every patient, the
+ * nurse with the first two, and Sofie Lie has blocked the record for the nurse.
  */
 test.describe('tilgangsstyring', () => {
 	async function findPatientId(page: import('@playwright/test').Page, name: string): Promise<string> {
@@ -28,7 +28,7 @@ test.describe('tilgangsstyring', () => {
 
 		await expect(page.getByRole('heading', { name: 'Ingen tilgang til journalen' })).toBeVisible();
 		await expect(page.getByRole('alert')).toContainText('behandlingsrelasjon');
-		// Journalinnholdet vises ikke.
+		// The record content is not shown.
 		await expect(page.getByRole('heading', { name: 'Diagnoser og problemer' })).toHaveCount(0);
 	});
 
@@ -56,7 +56,7 @@ test.describe('tilgangsstyring', () => {
 		await page.getByLabel('Bekreft med engangskode').fill(totp());
 		await page.getByRole('button', { name: 'Åpne journalen på nødrett' }).click();
 
-		// Skjemaet sendes ikke, og feltet markeres som ugyldig.
+		// The form is not submitted, and the field is marked invalid.
 		await expect(page).toHaveURL(new RegExp(`/pasienter/${id}$`));
 		expect(await page.getByLabel('Begrunnelse').evaluate((e: HTMLTextAreaElement) => e.validity.tooShort)).toBe(true);
 	});
@@ -67,9 +67,9 @@ test.describe('tilgangsstyring', () => {
 		await page.getByRole('button', { name: 'Logg ut' }).click();
 		await logIn(page, 'sykepleier');
 
-		// Sender direkte til handlingen, uten skjemaet - slik en angriper ville gjort.
-		// page.request deler informasjonskapsler med nettleseren, slik at kallet
-		// gjøres som den innloggede sykepleieren.
+		// Posts straight to the action, without the form - as an attacker would.
+		// page.request shares cookies with the browser, so the call is made as the
+		// signed-in nurse.
 		const response = await page.request.post(`/pasienter/${id}/nodrett?/nodrett`, {
 			headers: { accept: 'text/html', 'content-type': 'application/x-www-form-urlencoded' },
 			form: { justification: 'kort', oneTimeCode: totp() },
@@ -79,7 +79,7 @@ test.describe('tilgangsstyring', () => {
 		expect(response.headers()['location']).toContain('nodrettFeil=');
 		expect(decodeURIComponent(response.headers()['location'])).toContain('minst 15 tegn');
 
-		// Ingen tilgang er gitt.
+		// No access has been granted.
 		await page.goto(`/pasienter/${id}`);
 		await expect(page.getByRole('heading', { name: 'Ingen tilgang til journalen' })).toBeVisible();
 	});
@@ -112,8 +112,8 @@ test.describe('tilgangsstyring', () => {
 	});
 
 	test('nødrettsoppslag havner i loggen og på oversikten til systemansvarlig', async ({ page }) => {
-		// Sofie Lie har sperret journalen for sykepleieren. Nødrett overstyrer
-		// sperringen, og oppslaget skal da være særlig godt sporet.
+		// Sofie Lie has blocked the record for the nurse. Emergency access overrides
+		// the restriction, and the lookup must then be especially well traced.
 		await logIn(page, 'lege');
 		const id = await findPatientId(page, 'Lie');
 		await page.getByRole('button', { name: 'Logg ut' }).click();

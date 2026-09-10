@@ -1,8 +1,8 @@
 /**
- * Starter FHIR-testdobbelen på en fast port.
+ * Starts the FHIR test double on a fixed port.
  *
- * Brukes av Playwright og for lokal utvikling uten Docker. Den ekte
- * HAPI FHIR-serveren startes med `docker compose up hapi`.
+ * Used by Playwright and for local development without Docker. The real HAPI
+ * FHIR server is started with `docker compose up hapi`.
  */
 import { startTestFhirServer } from '../tests/fixtures/fhir-testserver';
 import { createServer } from 'node:http';
@@ -10,7 +10,7 @@ import { createServer } from 'node:http';
 const port = Number(process.env.TEST_FHIR_PORT ?? 8080);
 
 const server = await startTestFhirServer();
-// startTestFhirServer velger tilfeldig port; vi proxyer den til ønsket port.
+// startTestFhirServer picks a random port; we proxy it to the wanted one.
 const target = new URL(server.url);
 
 const proxy = createServer((req, res) => {

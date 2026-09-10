@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { logIn, waitOnHydration } from './hjelpere';
 
-/** Oppgjørsflyten: takstvalg, frikort, regningskort og innsending til Helfo. */
+/** The settlement flow: tariff choice, exemption card, billing card and submission to Helfo. */
 test.describe('oppgjør', () => {
 	async function openPatient(page: import('@playwright/test').Page, name: string): Promise<string> {
 		await page.goto('/pasienter');
@@ -65,7 +65,7 @@ test.describe('oppgjør', () => {
 		await page.getByRole('button', { name: 'Registrer regningskort' }).click();
 		await expect(page.locator('main').getByRole('status')).toContainText('klart for oppgjør');
 
-		// Helsesekretæren sender oppgjøret.
+		// The medical secretary submits the settlement.
 		await page.getByRole('button', { name: 'Logg ut' }).click();
 		await logIn(page, 'sekretaer');
 		await page.goto('/oppgjor');
@@ -86,7 +86,7 @@ test.describe('oppgjør', () => {
 
 		await logIn(page, 'sekretaer');
 		await page.goto(`/pasienter/${id}/notater`);
-		// Helsesekretæren ser journalen, men uten skjema for nytt notat.
+		// The medical secretary sees the record, but without a new-note form.
 		await expect(page.getByRole('heading', { name: 'Nytt notat' })).toHaveCount(0);
 	});
 });

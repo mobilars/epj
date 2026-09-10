@@ -1,11 +1,11 @@
 import { execFileSync } from 'node:child_process';
 
 /**
- * Legger demodata inn i testdatabasen.
+ * Puts demo data into the test database.
  *
- * Selve databasen er allerede opprettet av playwright.config.ts, som må gjøre
- * det før applikasjonen starter. Her venter vi på at FHIR-serveren svarer, og
- * kjører deretter seedingen.
+ * The database itself has already been created by playwright.config.ts, which
+ * must do so before the application starts. Here we wait for the FHIR server to
+ * answer, and then run the seeding.
  */
 export default async function setup(): Promise<void> {
 	await waitOn(`${process.env.EPJ_HAPI_BASE_URL}/metadata`, 60_000);
@@ -23,7 +23,7 @@ async function waitOn(url: string, timeoutMs: number): Promise<void> {
 			const response = await fetch(url, { signal: AbortSignal.timeout(3000) });
 			if (response.ok) return;
 		} catch {
-			/* prøver igjen */
+			/* trying again */
 		}
 		if (Date.now() > frist) throw new Error(`Fikk ikke kontakt med ${url}`);
 		await new Promise((r) => setTimeout(r, 500));
