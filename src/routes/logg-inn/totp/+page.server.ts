@@ -2,10 +2,9 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { activateMfa, getUser, rolesFor } from '$srv/auth/users';
 import { createSession } from '$srv/auth/session';
-import { newTotpSecret, otpauthUrl } from '$srv/auth/totp';
-import { decrypt, encrypt } from '$srv/util/crypto';
-import { config } from '$srv/config';
+import { otpauthUrl } from '$srv/auth/totp';
 import { log } from '$srv/audit';
+import { endMfaSetup, readMfaSetup } from '$srv/auth/mfa-setup';
 import { requireTenant } from '$srv/tenant/context';
 
 /**
@@ -24,42 +23,8 @@ import { requireTenant } from '$srv/tenant/context';
  * leaves nothing behind.
  */
 
-const SETUP_COOKIE = 'epj_mfa_oppsett';
-const SETUP_TTL_SECONDS = 600;
-
-interface Setup {
-	userId: string;
-	secret: string;
-	returnTo: string;
-	created_at: number;
-}
-
-/** Called from the sign-in action once the password has been accepted. */
-export function startMfaSetup(cookies: import('@sveltejs/kit').Cookies, userId: string, returnTo: string): void {
-	const setup: Setup = { userId, secret: newTotpSecret(), returnTo, created_at: Date.now() };
-	cookies.set(SETUP_COOKIE, encrypt(JSON.stringify(setup)), {
-		path: '/',
-		httpOnly: true,
-		sameSite: 'lax',
-		secure: config.security.httpsOnly,
-		maxAge: SETUP_TTL_SECONDS
-	});
-}
-
-function readSetup(cookies: import('@sveltejs/kit').Cookies): Setup | null {
-	const raw = cookies.get(SETUP_COOKIE);
-	if (!raw) return null;
-	try {
-		const setup = JSON.parse(decrypt(raw)) as Setup;
-		if (Date.now() - setup.created_at > SETUP_TTL_SECONDS * 1000) return null;
-		return setup;
-	} catch {
-		return null;
-	}
-}
-
 export const load: PageServerLoad = async (event) => {
-	const setup = readSetup(event.cookies);
+	const setup = readMfaSetup(event.cookies);
 	if (!setup) redirect(303, '/logg-inn?feil=Oppsettet%20tok%20for%20lang%20tid.%20Logg%20inn%20p%C3%A5%20nytt.');
 
 	const user = await getUser(setup.userId);
@@ -74,7 +39,7 @@ export const load: PageServerLoad = async (event) => {
 
 export const actions: Actions = {
 	default: async (event) => {
-		const setup = readSetup(event.cookies);
+		const setup = readMfaSetup(event.cookies);
 		if (!setup) redirect(303, '/logg-inn?feil=Oppsettet%20tok%20for%20lang%20tid.%20Logg%20inn%20p%C3%A5%20nytt.');
 
 		const form = await event.request.formData();
@@ -86,7 +51,7 @@ export const actions: Actions = {
 		if (!(await activateMfa(setup.userId, setup.secret, code))) {
 			return fail(400, { error: 'Koden stemmer ikke. Kontroller at klokka på telefonen er riktig, og prøv igjen.' });
 		}
-		event.cookies.delete(SETUP_COOKIE, { path: '/' });
+		endMfaSetup(event.cookies);
 
 		const user = await getUser(setup.userId);
 		if (!user) redirect(303, '/logg-inn');

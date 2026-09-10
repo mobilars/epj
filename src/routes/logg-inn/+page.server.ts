@@ -6,7 +6,7 @@ import { createSession } from '$srv/auth/session';
 import { isConfigured as healthIdConfigured } from '$srv/auth/helseid';
 import { log } from '$srv/audit';
 import { rateLimit } from '$srv/http';
-import { startMfaSetup } from './totp/+page.server';
+import { startMfaSetup } from '$srv/auth/mfa-setup';
 import { requireTenant } from '$srv/tenant/context';
 import { DEMO_PASSWORD, DEMO_TOTP_SECRET, demoUsersHere } from '$srv/auth/demo';
 
