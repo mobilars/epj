@@ -117,6 +117,26 @@ async function resolveTenant(
 	if (!config.tenant.allowUnknownHostname) {
 		return { error: `Ukjent vertsnavn: ${hostname}`, status: 404 };
 	}
+
+	/**
+	 * A hostname no organisation has claimed is a shared one, and the
+	 * organisation then follows from who is signed in.
+	 *
+	 * Giving every practice an address of its own needs a certificate for every
+	 * name, and this installation has no wildcard certificate - so an
+	 * organisation created with a hostname nobody added would simply not answer.
+	 * Sharing one address is the honest default; a practice that wants its own
+	 * gets one added deliberately, and is then found by hostname above.
+	 *
+	 * The isolation is unchanged. The id comes from the session, which is
+	 * server-side and cannot be named by the client, and the session is verified
+	 * inside that organisation exactly as it is on a dedicated hostname.
+	 */
+	if (sessionTenantId) {
+		const theirs = await getTenant(sessionTenantId);
+		if (theirs && theirs.status === 'aktiv') return { tenant: theirs, isPlatform: false };
+	}
+
 	const defaultValue = await getTenant(config.tenant.defaultValue);
 	if (!defaultValue) return { error: 'Standardvirksomheten mangler. Kjør migrasjonene.', status: 500 };
 	return { tenant: defaultValue, isPlatform: false };
@@ -125,11 +145,13 @@ async function resolveTenant(
 export const handle: Handle = async ({ event, resolve }) => {
 	await ensureSchema();
 
-	// On the shared trial hostname the organisation comes from the session, so
-	// it has to be looked up before the organisation context exists.
-	const sessionTenant = config.tenant.trialHostname && event.url.hostname === config.tenant.trialHostname
-		? await tenantIdForSession(event.cookies)
-		: null;
+	// On a shared hostname the organisation comes from the session, so it has to
+	// be looked up before the organisation context exists. Not on the platform's
+	// own hostname, which belongs to one organisation by definition.
+	const sessionTenant =
+		config.tenant.platformHostname && event.url.hostname === config.tenant.platformHostname
+			? null
+			: await tenantIdForSession(event.cookies);
 	const resolution = await resolveTenant(event.url.hostname, sessionTenant);
 	if ('error' in resolution) {
 		return new Response(resolution.error, { status: resolution.status, headers: { 'content-type': 'text/plain; charset=utf-8' } });

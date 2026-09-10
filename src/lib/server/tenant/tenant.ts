@@ -111,6 +111,15 @@ export interface NewTenant {
 	adminName?: string;
 	/** Fødselsnummer, so the administrator can sign in with HelseID. */
 	adminNationalId?: string;
+	/**
+	 * Address for the first administrator.
+	 *
+	 * On a shared hostname this is how they get in at all: a username is
+	 * resolved within one organisation, and a shared address has no organisation
+	 * until somebody is signed in. A code to an address does not have that
+	 * problem, because the address says which organisation it belongs to.
+	 */
+	adminEmail?: string;
 	createdOf?: string;
 }
 
@@ -184,6 +193,7 @@ export async function createTenant(inValue: NewTenant, actor: AuditActor): Promi
 			const user = await createUser({
 				username: inValue.adminUsername as string,
 				name: inValue.adminName ?? 'Systemansvarlig',
+				email: inValue.adminEmail,
 				password: temporaryPassword,
 				roles: ['systemansvarlig'],
 				createdOf: actor.userId ?? undefined

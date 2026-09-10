@@ -81,16 +81,20 @@
 		</div>
 		<div class="feltrad">
 			<div style="flex:1 1 16rem">
-				<label for="vertsnavn">Vertsnavn</label>
-				<input id="vertsnavn" name="vertsnavn" placeholder="legekontoret.epj.example.no" value={was('vertsnavn')} />
+				<label for="vertsnavn">Eget vertsnavn</label>
+				<input id="vertsnavn" name="vertsnavn" placeholder="valgfritt" value={was('vertsnavn')} />
+				<small class="svak">
+					La stå tomt. Da deler virksomheten adressen med de andre, og hvem som er innlogget
+					avgjør hvilken virksomhet forespørselen hører til. Et eget vertsnavn må legges inn i
+					inngangen og i sertifikatet først – ellers svarer det ikke.
+				</small>
 			</div>
 			<div style="flex:1 1 18rem">
 				<label for="baseUrl">Utadvendt adresse (issuer)</label>
 				<input
 					id="baseUrl"
 					name="baseUrl"
-					required
-					placeholder="legekontoret.epj.example.no"
+					placeholder="valgfritt – deler adressen ellers"
 					value={was('baseUrl')}
 				/>
 				<small class="svak">Uten https:// blir det lagt til.</small>
@@ -120,6 +124,15 @@
 						value={was('adminFodselsnummer')}
 					/>
 					<small class="svak">Gjør at brukeren kan logge inn med HelseID.</small>
+				</div>
+				<div style="flex:1 1 14rem">
+					<label for="adminEpost">E-post</label>
+					<input id="adminEpost" name="adminEpost" type="email" value={was('adminEpost')} />
+					<small class="svak">
+						Nødvendig når virksomheten deler adresse: et brukernavn slås opp i én virksomhet,
+						og en delt adresse har ingen før noen er innlogget. En kode på e-post har ikke det
+						problemet.
+					</small>
 				</div>
 			</div>
 		</fieldset>

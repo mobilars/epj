@@ -60,7 +60,7 @@ export const actions: Actions = {
 		// Handed back on failure so the form can fill itself in again.
 		const values = Object.fromEntries(
 			['id', 'navn', 'organisasjonsnummer', 'herId', 'kommunenummer', 'vertsnavn', 'baseUrl', 'merknad',
-				'adminBrukernavn', 'adminNavn', 'adminFodselsnummer'].map((f) => [f, text(f)])
+				'adminBrukernavn', 'adminNavn', 'adminFodselsnummer', 'adminEpost'].map((f) => [f, text(f)])
 		);
 
 		const result = await createTenant(
@@ -73,11 +73,16 @@ export const actions: Actions = {
 				hostname: text('vertsnavn').toLowerCase() || undefined,
 				// A bare hostname is what people type. Anything without a scheme gets
 				// https, so the form does not reject `legekontoret.apps.apus.no`.
-				baseUrl: medProtokoll(text('baseUrl')),
+				// Empty means the shared address. A practice only gets one of its own
+				// when somebody has added the hostname to the ingress and the
+				// certificate - there is no wildcard certificate here, so a name
+				// nobody added is a name that does not answer.
+				baseUrl: medProtokoll(text('baseUrl')) || config.baseUrl.replace(/\/$/, ''),
 				note: text('merknad') || undefined,
 				adminUsername: text('adminBrukernavn') || undefined,
 				adminName: text('adminNavn') || undefined,
-				adminNationalId: text('adminFodselsnummer').replace(/\s/g, '') || undefined
+				adminNationalId: text('adminFodselsnummer').replace(/\s/g, '') || undefined,
+				adminEmail: text('adminEpost') || undefined
 			},
 			actorFromContext(ctx)
 		);

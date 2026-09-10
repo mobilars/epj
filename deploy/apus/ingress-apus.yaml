@@ -25,6 +25,11 @@ spec:
         - epj-admin.apps.apus.no
         - utvikler.apps.apus.no
         - prov.apps.apus.no
+        # A practice that has been given an address of its own. Each such name
+        # has to be listed here and in the certificate - there is no wildcard
+        # certificate in this environment, so a hostname nobody has added is a
+        # hostname that does not answer.
+        - legekontoret.apps.apus.no
       secretName: epj-tls
   rules:
     - host: epj.apps.apus.no
@@ -58,6 +63,16 @@ spec:
                 port:
                   number: 80
     - host: prov.apps.apus.no
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: epj
+                port:
+                  number: 80
+    - host: legekontoret.apps.apus.no
       http:
         paths:
           - path: /
