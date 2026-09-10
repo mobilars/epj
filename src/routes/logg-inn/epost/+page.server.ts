@@ -5,6 +5,8 @@ import { requestEmailCode, signInAs, verifyEmailCode, type AccountMatch } from '
 import { rateLimit } from '$srv/http';
 import { log } from '$srv/audit';
 import { requireTenant } from '$srv/tenant/context';
+import { getTenant } from '$srv/tenant/tenant';
+import { methodIsEnough } from '$srv/auth/login-level';
 
 /**
  * Signing in with a code sent by email.
@@ -85,6 +87,17 @@ export const actions: Actions = {
 				code,
 				accounts: result.accounts.map((a) => ({ tenantId: a.tenantId, tenantName: a.tenantName })),
 				error: 'Velg hvilken virksomhet du vil logge inn i.'
+			} as Svar);
+		}
+
+		// The organisation the account belongs to may not accept an emailed code,
+		// even though this one does. Checked against theirs, not ours.
+		const theirs = await getTenant(account.tenantId);
+		if (theirs && !methodIsEnough('epost', theirs.login_level)) {
+			return fail(403, {
+				sent: true,
+				email,
+				error: `${theirs.name} krever sterkere innlogging enn en kode på e-post.`
 			} as Svar);
 		}
 

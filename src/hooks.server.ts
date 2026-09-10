@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { config } from '$srv/config';
 import { clientIp, rateLimit, securityHeaders } from '$srv/http';
 import { getSession, tenantIdForSession } from '$srv/auth/session';
+import { methodIsEnough } from '$srv/auth/login-level';
 import { getUser, rolesFor } from '$srv/auth/users';
 import { validateAccessToken } from '$srv/auth/tokens';
 import { parseScopes } from '$srv/authz/scopes';
@@ -34,6 +35,17 @@ function ensureSchema(): Promise<unknown> {
 async function contextFromSession(event: Parameters<Handle>[0]['event'], requestId: string): Promise<AuthContext | null> {
 	const session = await getSession(event.cookies);
 	if (!session) return null;
+
+	/**
+	 * A session is only as good as the way it was established.
+	 *
+	 * If the organisation has since raised what it requires, a session signed in
+	 * the old way stops working now rather than at the next sign-out. Otherwise
+	 * tightening the setting would change nothing for anyone already inside,
+	 * which is exactly the population it was tightened for.
+	 */
+	if (!methodIsEnough(session.amr ?? '', event.locals.tenant.login_level)) return null;
+
 	const user = await getUser(session.user_id);
 	if (!user || user.status !== 'aktiv') return null;
 	const roles = await rolesFor(user.id);

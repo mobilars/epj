@@ -30,6 +30,15 @@
 				<label for="virksomhet">Navn på kontoret</label>
 				<input id="virksomhet" name="virksomhet" required value={was('virksomhet')} placeholder="Storgata Legesenter" />
 			</div>
+			<div class="felt">
+				<label for="fodselsnummer">Fødselsnummer <span class="svak">(valgfritt)</span></label>
+				<input id="fodselsnummer" name="fodselsnummer" inputmode="numeric" value={was('fodselsnummer')} />
+				<small class="svak">
+					Oppgir du det, kan du logge inn med HelseID i tillegg til e-postkoden – og prøve
+					journalen slik en behandler faktisk kommer inn i den.
+				</small>
+			</div>
+
 			<button type="submit" class="primar">Opprett prøvekonto</button>
 		</form>
 	</div>

@@ -67,6 +67,26 @@
 			<div style="flex:1 1 16rem"><label for="vertsnavn">Vertsnavn</label><input id="vertsnavn" name="vertsnavn" value={v.hostname ?? ''} /></div>
 			<div style="flex:1 1 18rem"><label for="baseUrl">Utadvendt adresse</label><input id="baseUrl" name="baseUrl" type="url" value={v.baseUrl} /></div>
 		</div>
+		<fieldset>
+			<legend>Påkrevd innlogging</legend>
+			<p class="svak liten">
+				Det svakeste virksomheten godtar. Alt sterkere godtas også, så en virksomhet som strammer
+				inn slipper å tenke på hvilke måter som må slås av.
+			</p>
+			{#each data.loginLevels as level (level.code)}
+				<label class="avkryssing">
+					<input
+						type="radio"
+						name="innloggingsniva"
+						value={level.code}
+						checked={v.loginLevel === level.code}
+					/>
+					<strong>{level.name}</strong>
+					<span class="svak">{level.description}</span>
+				</label>
+			{/each}
+		</fieldset>
+
 		<div><label for="merknad">Merknad</label><input id="merknad" name="merknad" value={v.note ?? ''} /></div>
 		<button type="submit" class="primar">Lagre</button>
 	</form>

@@ -16,7 +16,7 @@ import { newToken } from '../util/ids';
  */
 
 const FIELD = `id, name, organisation_number, her_id, municipality_code, hostname, base_url,
-	partition_id, status, note, created_at`;
+	partition_id, status, login_level, note, created_at`;
 
 /**
  * Keeps the default organisation in step with the configuration.
@@ -111,6 +111,8 @@ export interface NewTenant {
 	adminName?: string;
 	/** Fødselsnummer, so the administrator can sign in with HelseID. */
 	adminNationalId?: string;
+	/** Weakest sign-in method the organisation will accept. */
+	loginLevel?: string;
 	/**
 	 * Address for the first administrator.
 	 *
@@ -173,12 +175,12 @@ export async function createTenant(inValue: NewTenant, actor: AuditActor): Promi
 	const tenant = await transaction(async () => {
 		await exec(
 			`INSERT INTO tenant (id, name, organisation_number, her_id, municipality_code, hostname,
-				base_url, partition_id, note, created_by)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+				base_url, partition_id, login_level, note, created_by)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
 			[
 				inValue.id, inValue.name, inValue.organisation_number, inValue.herId ?? null, inValue.municipality_code ?? null,
 				inValue.hostname ?? null, inValue.baseUrl.replace(/\/$/, ''), partitionId,
-				inValue.note ?? null, actor.userId
+				inValue.loginLevel ?? 'passord', inValue.note ?? null, actor.userId
 			]
 		);
 		return (await getTenant(inValue.id)) as Tenant;
@@ -247,7 +249,15 @@ export async function setTenantstatus(
 
 export async function updateTenant(
 	id: string,
-	change: { name?: string; hostname?: string | null; baseUrl?: string; herId?: string | null; municipality_code?: string | null; note?: string | null },
+	change: {
+		name?: string;
+		hostname?: string | null;
+		baseUrl?: string;
+		herId?: string | null;
+		municipality_code?: string | null;
+		loginLevel?: string;
+		note?: string | null;
+	},
 	actor: AuditActor
 ): Promise<{ ok: boolean; error?: string }> {
 	if (change.hostname) {
@@ -261,11 +271,12 @@ export async function updateTenant(
 			base_url = COALESCE($4, base_url),
 			her_id = COALESCE($5, her_id),
 			municipality_code = COALESCE($6, municipality_code),
-			note = COALESCE($7, note),
+			login_level = COALESCE($7, login_level),
+			note = COALESCE($8, note),
 			updated_at = now()
 		 WHERE id = $1`,
 		[id, change.name ?? null, change.hostname ?? null, change.baseUrl ?? null,
-		 change.herId ?? null, change.municipality_code ?? null, change.note ?? null]
+		 change.herId ?? null, change.municipality_code ?? null, change.loginLevel ?? null, change.note ?? null]
 	);
 	await log(
 		{ type: 'admin', subtype: 'tenant:endret', action: 'U', outcome: '0', entityRef: `Organization/${id}` },

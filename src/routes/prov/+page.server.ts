@@ -4,6 +4,7 @@ import { config } from '$srv/config';
 import { createTrial, trialsAreOpen } from '$srv/tenant/trial';
 import { requestEmailCode } from '$srv/auth/email-login';
 import { rateLimit } from '$srv/http';
+import { validNorwegianNationalId } from '$srv/fhir/codesystems';
 import { log } from '$srv/audit';
 
 /**
@@ -31,7 +32,8 @@ export const actions: Actions = {
 		const values = {
 			navn: text('navn'),
 			epost: text('epost'),
-			virksomhet: text('virksomhet')
+			virksomhet: text('virksomhet'),
+			fodselsnummer: text('fodselsnummer')
 		};
 		const fields = { values };
 
@@ -40,6 +42,13 @@ export const actions: Actions = {
 			return fail(400, { error: 'Skriv inn en gyldig e-postadresse.', ...fields });
 		}
 		if (!values.virksomhet) return fail(400, { error: 'Gi kontoret et navn.', ...fields });
+
+		// Optional, and checked if given: a number that fails its own check digits
+		// would sit in the account and quietly stop HelseID from ever matching it.
+		const nationalId = values.fodselsnummer.replace(/\s/g, '');
+		if (nationalId && !validNorwegianNationalId(nationalId)) {
+			return fail(400, { error: 'Ugyldig fødselsnummer (kontrollsiffer stemmer ikke).', ...fields });
+		}
 
 		// Creating an organisation is expensive - a partition in FHIR, a schema of
 		// rows - so the limit is per address and per caller, not per session.
@@ -63,6 +72,7 @@ export const actions: Actions = {
 				contactName: values.navn,
 				contactEmail: values.epost,
 				practiceName: values.virksomhet,
+				nationalId: nationalId || undefined,
 				ip: event.locals.clientIp
 			},
 			actor

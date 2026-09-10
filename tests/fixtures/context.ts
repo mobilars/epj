@@ -57,6 +57,7 @@ export const TEST_TENANT: Tenant = {
 	base_url: 'http://localhost:5173',
 	partition_id: 1,
 	status: 'aktiv',
+	login_level: 'passord',
 	note: null,
 	created_at: new Date(0).toISOString()
 };

@@ -3,6 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { getTenant, updateTenant } from '$srv/tenant/tenant';
 import { listPartitions } from '$srv/tenant/partition';
 import { actorFromContext } from '$srv/audit';
+import { LEVEL_TEXT, LOGIN_LEVELS, isLoginLevel } from '$srv/auth/login-level';
 import { query } from '$srv/db';
 import { PLATFORM_TENANT, fhirBaseFor, issuerFor } from '$srv/tenant/context';
 
@@ -33,7 +34,9 @@ export const load: PageServerLoad = async (event) => {
 	);
 
 	return {
+		loginLevels: LOGIN_LEVELS.map((level) => ({ code: level, ...LEVEL_TEXT[level] })),
 		organisation: {
+			loginLevel: tenant.login_level,
 			id: tenant.id,
 			name: tenant.name,
 			organisation_number: tenant.organisation_number,
@@ -86,6 +89,7 @@ export const actions: Actions = {
 				baseUrl: baseUrl || undefined,
 				herId: text('herId') || null,
 				municipality_code: text('kommunenummer') || null,
+				loginLevel: isLoginLevel(text('innloggingsniva')) ? text('innloggingsniva') : undefined,
 				note: text('merknad') || null
 			},
 			actorFromContext(ctx)

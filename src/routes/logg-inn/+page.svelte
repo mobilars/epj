@@ -65,6 +65,12 @@
 		</div>
 	{/if}
 
+	{#if data.loginLevel === 'helseid' && !data.testLogin}
+		<p class="svak liten">
+			Denne virksomheten krever innlogging med HelseID. Andre måter er slått av her.
+		</p>
+	{/if}
+
 	{#if data.emailLogin}
 		<div class="kort">
 			<h2>E-post</h2>

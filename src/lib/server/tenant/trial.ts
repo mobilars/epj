@@ -25,6 +25,13 @@ export interface TrialRequest {
 	contactName: string;
 	contactEmail: string;
 	practiceName: string;
+	/**
+	 * Optional. With it recorded, the person's first HelseID sign-in attaches to
+	 * this account instead of creating a new one without a role - which is what
+	 * makes it possible to try the record the way a clinician would actually
+	 * reach it.
+	 */
+	nationalId?: string;
 	ip: string | null;
 }
 
@@ -92,6 +99,10 @@ export async function createTrial(request: TrialRequest, actor: AuditActor): Pro
 			// No hostname of its own: trials share one, and which organisation a
 			// request belongs to follows from who is signed in.
 			baseUrl: base,
+			// A trial holds synthetic data and its users have no HelseID for it, so
+			// the weakest level is the only workable one. A practice that later
+			// becomes real changes this before it sees a real patient.
+			loginLevel: 'epost',
 			note: `Prøvekonto opprettet av ${request.contactName} <${email}>`
 		},
 		actor
@@ -103,6 +114,7 @@ export async function createTrial(request: TrialRequest, actor: AuditActor): Pro
 			username: email,
 			name: request.contactName || email,
 			email,
+			nationalId: request.nationalId,
 			roles: ['systemansvarlig', 'lege']
 		})
 	);

@@ -24,6 +24,8 @@ export interface Tenant {
 	/** The partition in HAPI FHIR. NULL for system organisations with no clinical data. */
 	partition_id: number | null;
 	status: 'aktiv' | 'suspendert' | 'avviklet';
+	/** Weakest sign-in method the organisation accepts: epost, passord, helseid. */
+	login_level: string;
 	note: string | null;
 	created_at: string;
 }

@@ -8,6 +8,7 @@ import { log } from '$srv/audit';
 import { rateLimit } from '$srv/http';
 import { startMfaSetup } from '$srv/auth/mfa-setup';
 import { requireTenant } from '$srv/tenant/context';
+import { allows, methodIsEnough } from '$srv/auth/login-level';
 import { DEMO_PASSWORD, DEMO_TOTP_SECRET, demoUsersHere } from '$srv/auth/demo';
 
 /**
@@ -30,7 +31,10 @@ export const load: PageServerLoad = async (event) => {
 	}
 	return {
 		healthId: healthIdConfigured(),
-		testLogin: config.testLogin.aktivert,
+		// Only the methods this organisation accepts are offered. A form that
+		// cannot succeed is worse than no form.
+		testLogin: config.testLogin.aktivert && allows(requireTenant().login_level, 'passord'),
+		loginLevel: requireTenant().login_level,
 		demoUsers: config.testLogin.showDemoUsers ? await demoUsersHere() : [],
 		demoPassword: config.testLogin.showDemoUsers ? DEMO_PASSWORD : '',
 		demoTotpSecret: config.testLogin.showDemoUsers ? DEMO_TOTP_SECRET : '',
@@ -40,7 +44,7 @@ export const load: PageServerLoad = async (event) => {
 		organisation: requireTenant().name,
 		// The other ways in, so the front page can point at them rather than
 		// leaving people to guess at hostnames.
-		emailLogin: config.testLogin.epost,
+		emailLogin: config.testLogin.epost && allows(requireTenant().login_level, 'epost'),
 		trialUrl: config.tenant.trialsEnabled && config.tenant.trialHostname
 			? `https://${config.tenant.trialHostname}/prov`
 			: null,
@@ -116,6 +120,19 @@ export const actions: Actions = {
 				// The same message whatever the cause - we do not reveal whether the user exists.
 				return response(401, { error: 'Feil brukernavn, passord eller engangskode.', username });
 			case 'ok': {
+				// The organisation may require something stronger than a password.
+				// Checked after the password is verified, so a refusal here cannot be
+				// used to find out whether an account exists.
+				if (!methodIsEnough(result.amr, requireTenant().login_level)) {
+					await log(
+						{ type: 'login', subtype: 'passord', action: 'E', outcome: '4', outcomeDescription: 'Innloggingsmåten er ikke sterk nok for virksomheten' },
+						actor
+					);
+					return response(403, {
+						error: 'Denne virksomheten krever innlogging med HelseID. Passord er ikke nok her.'
+					});
+				}
+
 				await createSession(
 					result.user.id,
 					result.amr,
