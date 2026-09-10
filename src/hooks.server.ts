@@ -183,6 +183,29 @@ async function handleIContext(
 		event.locals.auth = await contextFromSession(event, requestId);
 	}
 
+	/**
+	 * Same-origin check for form submissions to the record's own pages.
+	 *
+	 * This is the protection SvelteKit does by default, kept but narrowed. A
+	 * form posted from another site with the user's cookies riding along is what
+	 * it stops, and that only applies where cookies are used - the record's own
+	 * pages. The OAuth and FHIR endpoints authenticate by token and never read a
+	 * cookie, and a public SMART app has to post to the token endpoint from its
+	 * own origin, which the framework's version refused.
+	 */
+	const skjemaposting =
+		['POST', 'PUT', 'PATCH', 'DELETE'].includes(event.request.method) &&
+		['application/x-www-form-urlencoded', 'multipart/form-data', 'text/plain'].some((t) =>
+			(event.request.headers.get('content-type') ?? '').startsWith(t)
+		);
+	const apiSti = path.startsWith('/fhir') || path.startsWith('/api') || path.startsWith('/oauth');
+	if (skjemaposting && !apiSti) {
+		const origin = event.request.headers.get('origin');
+		if (origin !== event.url.origin) {
+			return new Response('Kryssopphavs-postering avvist.', { status: 403 });
+		}
+	}
+
 	const response = await resolve(event);
 
 	for (const [k, v] of Object.entries(securityHeaders(isFhirApi))) {

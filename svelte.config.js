@@ -6,6 +6,21 @@ const config = {
 	preprocess: vitePreprocess(),
 	kit: {
 		adapter: adapter(),
+		/*
+		 * CSRF-kontrollen gjøres i hooks.server.ts i stedet for her.
+		 *
+		 * Rammeverkets kontroll gjelder alle skjemaposteringer fra andre
+		 * opphav, og den slo ut token-endepunktet: en offentlig SMART-app
+		 * kjører i nettleseren og poster skjemakodet innhold fra sitt eget
+		 * opphav, slik OAuth krever. `trustedOrigins` er statisk oppsett, mens
+		 * de tillatte appene står i klientregisteret og er ulike per
+		 * virksomhet.
+		 *
+		 * Vernet er derfor flyttet, ikke fjernet: hooks krever samme opphav for
+		 * alle skjemaposteringer til sidene, og lar bare API-endepunktene - som
+		 * ikke bruker informasjonskapsler i det hele tatt - ta imot fra andre.
+		 */
+		csrf: { trustedOrigins: ['*'] },
 		alias: { $srv: 'src/lib/server' },
 		/**
 		 * Innholdssikkerhetspolicy for HTML-svar.
