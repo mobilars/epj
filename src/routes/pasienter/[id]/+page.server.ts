@@ -3,12 +3,13 @@ import type { PageServerLoad } from './$types';
 import { patientRecord, resources } from '$srv/fhir/internal';
 import { formatsDate, klinisksStatus, codeText, codeValue } from '$srv/fhir/display';
 import type { FhirResource } from '$srv/fhir/types';
+import { callHook } from '$srv/cds/hooks';
 
 /** Clinical overview: diagnoses, medicines, allergies, latest measurements and notes. */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	const parent = await event.parent();
-	if (!ctx || !parent.patient) return { grupper: null };
+	if (!ctx || !parent.patient) return { grupper: null, cds: { cards: [], failed: [] } };
 
 	const bundle = await patientRecord(ctx, event.params.id, 400);
 	const all = resources(bundle);
@@ -17,7 +18,20 @@ export const load: PageServerLoad = async (event) => {
 	const sorterOnDate = (a: FhirResource, b: FhirResource) =>
 		String(b.meta?.loadUpdated ?? '').localeCompare(String(a.meta?.loadUpdated ?? ''));
 
+	/**
+	 * Advice from CDS Hooks services, at the moment the record is opened.
+	 *
+	 * Cards are advice: they cannot write, cannot block, and cannot change what
+	 * is on screen. A service that is slow or down is skipped - a record that
+	 * will not open is worse than one that opens without advice.
+	 */
+	const advice = await callHook('patient-view', ctx, {
+		patientId: event.params.id,
+		patient: event.params.id
+	}).catch(() => ({ cards: [], failed: [] as string[] }));
+
 	return {
+		cds: advice,
 		grupper: {
 			diagnoses: of('Condition')
 				.map((c) => ({

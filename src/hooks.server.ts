@@ -132,9 +132,12 @@ async function handleIContext(
 	// The pages under /oauth that a person actually looks at. Everything else
 	// there answers a machine.
 	const oauthPages = ['/oauth/authorize', '/oauth/videresend'];
+	// CDS Hooks answers machines, like the FHIR endpoint does.
+	const isCds = path.startsWith('/cds-services');
 	const isFhirApi =
-		(path.startsWith('/fhir') || path.startsWith('/api') || path.startsWith('/oauth')) &&
-		!oauthPages.some((p) => path.startsWith(p));
+		isCds ||
+		((path.startsWith('/fhir') || path.startsWith('/api') || path.startsWith('/oauth')) &&
+			!oauthPages.some((p) => path.startsWith(p)));
 
 	/**
 	 * The developer portal has a hostname of its own, and only the portal is on
@@ -220,7 +223,7 @@ async function handleIContext(
 		['application/x-www-form-urlencoded', 'multipart/form-data', 'text/plain'].some((t) =>
 			(event.request.headers.get('content-type') ?? '').startsWith(t)
 		);
-	const apiSti = path.startsWith('/fhir') || path.startsWith('/api') || path.startsWith('/oauth');
+	const apiSti = path.startsWith('/fhir') || path.startsWith('/api') || path.startsWith('/oauth') || isCds;
 	if (skjemaposting && !apiSti) {
 		const origin = event.request.headers.get('origin');
 		if (origin !== event.url.origin) {

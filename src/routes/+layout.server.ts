@@ -2,6 +2,7 @@ import type { LayoutServerLoad } from './$types';
 import { config } from '$srv/config';
 import { ROLE_DEFINISJONER } from '$srv/authz/roles';
 import { listClients } from '$srv/auth/clients';
+import { recentPatients } from '$srv/journal/recent';
 
 /** Data shared by the whole application: who is signed in, and in which environment. */
 export const load: LayoutServerLoad = async (event) => {
@@ -22,8 +23,22 @@ export const load: LayoutServerLoad = async (event) => {
 					.map((c) => ({ clientId: c.client_id, name: c.name, inMainMenu: c.in_main_menu }))
 			: [];
 
+	/**
+	 * The patients this user has had open lately.
+	 *
+	 * Read out of the audit log rather than kept in a list of its own: every
+	 * lookup is written there already, and a second record of who looked at whom
+	 * would be one more place holding that fact. It is also self-correcting - a
+	 * relationship that ends stops appearing as soon as the lookups stop.
+	 *
+	 * Names come from FHIR through the ordinary guard, so a patient the user may
+	 * no longer see simply does not appear.
+	 */
+	const recent = ctx?.userId && ctx.permissions.has('journal:les') ? await recentPatients(ctx) : [];
+
 	return {
 		apps,
+		recentPatients: recent,
 		user: ctx
 			? {
 					name: ctx.name,

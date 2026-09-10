@@ -295,7 +295,12 @@ main.bred { max-width: none; }
   color: var(--tekst); text-align: left; width: 100%; text-decoration: none; padding: 0.4rem 0.55rem;
 }
 .nedtrekk-panel .menylenke:hover, .nedtrekk-panel a:hover { background: var(--flate-2); }
-.nedtrekk { position: relative; display: inline-block; }
+.nedtrekk { position: relative; display: inline-flex; align-items: center; gap: 0.1rem; }
+.topplinje .menylenke.pil { padding: 0.3rem 0.25rem; font-size: 0.8rem; opacity: 0.85; }
+.nedtrekk-tittel {
+  padding: 0.35rem 0.55rem 0.2rem; font-size: 0.72rem; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--tekst-svak);
+}
 .nedtrekk-panel {
   position: absolute; top: 100%; left: 0; z-index: 61; min-width: 14rem;
   display: flex; flex-direction: column; gap: 0.15rem; padding: 0.35rem;
@@ -349,3 +354,12 @@ main.bred { max-width: none; }
 	background: var(--primar);
 }
 .tidslinje li:last-child { border-left-color: transparent; }
+
+/* Advice at the top of a record. Cards are read before anything else or not at
+   all, so they sit above the record's own content - and stay quiet when there
+   is nothing to say, because a panel that always shows something stops being
+   read. */
+.cds-kort { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 1rem; }
+.cds-kort article { margin: 0; }
+.cds-kort article p { margin: 0.35rem 0; }
+.cds-kort small { display: block; margin-top: 0.35rem; }

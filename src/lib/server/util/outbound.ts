@@ -114,3 +114,36 @@ export async function getJsonUtenfra(
 		throw new OutboundError('Svaret var ikke gyldig JSON');
 	}
 }
+
+/**
+ * Posts to a data-driven address and returns the body as text.
+ *
+ * The same guard as `getJsonUtenfra`: the address is resolved and checked
+ * before anything is sent, redirects are not followed, and the response is
+ * capped. Used for CDS Hooks, where the address comes from what a practice
+ * registered rather than from us.
+ */
+export async function fetchOutbound(
+	raw: string,
+	{
+		method = 'GET',
+		body,
+		headers = {},
+		timeoutMs = 5000,
+		maxBytes = 512 * 1024
+	}: { method?: string; body?: string; headers?: Record<string, string>; timeoutMs?: number; maxBytes?: number } = {}
+): Promise<string> {
+	const url = await checkOutboundUrl(raw);
+	const response = await fetch(url, {
+		method,
+		body,
+		redirect: 'manual',
+		signal: AbortSignal.timeout(timeoutMs),
+		headers: { accept: 'application/json', ...headers }
+	});
+	if (response.status >= 300 && response.status < 400) {
+		throw new OutboundError('Adressen svarte med en omdirigering, som ikke følges');
+	}
+	if (!response.ok) throw new OutboundError(`Adressen svarte ${response.status}`);
+	return (await response.text()).slice(0, maxBytes);
+}

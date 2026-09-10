@@ -7,7 +7,13 @@
 		data,
 		children
 	}: {
-		data: { user: UserInfo | null; organisation: string; miljo: Miljo; apps: MenuApp[] };
+		data: {
+			user: UserInfo | null;
+			organisation: string;
+			miljo: Miljo;
+			apps: MenuApp[];
+			recentPatients: { id: string; name: string; age: number | null }[];
+		};
 		children: Snippet;
 	} = $props();
 
@@ -44,6 +50,8 @@
 	// else keeps the narrower measure that is easier to read.
 	const wide = $derived(page.url.pathname.startsWith('/pasienter/'));
 
+	let nyligApen = $state(false);
+
 
 	// Marks the page as hydrated. The UI works without JavaScript, but hydration
 	// rewrites input values among other things. The marker lets automated tests -
@@ -69,7 +77,42 @@
 			<span class="merkenavn">EPJ</span>
 			<a href="/" aria-current={page.url.pathname === '/' ? 'page' : undefined}>Arbeidsflate</a>
 			{#if has('journal:les')}
-				<a href="/pasienter" aria-current={page.url.pathname.startsWith('/pasienter') ? 'page' : undefined}>Pasienter</a>
+				<!-- Pasienter, with the ones you had open last hanging off it. Going
+				     back to a patient you saw an hour ago is the commonest navigation
+				     there is, and it was a search every time. -->
+				<div class="nedtrekk">
+					<a
+						href="/pasienter"
+						aria-current={page.url.pathname.startsWith('/pasienter') ? 'page' : undefined}
+						onmouseenter={() => (nyligApen = true)}
+					>
+						Pasienter
+					</a>
+					{#if data.recentPatients?.length}
+						<button
+							type="button"
+							class="menylenke pil"
+							aria-expanded={nyligApen}
+							aria-label="Nylige pasienter"
+							onclick={() => (nyligApen = !nyligApen)}
+						>
+							▾
+						</button>
+						{#if nyligApen}
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div class="nedtrekk-panel" onmouseleave={() => (nyligApen = false)}>
+								<span class="nedtrekk-tittel">Nylig åpnet</span>
+								{#each data.recentPatients as p (p.id)}
+									<a href="/pasienter/{p.id}">
+										{p.name}
+										{#if p.age !== null}<span class="svak"> · {p.age} år</span>{/if}
+									</a>
+								{/each}
+								<a href="/pasienter" class="svak">Søk etter pasient …</a>
+							</div>
+						{/if}
+					{/if}
+				</div>
 			{/if}
 			{#if has('melding:les')}
 				<a href="/meldinger" aria-current={page.url.pathname.startsWith('/meldinger') ? 'page' : undefined}>Meldinger</a>

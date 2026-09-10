@@ -3,6 +3,35 @@
 	const g = $derived(data.grupper);
 </script>
 
+{#if data.cds?.cards?.length}
+	<!-- Advice from CDS Hooks services. Cards say something; they never do
+	     anything. Nothing here can write to the record or stop the user. -->
+	<section class="cds-kort" aria-label="Beslutningsstøtte">
+		{#each data.cds.cards as card, i (i)}
+			<article class="varsel varsel-{card.indicator === 'critical' ? 'feil' : card.indicator === 'warning' ? 'advarsel' : 'info'}">
+				<strong>{card.summary}</strong>
+				{#if card.detail}<p>{card.detail}</p>{/if}
+				{#if card.links?.length}
+					<p>
+						{#each card.links as link (link.url)}
+							<a href={link.url} rel="noopener" class="knapp liten">{link.label}</a>
+						{/each}
+					</p>
+				{/if}
+				<small class="svak">
+					{card.serviceTitle ?? card.source?.label ?? 'Beslutningsstøtte'} · råd, ikke en avgjørelse
+				</small>
+			</article>
+		{/each}
+	</section>
+{/if}
+{#if data.cds?.failed?.length}
+	<p class="svak liten">
+		Beslutningsstøtte svarte ikke: {data.cds.failed.join(', ')}. Journalen er vist uten.
+	</p>
+{/if}
+
+
 {#if !g}
 	<p class="svak">Journalinnholdet vises når du har tilgang.</p>
 {:else}
