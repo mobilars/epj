@@ -35,7 +35,18 @@ data:
 
   EPJ_TESTINNLOGGING: 'true'
   EPJ_VIS_DEMOBRUKERE: 'true'
+
+  # HelseID mot NHN sitt testmiljø. Nøkkelen ligger i `epj-hemmeligheter`,
+  # aldri i git. `kid` er RFC 7638-tommelavtrykket av den offentlige nøkkelen,
+  # og er kontrollert mot nøkkelen selv.
+  #
+  # Slås på når EPJ_HELSEID_CLIENT_ID er satt: uten klient-id feiler
+  # klientassertion-en, og testinnlogging er da eneste vei inn.
   EPJ_HELSEID_ENABLED: 'false'
+  EPJ_HELSEID_ISSUER: https://helseid-sts.test.nhn.no
+  EPJ_HELSEID_KEY_ID: oUMPVNSLU4Xj5LiEJ_X1vzVZF5iLM5C1GqUYAMlEs9U
+  EPJ_HELSEID_ALG: PS256
+  EPJ_HELSEID_REDIRECT_URI: https://epj.apps.apus.no/logg-inn/helseid/tilbake
   EPJ_INTEGRASJON_MODUS: mock
 
   EPJ_ORG_NAVN: Storgata Legesenter
