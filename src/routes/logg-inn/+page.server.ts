@@ -7,7 +7,7 @@ import { isConfigured as healthIdConfigured } from '$srv/auth/helseid';
 import { log } from '$srv/audit';
 import { rateLimit } from '$srv/http';
 import { requireTenant } from '$srv/tenant/context';
-import { DEMO_PASSWORD, DEMO_TOTP_SECRET, DEMO_USERS } from '$srv/auth/demo';
+import { DEMO_PASSWORD, DEMO_TOTP_SECRET, demoUsersHere } from '$srv/auth/demo';
 
 /**
  * Sign-in.
@@ -30,7 +30,7 @@ export const load: PageServerLoad = async (event) => {
 	return {
 		healthId: healthIdConfigured(),
 		testLogin: config.testLogin.aktivert,
-		demoUsers: config.testLogin.showDemoUsers ? DEMO_USERS : [],
+		demoUsers: config.testLogin.showDemoUsers ? await demoUsersHere() : [],
 		demoPassword: config.testLogin.showDemoUsers ? DEMO_PASSWORD : '',
 		demoTotpSecret: config.testLogin.showDemoUsers ? DEMO_TOTP_SECRET : '',
 		returnTo: trygtReturnTo(event.url.searchParams.get('retur')),

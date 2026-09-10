@@ -94,7 +94,7 @@
 						name="engangskode"
 						inputmode="numeric"
 						autocomplete="one-time-code"
-						placeholder="000000"
+						placeholder="6 siffer"
 						bind:this={oneTimeCodeField}
 					/>
 					<small>Seks siffer fra autentiseringsappen din.</small>
