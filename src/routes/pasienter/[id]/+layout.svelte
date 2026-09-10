@@ -78,10 +78,7 @@
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div class="nedtrekk-panel" onmouseleave={() => (appsOpen = false)}>
 					{#each apps as app (app.clientId)}
-						<form method="POST" action="/pasienter/{data.patientId}/apper?/start">
-							<input type="hidden" name="clientId" value={app.clientId} />
-							<button type="submit" class="menylenke">{app.name}</button>
-						</form>
+						<a href="/pasienter/{data.patientId}/apper/{app.clientId}">{app.name}</a>
 					{:else}
 						<span class="svak" style="padding: 0.4rem 0.55rem">Ingen apper er registrert.</span>
 					{/each}

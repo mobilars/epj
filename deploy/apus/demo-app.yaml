@@ -1,0 +1,143 @@
+# ---------------------------------------------------------------------------
+# The FHIR test app, on a hostname of its own.
+#
+# A separate origin on purpose: a SMART app is a third party, and running it on
+# the record's own hostname would make it share cookies and origin with the
+# record itself. Everything that makes the app safe to embed rests on it being
+# somewhere else.
+#
+# Static files served by nginx. The app is a public client - all of it runs in
+# the browser, and there is no server to keep a secret in.
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demoapp-nginx
+  namespace: epj
+data:
+  default.conf: |
+    server {
+      listen 8080;
+      server_name _;
+      root /usr/share/nginx/html;
+
+      # /launch and /callback are states of the same page, not separate files.
+      location / {
+        try_files $uri /index.html;
+      }
+
+      # The record frames the app. It says who may do so; the record's own
+      # frame-ancestors stays 'none' - this is the app allowing the record.
+      add_header Content-Security-Policy "frame-ancestors https://epj.apps.apus.no https://epj-admin.apps.apus.no" always;
+      add_header X-Content-Type-Options nosniff always;
+      add_header Referrer-Policy no-referrer always;
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demoapp
+  namespace: epj
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demoapp
+  template:
+    metadata:
+      labels:
+        app: demoapp
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nginx
+          image: nginxinc/nginx-unprivileged:1.27-alpine
+          ports:
+            - containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: { cpu: 10m, memory: 24Mi }
+            limits: { cpu: 200m, memory: 96Mi }
+          volumeMounts:
+            - { name: html, mountPath: /usr/share/nginx/html }
+            - { name: konfigurasjon, mountPath: /etc/nginx/conf.d }
+            - { name: cache, mountPath: /var/cache/nginx }
+            - { name: run, mountPath: /tmp }
+      volumes:
+        - name: html
+          configMap:
+            name: demoapp-html
+        - name: konfigurasjon
+          configMap:
+            name: demoapp-nginx
+        - name: cache
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demoapp
+  namespace: epj
+spec:
+  selector:
+    app: demoapp
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: demoapp
+  namespace: epj
+spec:
+  podSelector:
+    matchLabels:
+      app: demoapp
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress
+      ports:
+        - port: 8080
+  # Serves files and nothing else. It talks to no one - the browser does the
+  # talking to the record, not this pod.
+  egress: []
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demoapp
+  namespace: epj
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+spec:
+  ingressClassName: public
+  tls:
+    - hosts:
+        - smartdemo.apps.apus.no
+      secretName: demoapp-tls
+  rules:
+    - host: smartdemo.apps.apus.no
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: demoapp
+                port:
+                  number: 80

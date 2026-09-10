@@ -5,7 +5,10 @@
 
 <div class="rad-mellom">
 	<h2>{v.name}</h2>
-	<a href="/systemadmin">← Alle virksomheter</a>
+	<div class="rad">
+		<a class="knapp" href="/systemadmin/{data.organisation.id}/brukere">Brukere</a>
+		<a href="/systemadmin">← Alle virksomheter</a>
+	</div>
 </div>
 
 {#if form?.error}<div class="varsel varsel-feil" role="alert">{form.error}</div>{/if}

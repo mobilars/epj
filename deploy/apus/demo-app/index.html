@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="no">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>FHIR-testapp</title>
+		<style>
+			:root { color-scheme: light dark; --kant: #d3d9e0; --svak: #5a6672; --primar: #12507e; }
+			body { font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 1.25rem; }
+			h1 { font-size: 1.3rem; margin: 0 0 0.25rem; }
+			h2 { font-size: 1.05rem; margin: 1.25rem 0 0.5rem; }
+			.kort { border: 1px solid var(--kant); border-radius: 8px; padding: 0.9rem 1rem; margin-bottom: 1rem; }
+			.svak { color: var(--svak); }
+			.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.85em; }
+			pre { background: rgb(127 127 127 / 12%); padding: 0.7rem; border-radius: 6px; overflow-x: auto; font-size: 0.8rem; }
+			table { border-collapse: collapse; width: 100%; }
+			th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--kant); }
+			label { display: block; font-weight: 600; margin: 0.6rem 0 0.2rem; }
+			input, select { padding: 0.45rem 0.55rem; border: 1px solid var(--kant); border-radius: 5px; font: inherit; width: 100%; box-sizing: border-box; }
+			button { padding: 0.5rem 0.9rem; border-radius: 5px; border: 1px solid var(--primar); background: var(--primar); color: #fff; font: inherit; cursor: pointer; }
+			button.sekundar { background: transparent; color: inherit; border-color: var(--kant); }
+			.feil { border-left: 4px solid #a4262c; background: rgb(164 38 44 / 10%); padding: 0.7rem 0.9rem; border-radius: 4px; }
+			.ok { border-left: 4px solid #14682f; background: rgb(20 104 47 / 10%); padding: 0.7rem 0.9rem; border-radius: 4px; }
+			.rad { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: flex-end; }
+			.rad > div { flex: 1 1 10rem; }
+		</style>
+	</head>
+	<body>
+		<main id="app">
+			<p class="svak">Laster …</p>
+		</main>
+
+		<script type="module">
+			/**
+			 * A technical SMART on FHIR app, for testing a record's implementation.
+			 *
+			 * It does nothing clinically useful on purpose. What it does is exercise
+			 * the whole contract end to end and show the result: EHR launch,
+			 * discovery, PKCE, the token exchange, the launch context, reads within
+			 * the granted scopes, and a write back into the record. When something is
+			 * wrong it shows what the server actually answered rather than a blank
+			 * screen, which is the part that makes it useful during development.
+			 *
+			 * A public client with no secret: everything here runs in the browser,
+			 * so there is nowhere to keep one. PKCE is what protects the code.
+			 */
+
+			const CLIENT_ID = new URLSearchParams(location.search).get('client_id') || window.DEMO_CLIENT_ID || '';
+			const REDIRECT_URI = `${location.origin}/callback`;
+			const SCOPE =
+				'openid fhirUser launch patient/Patient.rs patient/Observation.rs patient/Condition.rs patient/MedicationRequest.rs patient/Observation.c';
+
+			const app = document.getElementById('app');
+			const el = (html) => { app.innerHTML = html; };
+			const escape = (s) => String(s ?? '').replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]);
+
+			function fail(title, detail) {
+				el(`<h1>${escape(title)}</h1><div class="feil"><pre>${escape(detail)}</pre></div>
+					<p><a href="/">Start på nytt</a></p>`);
+			}
+
+			async function pkce() {
+				const bytes = crypto.getRandomValues(new Uint8Array(32));
+				const verifier = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+				const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+				const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+					.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+				return { verifier, challenge };
+			}
+
+			const store = {
+				set: (k, v) => sessionStorage.setItem(`smartdemo:${k}`, v),
+				get: (k) => sessionStorage.getItem(`smartdemo:${k}`),
+				clear: () => Object.keys(sessionStorage).filter((k) => k.startsWith('smartdemo:')).forEach((k) => sessionStorage.removeItem(k))
+			};
+
+			/** Step 1: the record sends the user here with `iss` and `launch`. */
+			async function launch() {
+				const q = new URLSearchParams(location.search);
+				const iss = q.get('iss');
+				const launchId = q.get('launch');
+				const clientId = q.get('client_id') || CLIENT_ID;
+				if (!iss) return fail('Mangler iss', 'Denne siden må åpnes av journalen, med iss og launch som parametre.');
+				if (!clientId) {
+					return fail(
+						'Mangler client_id',
+						'Appen vet ikke hvilken klient-id den er registrert med. Legg den på launch-URL-en som ?client_id=…'
+					);
+				}
+
+				el('<p class="svak">Henter oppsett fra journalen …</p>');
+				const wellKnown = `${iss.replace(/\/fhir\/?$/, '').replace(/\/$/, '')}/.well-known/smart-configuration`;
+				let conf;
+				try {
+					const response = await fetch(wellKnown, { headers: { accept: 'application/json' } });
+					if (!response.ok) throw new Error(`${response.status} fra ${wellKnown}`);
+					conf = await response.json();
+				} catch (err) {
+					return fail('Fant ikke .well-known/smart-configuration', `${wellKnown}\n\n${err.message}`);
+				}
+
+				const { verifier, challenge } = await pkce();
+				const state = crypto.randomUUID();
+				store.set('verifier', verifier);
+				store.set('state', state);
+				store.set('iss', iss);
+				store.set('token_endpoint', conf.token_endpoint);
+				store.set('client_id', clientId);
+
+				const url = new URL(conf.authorization_endpoint);
+				url.searchParams.set('response_type', 'code');
+				url.searchParams.set('client_id', clientId);
+				url.searchParams.set('redirect_uri', REDIRECT_URI);
+				url.searchParams.set('scope', SCOPE);
+				url.searchParams.set('state', state);
+				url.searchParams.set('aud', iss);
+				url.searchParams.set('launch', launchId ?? '');
+				url.searchParams.set('code_challenge', challenge);
+				url.searchParams.set('code_challenge_method', 'S256');
+				location.assign(url.toString());
+			}
+
+			/** Step 2: back from the authorization endpoint with a code. */
+			async function callback() {
+				const q = new URLSearchParams(location.search);
+				if (q.get('error')) return fail('Journalen avviste autorisasjonen', `${q.get('error')}\n${q.get('error_description') ?? ''}`);
+				const code = q.get('code');
+				if (!code) return fail('Mangler kode', 'Autorisasjonsendepunktet svarte uten code.');
+				if (q.get('state') !== store.get('state')) return fail('Feil state', 'Svaret hører ikke til denne økten.');
+
+				const body = new URLSearchParams({
+					grant_type: 'authorization_code',
+					code,
+					redirect_uri: REDIRECT_URI,
+					client_id: store.get('client_id'),
+					code_verifier: store.get('verifier')
+				});
+				const response = await fetch(store.get('token_endpoint'), {
+					method: 'POST',
+					headers: { 'content-type': 'application/x-www-form-urlencoded' },
+					body
+				});
+				const text = await response.text();
+				if (!response.ok) return fail('Token-endepunktet svarte med feil', `${response.status}\n\n${text}`);
+
+				const tokens = JSON.parse(text);
+				store.set('tokens', text);
+				history.replaceState(null, '', '/');
+				show(tokens);
+			}
+
+			async function fhir(path, tokens, init = {}) {
+				const base = store.get('iss').replace(/\/$/, '');
+				const response = await fetch(`${base}/${path}`, {
+					...init,
+					headers: {
+						authorization: `Bearer ${tokens.access_token}`,
+						accept: 'application/fhir+json',
+						...(init.body ? { 'content-type': 'application/fhir+json' } : {}),
+						...(init.headers ?? {})
+					}
+				});
+				const text = await response.text();
+				return { ok: response.ok, status: response.status, body: text ? JSON.parse(text) : null };
+			}
+
+			/** Step 3: show the context, read within scope, and offer a write. */
+			async function show(tokens) {
+				el('<p class="svak">Henter data …</p>');
+				const patientId = tokens.patient;
+				const [patient, observations, conditions] = await Promise.all([
+					patientId ? fhir(`Patient/${patientId}`, tokens) : Promise.resolve(null),
+					patientId ? fhir(`Observation?patient=${patientId}&_count=10&_sort=-date`, tokens) : Promise.resolve(null),
+					patientId ? fhir(`Condition?patient=${patientId}&_count=10`, tokens) : Promise.resolve(null)
+				]);
+
+				const name = patient?.body?.name?.[0];
+				const rows = (bundle, render) =>
+					(bundle?.body?.entry ?? []).map((e) => render(e.resource)).join('') || '<tr><td colspan="3" class="svak">Ingenting å vise.</td></tr>';
+
+				el(`
+					<h1>FHIR-testapp</h1>
+					<p class="svak">Teknisk app for å prøve SMART on FHIR mot journalen. Ingen klinisk verdi.</p>
+
+					<div class="kort">
+						<h2>Kontekst fra journalen</h2>
+						<table>
+							<tr><th>Pasient</th><td>${escape(patientId ?? '—')}</td></tr>
+							<tr><th>Bruker (fhirUser)</th><td>${escape(tokens.fhirUser ?? '—')}</td></tr>
+							<tr><th>Tildelte scopes</th><td class="mono">${escape(tokens.scope ?? '—')}</td></tr>
+							<tr><th>Utløper om</th><td>${escape(tokens.expires_in ?? '—')} sekunder</td></tr>
+						</table>
+					</div>
+
+					<div class="kort">
+						<h2>Pasient</h2>
+						${
+							patient?.ok
+								? `<p><strong>${escape([name?.given?.join(' '), name?.family].filter(Boolean).join(' '))}</strong>
+									 — ${escape(patient.body.gender ?? '')} ${escape(patient.body.birthDate ?? '')}</p>
+									 <details><summary>Rå FHIR</summary><pre>${escape(JSON.stringify(patient.body, null, 2))}</pre></details>`
+								: `<div class="feil">Kunne ikke lese pasienten (${escape(patient?.status ?? 'ingen kontekst')}).
+									 <pre>${escape(JSON.stringify(patient?.body ?? {}, null, 2))}</pre></div>`
+						}
+					</div>
+
+					<div class="kort">
+						<h2>Målinger</h2>
+						<table><thead><tr><th>Kode</th><th>Verdi</th><th>Tidspunkt</th></tr></thead><tbody>
+						${rows(observations, (r) => `<tr>
+							<td>${escape(r.code?.text ?? r.code?.coding?.[0]?.display ?? r.code?.coding?.[0]?.code ?? '')}</td>
+							<td>${escape(r.valueQuantity ? `${r.valueQuantity.value} ${r.valueQuantity.unit ?? ''}` : '')}</td>
+							<td>${escape(r.effectiveDateTime ?? '')}</td></tr>`)}
+						</tbody></table>
+					</div>
+
+					<div class="kort">
+						<h2>Diagnoser</h2>
+						<table><thead><tr><th>Kode</th><th>Tekst</th><th>Status</th></tr></thead><tbody>
+						${rows(conditions, (r) => `<tr>
+							<td class="mono">${escape(r.code?.coding?.[0]?.code ?? '')}</td>
+							<td>${escape(r.code?.text ?? '')}</td>
+							<td>${escape(r.clinicalStatus?.coding?.[0]?.code ?? '')}</td></tr>`)}
+						</tbody></table>
+						${conditions && !conditions.ok ? `<div class="feil">Avvist (${escape(conditions.status)}) – appen har trolig ikke scope for Condition.</div>` : ''}
+					</div>
+
+					<div class="kort">
+						<h2>Skriv en måling tilbake</h2>
+						<p class="svak">Lagrer en Observation på pasienten, gjennom journalens eget FHIR-endepunkt.</p>
+						<div class="rad">
+							<div>
+								<label for="kode">LOINC-kode</label>
+								<select id="kode">
+									<option value="8867-4|Puls|/min">Puls (8867-4)</option>
+									<option value="8310-5|Kroppstemperatur|Cel">Temperatur (8310-5)</option>
+									<option value="29463-7|Vekt|kg">Vekt (29463-7)</option>
+								</select>
+							</div>
+							<div>
+								<label for="verdi">Verdi</label>
+								<input id="verdi" type="number" step="0.1" value="72" />
+							</div>
+							<div style="flex:0 0 auto"><button id="lagre">Lagre i journalen</button></div>
+						</div>
+						<div id="skriveresultat"></div>
+					</div>
+
+					<p><button class="sekundar" id="nullstill">Logg ut av appen</button></p>
+				`);
+
+				document.getElementById('nullstill').onclick = () => { store.clear(); location.assign('/'); };
+				document.getElementById('lagre').onclick = async () => {
+					const target = document.getElementById('skriveresultat');
+					const [code, display, unit] = document.getElementById('kode').value.split('|');
+					const value = Number(document.getElementById('verdi').value);
+					target.innerHTML = '<p class="svak">Lagrer …</p>';
+					const result = await fhir('Observation', tokens, {
+						method: 'POST',
+						body: JSON.stringify({
+							resourceType: 'Observation',
+							status: 'final',
+							category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'vital-signs' }] }],
+							code: { coding: [{ system: 'http://loinc.org', code, display }], text: display },
+							subject: { reference: `Patient/${patientId}` },
+							effectiveDateTime: new Date().toISOString(),
+							valueQuantity: { value, unit, system: 'http://unitsofmeasure.org', code: unit }
+						})
+					});
+					target.innerHTML = result.ok
+						? `<div class="ok">Lagret som <span class="mono">Observation/${escape(result.body?.id)}</span>. Last siden på nytt for å se den i listen.</div>`
+						: `<div class="feil">Journalen avviste skrivingen (${escape(result.status)}).
+							 <pre>${escape(JSON.stringify(result.body, null, 2))}</pre></div>`;
+				};
+			}
+
+			function frontPage() {
+				el(`<h1>FHIR-testapp</h1>
+					<p>Teknisk SMART on FHIR-app for å prøve en journals implementasjon.</p>
+					<div class="kort">
+						<h2>Slik registrerer du den</h2>
+						<table>
+							<tr><th>Launch-URL</th><td class="mono">${location.origin}/launch?client_id=DIN-KLIENT-ID</td></tr>
+							<tr><th>Redirect-URI</th><td class="mono">${REDIRECT_URI}</td></tr>
+							<tr><th>Klienttype</th><td>public (PKCE, ingen hemmelighet)</td></tr>
+							<tr><th>Scopes</th><td class="mono">${escape(SCOPE)}</td></tr>
+						</table>
+						<p class="svak">
+							Klient-id sendes med på launch-URL-en, slik at den samme appen kan brukes fra flere
+							journaler uten å bygges på nytt.
+						</p>
+					</div>
+					<p class="svak">Start appen fra journalen – den kan ikke starte seg selv.</p>`);
+			}
+
+			const saved = store.get('tokens');
+			if (location.pathname === '/launch') launch();
+			else if (location.pathname === '/callback') callback();
+			else if (saved) show(JSON.parse(saved));
+			else frontPage();
+		</script>
+	</body>
+</html>

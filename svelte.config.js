@@ -26,6 +26,18 @@ const config = {
 				'connect-src': ['self'],
 				'form-action': ['self'],
 				'frame-ancestors': ['none'],
+				/*
+				 * SMART-apper kjøres i en ramme inne i journalen. Bare registrerte
+				 * apper får en ramme i det hele tatt - adressen kommer fra
+				 * klientregisteret, som er en administrativ handling - men CSP settes
+				 * statisk her og kan ikke liste opp appene per forespørsel. 'https:'
+				 * er derfor så snevert dette kan bli uten en dynamisk policy.
+				 *
+				 * Merk at frame-src bare styrer hva vi kan ramme inn. Den sier
+				 * ingenting om hvem som kan ramme inn oss - det er frame-ancestors
+				 * over, og den er fortsatt 'none'.
+				 */
+				'frame-src': ['self', 'https:'],
 				'base-uri': ['none'],
 				'object-src': ['none']
 			}

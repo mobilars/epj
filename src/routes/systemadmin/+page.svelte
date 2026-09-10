@@ -57,7 +57,7 @@
 		ikke dele vertsnavn.
 	</p>
 	<form method="POST" action="?/create">
-		<div class="rad">
+		<div class="feltrad">
 			<div style="flex:0 0 12rem">
 				<label for="id">Maskinnavn</label>
 				<input id="id" name="id" required pattern="[a-z][a-z0-9-]{'{'}1,30{'}'}" placeholder="legekontoret" />
@@ -79,7 +79,7 @@
 				<input id="kommunenummer" name="kommunenummer" inputmode="numeric" value={was('kommunenummer')} />
 			</div>
 		</div>
-		<div class="rad">
+		<div class="feltrad">
 			<div style="flex:1 1 16rem">
 				<label for="vertsnavn">Vertsnavn</label>
 				<input id="vertsnavn" name="vertsnavn" placeholder="legekontoret.epj.example.no" value={was('vertsnavn')} />
@@ -102,7 +102,7 @@
 				Valgfritt. Opprettes inne i den nye virksomheten med rollen systemansvarlig, og får et
 				midlertidig passord som vises én gang.
 			</p>
-			<div class="rad">
+			<div class="feltrad">
 				<div style="flex:1 1 12rem">
 					<label for="adminBrukernavn">Brukernavn</label>
 					<input id="adminBrukernavn" name="adminBrukernavn" value={was('adminBrukernavn')} />

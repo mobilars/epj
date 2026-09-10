@@ -29,7 +29,7 @@
 <section class="kort">
 	<h3>Registrer app</h3>
 	<form method="POST" action="?/register">
-		<div class="rad">
+		<div class="feltrad">
 			<div style="flex:1 1 14rem"><label for="navn">Navn</label><input id="navn" name="navn" required /></div>
 			<div style="flex:0 0 12rem">
 				<label for="kategori">Type</label>
@@ -54,11 +54,11 @@
 			<textarea id="scopes" name="scopes" placeholder="openid fhirUser launch launch/patient patient/Patient.rs" style="min-height:4rem"></textarea>
 			<small>Appen kan aldri få mer enn dette, og aldri mer enn brukerens rolle tillater.</small>
 		</div>
-		<div class="rad">
+		<div class="feltrad">
 			<div style="flex:1 1 16rem"><label for="jwksUri">jwks_uri</label><input id="jwksUri" name="jwksUri" placeholder="https://app.example/jwks.json" /></div>
 			<div style="flex:1 1 12rem"><label for="databehandleravtale">Databehandleravtale</label><input id="databehandleravtale" name="databehandleravtale" placeholder="DBA-2026-001" /></div>
 		</div>
-		<div class="rad">
+		<div class="feltrad">
 			<div style="flex:1 1 18rem"><label for="launchUrl">Launch-URL (EHR launch)</label><input id="launchUrl" name="launchUrl" placeholder="https://app.example/launch" /></div>
 		</div>
 		<label class="avkryssing">

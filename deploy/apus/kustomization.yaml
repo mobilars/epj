@@ -30,6 +30,16 @@ resources:
   - postgres-cnpg.yaml
   - nettverk-apus.yaml
   - ingress-apus.yaml
+  - demo-app.yaml
+
+# The test app is static files. Kustomize builds the ConfigMap from the file
+# itself, so the app is versioned with the repository rather than pasted into a
+# manifest - and a change to it rolls the pod, because the generated name
+# changes with the content.
+configMapGenerator:
+  - name: demoapp-html
+    files:
+      - index.html=demo-app/index.html
 
 patches:
   - path: fjern-grunnoppsett.yaml

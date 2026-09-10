@@ -18,7 +18,7 @@
 <section class="kort">
 	<h3>Ny bruker</h3>
 	<form method="POST" action="?/create">
-		<div class="rad">
+		<div class="feltrad">
 			<div style="flex:1 1 12rem"><label for="brukernavn">Brukernavn</label><input id="brukernavn" name="brukernavn" required /></div>
 			<div style="flex:1 1 14rem"><label for="navn">Navn</label><input id="navn" name="navn" /></div>
 			<div style="flex:0 0 10rem"><label for="hpr">HPR-nummer</label><input id="hpr" name="hpr" /></div>

@@ -99,6 +99,14 @@ h3 { font-size: 1.02rem; }
 
 .stabel { display: flex; flex-direction: column; gap: 1rem; }
 .rad { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+/* A row of labelled fields. Centring them vertically - which is right for a row
+   of buttons - lines the inputs up against each other only when every field is
+   the same height, so one field with a hint underneath pushed its neighbours
+   out of line. These align at the top and let the hint hang below. */
+.feltrad { display: flex; gap: 0.75rem; align-items: flex-start; flex-wrap: wrap; }
+.feltrad > div { display: flex; flex-direction: column; min-width: 0; }
+.feltrad input, .feltrad select { width: 100%; }
+.feltrad small { margin-top: 0.2rem; }
 .rad-mellom { display: flex; gap: 0.75rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .rutenett { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 
