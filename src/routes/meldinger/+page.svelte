@@ -11,7 +11,7 @@
 <div class="rad-mellom">
 	<h1>Meldinger</h1>
 	{#if data.canSende}
-		<form method="POST" action="?/sendKo"><button type="submit">Send kø nå</button></form>
+		<form method="POST" action="?/sendQueue"><button type="submit">Send kø nå</button></form>
 	{/if}
 </div>
 
@@ -45,7 +45,7 @@
 						</td>
 						<td class="hoyre">
 							{#if m.direction === 'inn' && m.status === 'mottatt'}
-								<form method="POST" action="?/behandlet">
+								<form method="POST" action="?/processed">
 									<input type="hidden" name="id" value={m.id} />
 									<button type="submit" class="liten">Marker behandlet</button>
 								</form>

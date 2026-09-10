@@ -38,7 +38,7 @@
 	     siden er hydrert, og for brukere uten JavaScript. -->
 	<section class="kort">
 		<h3>Ny resept</h3>
-		<form method="POST" action="?/forskriv">
+		<form method="POST" action="?/prescribe">
 		<div class="rad">
 			<div style="flex: 2 1 14rem"><label for="navn">Legemiddel</label><input id="navn" name="navn" required /></div>
 			<div style="flex: 0 0 8rem"><label for="atc">ATC-kode</label><input id="atc" name="atc" placeholder="A10BA02" /></div>
@@ -85,7 +85,7 @@
 							<td>{l.reimbursement ? `${l.reimbursement.legalBasis} ${l.reimbursement.code}` : ''}</td>
 							<td class="hoyre">
 								{#if l.status === 'aktiv' && data.canForskrive}
-									<form method="POST" action="?/seponer" class="rad">
+									<form method="POST" action="?/discontinue" class="rad">
 										<input type="hidden" name="reseptId" value={l.prescriptionId} />
 										<input name="arsak" placeholder="Årsak" style="width: 9rem" />
 										<button type="submit" class="liten">Seponer</button>

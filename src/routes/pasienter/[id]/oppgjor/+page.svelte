@@ -32,7 +32,7 @@
 {/if}
 
 {#if data.canRegistrere}
-	<form method="POST" action="?/nytt" class="kort">
+	<form method="POST" action="?/newValue" class="kort">
 		<h3>Nytt regningskort</h3>
 		<div class="rad">
 			<div style="flex: 0 0 11rem"><label for="dato">Dato</label><input id="dato" name="dato" type="date" value={new Date().toISOString().slice(0, 10)} /></div>

@@ -17,7 +17,7 @@
 
 <section class="kort">
 	<h3>Ny bruker</h3>
-	<form method="POST" action="?/opprett">
+	<form method="POST" action="?/create">
 		<div class="rad">
 			<div style="flex:1 1 12rem"><label for="brukernavn">Brukernavn</label><input id="brukernavn" name="brukernavn" required /></div>
 			<div style="flex:1 1 14rem"><label for="navn">Navn</label><input id="navn" name="navn" /></div>
@@ -49,7 +49,7 @@
 						{#if b.hpr}<span class="svak">· HPR {b.hpr}</span>{/if}
 					</td>
 					<td>
-						<form method="POST" action="?/roller">
+						<form method="POST" action="?/roles">
 							<input type="hidden" name="id" value={b.id} />
 							{#each data.roles as r (r.code)}
 								<label style="font-weight:400; display:inline-block; margin-right:.6rem">
@@ -72,7 +72,7 @@
 							<input type="hidden" name="status" value={b.status === 'aktiv' ? 'sperret' : 'aktiv'} />
 							<button type="submit" class="liten">{b.status === 'aktiv' ? 'Sperr' : 'Aktiver'}</button>
 						</form>
-						<form method="POST" action="?/nyttPassord" style="display:inline">
+						<form method="POST" action="?/newPassword" style="display:inline">
 							<input type="hidden" name="id" value={b.id} />
 							<button type="submit" class="liten">Nytt passord</button>
 						</form>

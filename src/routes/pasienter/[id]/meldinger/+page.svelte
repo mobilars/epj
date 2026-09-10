@@ -38,7 +38,7 @@
 
 	<section class="kort">
 		<h3>Ny henvisning</h3>
-		<form method="POST" action="?/henvisning">
+		<form method="POST" action="?/referral">
 		<div class="rad">
 			<div style="flex:1 1 18rem">
 				<label for="mottaker-h">Mottaker</label>

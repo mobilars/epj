@@ -89,14 +89,25 @@ export async function listPartitions(): Promise<
 
 	// HAPI answers with Parameters where each `partition` has `id`, `name` and
 	// `description` as parts.
-	const parts = (response.response.parameter as { name: string; part?: { name: string; valueInteger?: number; valueString?: string }[] }[] | undefined) ?? [];
+	//
+	// The name comes back as `valueCode`, not `valueString` - the partition name
+	// is a code in HAPI's operation definition. Reading only `valueString` left
+	// every partition without a name, and they were then dropped by the filter
+	// below: the list looked empty however many partitions existed. Platform
+	// administration reported the partition missing for organisations that had
+	// one, and start-up tried to create it again on every boot.
+	const parts =
+		(response.response.parameter as
+			| { name: string; part?: { name: string; valueInteger?: number; valueString?: string; valueCode?: string }[] }[]
+			| undefined) ?? [];
 	const partitions: Partition[] = parts
 		.filter((d) => d.part)
 		.map((d) => {
 			const find = (name: string) => d.part?.find((p) => p.name === name);
+			const named = find('name');
 			return {
 				id: find('id')?.valueInteger ?? 0,
-				name: find('name')?.valueString ?? '',
+				name: named?.valueCode ?? named?.valueString ?? '',
 				description: find('description')?.valueString
 			};
 		})

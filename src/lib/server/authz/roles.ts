@@ -194,6 +194,26 @@ export function isRole(v: string): v is Role {
 	return (ROLES as readonly string[]).includes(v);
 }
 
+/**
+ * Roles that belong to the platform, not to a practice.
+ *
+ * `systemeier` administers the organisations themselves. It must therefore be
+ * granted from platform administration only - a practice's own administrator
+ * offering it in their user list would let them hand out authority over every
+ * other practice on the installation. The role's reach is already bounded by
+ * the platform having its own hostname and its own set of accounts, but a
+ * permission nobody can grant by mistake is worth more than one that merely
+ * fails to work.
+ */
+export const PLATFORM_ROLES: readonly Role[] = ['systemeier'];
+
+export function isPlatformRole(role: Role): boolean {
+	return PLATFORM_ROLES.includes(role);
+}
+
+/** The roles a practice's own user administration may hand out. */
+export const TENANT_ROLES: readonly Role[] = ROLES.filter((r) => !isPlatformRole(r));
+
 /** Combined scopes for a set of roles. */
 export function scopesForRoles(roles: Role[]): Set<string> {
 	const set = new Set<string>();

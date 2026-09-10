@@ -202,8 +202,18 @@ export async function startTestFhirServer(): Promise<TestFhirServer> {
 			// --- Partition administration (called on the default partition) ---
 			if (parts.length === 1 && parts[0].startsWith('$partition-management-')) {
 				const operation = parts[0].slice('$partition-management-'.length);
-				const inValue = body ? (JSON.parse(body) as { parameter?: { name: string; valueInteger?: number; valueString?: string }[] }) : {};
+				const inValue = body
+					? (JSON.parse(body) as {
+							parameter?: { name: string; valueInteger?: number; valueString?: string; valueCode?: string }[];
+						})
+					: {};
 				const part = (name: string) => inValue.parameter?.find((p) => p.name === name);
+				// The partition name is a code in HAPI's operation definition, so it
+				// comes back as `valueCode` - and is accepted either way on the way in.
+				// The double answered `valueString`, which made a parser that only read
+				// `valueString` look correct here while finding nothing against the real
+				// server.
+				const partitionName = (p?: { valueString?: string; valueCode?: string }) => p?.valueCode ?? p?.valueString ?? '';
 
 				if (operation === 'list-partitions') {
 					return response(200, {
@@ -212,7 +222,7 @@ export async function startTestFhirServer(): Promise<TestFhirServer> {
 							name: 'partition',
 							part: [
 								{ name: 'id', valueInteger: p.id },
-								{ name: 'name', valueString: p.name },
+								{ name: 'name', valueCode: p.name },
 								{ name: 'description', valueString: p.description ?? '' }
 							]
 						}))
@@ -220,7 +230,7 @@ export async function startTestFhirServer(): Promise<TestFhirServer> {
 				}
 				if (operation === 'create-partition') {
 					const id = part('id')?.valueInteger ?? 0;
-					const name = part('name')?.valueString ?? '';
+					const name = partitionName(part('name'));
 					if (!name) return error(400, 'Partisjonen må ha et navn');
 					if (partitionRegistry.has(name)) return error(400, `Partisjonen ${name} finnes allerede`);
 					if ([...partitionRegistry.values()].some((p) => p.id === id)) {
@@ -232,7 +242,7 @@ export async function startTestFhirServer(): Promise<TestFhirServer> {
 						resourceType: 'Parameters',
 						parameter: [
 							{ name: 'id', valueInteger: id },
-							{ name: 'name', valueString: name }
+							{ name: 'name', valueCode: name }
 						]
 					});
 				}

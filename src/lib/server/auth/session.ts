@@ -40,7 +40,19 @@ export async function createSession(
 	cookies.set(config.session.cookieName, `${id}.${token}`, {
 		path: '/',
 		httpOnly: true,
-		sameSite: 'strict',
+		/**
+		 * `lax`, not `strict`.
+		 *
+		 * The return from HelseID is a navigation begun on another site, and
+		 * browsers withhold a Strict cookie on every request in such a chain. The
+		 * first page after a successful sign-in therefore arrived without the
+		 * session and bounced the user back to the sign-in page; signing in again
+		 * - now a same-site navigation - worked, which made it look intermittent.
+		 *
+		 * `lax` still keeps the cookie off cross-site POSTs, and SvelteKit checks
+		 * the Origin header on form submissions besides.
+		 */
+		sameSite: 'lax',
 		secure: config.security.httpsOnly,
 		maxAge: config.session.absoluteSeconds
 	});

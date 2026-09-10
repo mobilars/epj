@@ -46,7 +46,7 @@
 		etterpå. Vertsnavnet avgjør hvilken virksomhet en forespørsel havner i - to virksomheter kan
 		ikke dele vertsnavn.
 	</p>
-	<form method="POST" action="?/opprett">
+	<form method="POST" action="?/create">
 		<div class="rad">
 			<div style="flex:0 0 12rem">
 				<label for="id">Maskinnavn</label>

@@ -28,7 +28,7 @@
 
 <section class="kort">
 	<h3>Registrer app</h3>
-	<form method="POST" action="?/registrer">
+	<form method="POST" action="?/register">
 		<div class="rad">
 			<div style="flex:1 1 14rem"><label for="navn">Navn</label><input id="navn" name="navn" required /></div>
 			<div style="flex:0 0 12rem">

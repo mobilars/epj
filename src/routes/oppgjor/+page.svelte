@@ -26,7 +26,7 @@
 		<div class="varsel varsel-advarsel">{a}</div>
 	{/each}
 	{#if data.canSende && data.forhand.countCard > 0}
-		<form method="POST" action="?/generer">
+		<form method="POST" action="?/generate">
 			<input type="hidden" name="fra" value={data.from} />
 			<input type="hidden" name="til" value={data.to} />
 			<button type="submit" class="primar">Generer oppgjør</button>

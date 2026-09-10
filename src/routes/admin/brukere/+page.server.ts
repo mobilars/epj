@@ -3,7 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { listUsers, createUser, setPassword, setRoles, setStatus } from '$srv/auth/users';
 import { endAllSessions } from '$srv/auth/session';
 import { revokeForUser } from '$srv/auth/tokens';
-import { isRole, ROLE_DEFINISJONER, ROLES } from '$srv/authz/roles';
+import { isPlatformRole, isRole, ROLE_DEFINISJONER, TENANT_ROLES } from '$srv/authz/roles';
 import { log, actorFromContext } from '$srv/audit';
 import { newToken } from '$srv/util/ids';
 
@@ -23,7 +23,9 @@ export const load: PageServerLoad = async (event) => {
 			lastLogin: b.last_login ? new Date(b.last_login).toLocaleString('nb-NO') : null,
 			locked: b.locked_until ? new Date(b.locked_until) > new Date() : false
 		})),
-		roles: ROLES.map((r) => ({ code: r, name: ROLE_DEFINISJONER[r].name, description: ROLE_DEFINISJONER[r].description }))
+		// Platform roles are granted from platform administration, never from a
+		// practice's own user list.
+		roles: TENANT_ROLES.map((r) => ({ code: r, name: ROLE_DEFINISJONER[r].name, description: ROLE_DEFINISJONER[r].description }))
 	};
 };
 
@@ -33,6 +35,7 @@ export const actions: Actions = {
 		if (!ctx?.permissions.has('admin:brukere')) return fail(403, { error: 'Ingen tilgang.' });
 		const form = await event.request.formData();
 		const roles = form.getAll('roller').map(String).filter(isRole);
+		if (roles.some(isPlatformRole)) return fail(400, { error: 'Plattformroller tildeles fra plattformadministrasjonen.' });
 		const username = String(form.get('brukernavn') ?? '').trim();
 		if (!username) return fail(400, { error: 'Brukernavn må fylles ut.' });
 
@@ -60,6 +63,7 @@ export const actions: Actions = {
 		const form = await event.request.formData();
 		const userId = String(form.get('id') ?? '');
 		const roles = form.getAll('roller').map(String).filter(isRole);
+		if (roles.some(isPlatformRole)) return fail(400, { error: 'Plattformroller tildeles fra plattformadministrasjonen.' });
 		await setRoles(userId, roles, ctx.userId ?? 'ukjent');
 		await log(
 			{ type: 'admin', subtype: 'bruker:roller', action: 'U', outcome: '0', entityRef: `Person/${userId}`, details: { roles: roles.join(',') } },

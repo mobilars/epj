@@ -54,7 +54,7 @@
 		Maskinnavn, organisasjonsnummer og partisjons-id kan ikke endres: de er knyttet til de
 		kliniske dataene og til loggen.
 	</p>
-	<form method="POST" action="?/lagre">
+	<form method="POST" action="?/store">
 		<div class="rad">
 			<div style="flex:1 1 16rem"><label for="navn">Navn</label><input id="navn" name="navn" value={v.name} /></div>
 			<div style="flex:0 0 9rem"><label for="herId">HER-id</label><input id="herId" name="herId" value={v.herId ?? ''} /></div>

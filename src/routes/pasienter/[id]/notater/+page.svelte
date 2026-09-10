@@ -15,7 +15,7 @@
 {#if data.canSkrive}
 	<section class="kort">
 		<h3>Nytt notat</h3>
-		<form method="POST" action="?/nytt">
+		<form method="POST" action="?/newValue">
 		<div class="felt">
 			<label for="tittel">Tittel</label>
 			<input id="tittel" name="tittel" value="Konsultasjonsnotat" />
