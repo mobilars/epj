@@ -111,7 +111,7 @@ Partisjoneringen er testet over ekte HTTP mot en partisjonsbevisst testdobbel
 som svarer på `$partition-management`-operasjonene, og isolasjonen mellom
 virksomheter er dekket av 32 tester i `tests/multitenancy.test.ts`. Det er ikke
 det samme som å ha kjørt mot HAPI selv. Kjør testsuiten med
-`EPJ_BRUK_EKTE_HAPI=1` mot en HAPI-instans med
+`EPJ_USE_REAL_HAPI=1` mot en HAPI-instans med
 `hapi.fhir.tenant_identification_strategy=URL_BASED` for å bekrefte.
 
 ### Ytelse

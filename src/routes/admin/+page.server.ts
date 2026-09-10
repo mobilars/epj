@@ -35,7 +35,7 @@ export const load: PageServerLoad = async () => {
 		pendingKvitteringer: kvitteringer.length,
 		schemaVersion: await currentVersion().catch(() => 0),
 		miljo: {
-			integrations: config.integrations.modus,
+			integrations: config.integrations.mode,
 			healthId: config.integrations.healthId.enabled,
 			testLogin: config.testLogin.aktivert,
 			mfa: config.security.requireMfa

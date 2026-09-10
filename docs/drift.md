@@ -54,8 +54,8 @@ ved siden av koden.
 | `EPJ_SESSION_ABSOLUTE_SECONDS` | `43200` | Absolutt levetid |
 | `EPJ_TRUSTED_PROXY_HOPS` | `1` | Hopp i `X-Forwarded-For` som kan stoles på |
 | `EPJ_RATE_AUTH` | `20` | Påloggingskall per minutt per IP |
-| `EPJ_RATE_GENERELL` | `600` | Øvrige kall per minutt per IP |
-| `EPJ_RATE_LOGIN_BRUKER` | `10` | Påloggingsforsøk per brukernavn per 5 min |
+| `EPJ_RATE_GENERAL` | `600` | Øvrige kall per minutt per IP |
+| `EPJ_RATE_LOGIN_USER` | `10` | Påloggingsforsøk per brukernavn per 5 min |
 
 Sett `EPJ_TRUSTED_PROXY_HOPS` riktig. For lavt gir feil IP i loggen; for høyt
 lar en klient sette sin egen adresse, og da blir ratebegrensningen og loggen
@@ -71,7 +71,7 @@ verdiløs.
 | `EPJ_HELSEID_PRIVATE_KEY` | Privat nøkkel (PKCS#8) for klientassertions |
 | `EPJ_HELSEID_KEY_ID` | `kid` som svarer til nøkkelen |
 | `EPJ_HELSEID_ALG` | `RS256` eller `PS256` |
-| `EPJ_TESTINNLOGGING` | **Sett `false` i produksjon** |
+| `EPJ_TEST_LOGIN` | **Sett `false` i produksjon** |
 
 ### Tokens og nøkler
 
@@ -87,7 +87,7 @@ verdiløs.
 ## Sjekkliste før produksjon
 
 - [ ] `EPJ_DATA_KEY` fra hemmelighetstjeneste, ikke fra fil
-- [ ] `EPJ_TESTINNLOGGING=false`
+- [ ] `EPJ_TEST_LOGIN=false`
 - [ ] `EPJ_HELSEID_ENABLED=true` med produksjonsutsteder
 - [ ] `EPJ_HTTPS_ONLY=true`, TLS terminert foran applikasjonen
 - [ ] HAPI uten publiserte porter og uten rute ut
@@ -100,8 +100,8 @@ verdiløs.
 - [ ] Takstbeløp oppdatert fra gjeldende normaltariff
 - [ ] Databehandleravtaler for alle registrerte apper
 - [ ] Risikovurdering og personvernkonsekvensvurdering gjennomført
-- [ ] `EPJ_TILLAT_UKJENT_VERTSNAVN=false`
-- [ ] `EPJ_PLATTFORM_VERTSNAVN` satt, og `/systemadmin` begrenset på nettverksnivå
+- [ ] `EPJ_ALLOW_UNKNOWN_HOSTNAME=false`
+- [ ] `EPJ_PLATFORM_HOSTNAME` satt, og `/systemadmin` begrenset på nettverksnivå
 - [ ] Virksomhetsregisteret stemmer med partisjonene i HAPI (kontrolleres i `/systemadmin`)
 - [ ] Penetrasjonstest gjennomført av noen andre enn den som bygget systemet
 

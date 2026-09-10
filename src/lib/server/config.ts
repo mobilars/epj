@@ -135,10 +135,10 @@ export const config = {
 		 * be attacked from many addresses.
 		 */
 		rateLimit: {
-			generellPerMinutt: int('EPJ_RATE_GENERELL', 600),
+			generellPerMinutt: int('EPJ_RATE_GENERAL', 600),
 			autentiseringPerMinutt: int('EPJ_RATE_AUTH', 20),
-			loginPerUser: int('EPJ_RATE_LOGIN_BRUKER', 10),
-			loginWindowSekunder: int('EPJ_RATE_LOGIN_VINDU', 300)
+			loginPerUser: int('EPJ_RATE_LOGIN_USER', 10),
+			loginWindowSekunder: int('EPJ_RATE_LOGIN_WINDOW', 300)
 		}
 	},
 
@@ -148,9 +148,9 @@ export const config = {
 	 * Must be turned off in production when HelseID is in use.
 	 */
 	testLogin: {
-		aktivert: bool('EPJ_TESTINNLOGGING', process.env.NODE_ENV !== 'production'),
+		aktivert: bool('EPJ_TEST_LOGIN', process.env.NODE_ENV !== 'production'),
 		/** Shows demo users with the password filled in on the sign-in page. */
-		showDemoUsers: bool('EPJ_VIS_DEMOBRUKERE', process.env.NODE_ENV !== 'production')
+		showDemoUsers: bool('EPJ_SHOW_DEMO_USERS', process.env.NODE_ENV !== 'production')
 	},
 
 	audit: {
@@ -171,19 +171,19 @@ export const config = {
 		/** The hostname platform administration is reached on. */
 		platformHostname: env.EPJ_PLATFORM_HOSTNAME ?? '',
 		/** Accept an unknown hostname and use the default organisation. Off in production. */
-		allowUnknownHostname: bool('EPJ_TILLAT_UKJENT_VERTSNAVN', process.env.NODE_ENV !== 'production')
+		allowUnknownHostname: bool('EPJ_ALLOW_UNKNOWN_HOSTNAME', process.env.NODE_ENV !== 'production')
 	},
 
 	organisation: {
 		name: env.EPJ_ORG_NAME ?? 'Fastlegekontoret (utviklingsmiljø)',
-		organisation_number: env.EPJ_ORG_ORGNR ?? '999999999',
+		organisation_number: env.EPJ_ORG_NUMBER ?? '999999999',
 		herId: env.EPJ_ORG_HER_ID ?? '0000000',
-		municipality_code: env.EPJ_ORG_KOMMUNENR ?? '0301'
+		municipality_code: env.EPJ_ORG_MUNICIPALITY_CODE ?? '0301'
 	},
 
 	integrations: {
 		/** `mock` runs everything locally without network. `live` requires an endpoint + client certificate. */
-		modus: (env.EPJ_INTEGRATION_MODUS ?? 'mock') as 'mock' | 'live',
+		mode: (env.EPJ_INTEGRATION_MODE ?? 'mock') as 'mock' | 'live',
 		sfm: {
 			baseUrl: env.EPJ_SFM_BASE_URL ?? '',
 			clientId: env.EPJ_SFM_CLIENT_ID ?? '',
@@ -192,7 +192,7 @@ export const config = {
 			scope: env.EPJ_SFM_SCOPE ?? 'nhn:sfm/api'
 		},
 		nhn: {
-			meldingstjenerUrl: env.EPJ_NHN_MELDINGSTJENER_URL ?? '',
+			messageServerUrl: env.EPJ_NHN_MESSAGE_SERVER_URL ?? '',
 			herId: env.EPJ_ORG_HER_ID ?? '0000000',
 			addressRegistryUrl: env.EPJ_NHN_ADDRESSREGISTRY_URL ?? ''
 		},
@@ -201,7 +201,7 @@ export const config = {
 			settlementUrl: env.EPJ_HELFO_SETTLEMENT_URL ?? '',
 			/** Lookups against the exemption-card/copayment service. */
 			copaymentUrl: env.EPJ_HELFO_COPAYMENT_URL ?? '',
-			avtaleId: env.EPJ_HELFO_AVTALE_ID ?? ''
+			agreementId: env.EPJ_HELFO_AGREEMENT_ID ?? ''
 		},
 		/**
 		 * HelseID is the primary sign-in mechanism for health personnel. The

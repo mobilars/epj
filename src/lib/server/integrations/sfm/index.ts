@@ -99,7 +99,7 @@ async function call<T>(operation: SfmOperation, body: unknown, patientId: string
 
 	try {
 		const response =
-			config.integrations.modus === 'mock'
+			config.integrations.mode === 'mock'
 				? await mockSfm<T>(operation, body, patientId)
 				: await callLive<T>(operation, body);
 

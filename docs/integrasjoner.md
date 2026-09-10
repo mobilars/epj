@@ -3,9 +3,9 @@
 Tre nasjonale integrasjoner: **SFM** for legemidler, **NHN meldingstjener** for
 helsemeldinger, og **Helfo** for refusjon. Alle tre kan kjøres i to modus:
 
-* `EPJ_INTEGRASJON_MODUS=mock` — lokale simulatorer. Hele flyten kan øves og
+* `EPJ_INTEGRATION_MODE=mock` — lokale simulatorer. Hele flyten kan øves og
   testes uten oppkobling mot Helsenettet.
-* `EPJ_INTEGRASJON_MODUS=live` — ekte endepunkter. Krever avtaler, tilgang og
+* `EPJ_INTEGRATION_MODE=live` — ekte endepunkter. Krever avtaler, tilgang og
   som regel klientsertifikat.
 
 ---
@@ -127,10 +127,10 @@ vedlegg, slik at ingenting går tapt i konverteringen.
 ### Konfigurasjon
 
 ```bash
-EPJ_NHN_MELDINGSTJENER_URL=https://meldingstjener.test.nhn.no
-EPJ_NHN_ADRESSEREGISTER_URL=https://adresseregisteret.test.nhn.no
+EPJ_NHN_MESSAGE_SERVER_URL=https://meldingstjener.test.nhn.no
+EPJ_NHN_ADDRESSREGISTRY_URL=https://adresseregisteret.test.nhn.no
 EPJ_ORG_HER_ID=8000001
-EPJ_ORG_ORGNR=999999999
+EPJ_ORG_NUMBER=999999999
 ```
 
 ---
@@ -186,9 +186,9 @@ slik at oppgjørsdata er tilgjengelige på samme API som resten av journalen.
 ### Konfigurasjon
 
 ```bash
-EPJ_HELFO_OPPGJOR_URL=https://oppgjor.test.helfo.no
-EPJ_HELFO_EGENANDEL_URL=https://egenandel.test.helfo.no
-EPJ_HELFO_AVTALE_ID=…
+EPJ_HELFO_SETTLEMENT_URL=https://oppgjor.test.helfo.no
+EPJ_HELFO_COPAYMENT_URL=https://egenandel.test.helfo.no
+EPJ_HELFO_AGREEMENT_ID=…
 ```
 
 Avtale om direkte oppgjør inngås med Helfo.

@@ -92,7 +92,7 @@ i praksis.
 
 ### 3. Konfigurasjon
 
-Rediger `02-konfigurasjon.yaml`: `EPJ_BASE_URL`, `EPJ_PLATTFORM_VERTSNAVN` og
+Rediger `02-konfigurasjon.yaml`: `EPJ_BASE_URL`, `EPJ_PLATFORM_HOSTNAME` og
 HelseID-verdiene. Verdiene i filen er satt for produksjon - testinnlogging av,
 HTTPS påkrevd, ukjente vertsnavn avvist.
 
@@ -295,7 +295,7 @@ domenet, slik at nye virksomheter bare krever steg 2.
 
 ### Plattformadministrasjonen
 
-`/systemadmin` er bare tilgjengelig på `EPJ_PLATTFORM_VERTSNAVN`, og
+`/systemadmin` er bare tilgjengelig på `EPJ_PLATFORM_HOSTNAME`, og
 `11-ingress.yaml` begrenser i tillegg det vertsnavnet til driftsnettet med
 `whitelist-source-range`. To uavhengige sperrer, fordi dette er grensesnittet
 som ser på tvers av virksomheter.
@@ -390,7 +390,7 @@ nettverkspolicyen `hapi`.
 
 **404 «Ukjent vertsnavn».**
 Vertsnavnet er ikke registrert på noen virksomhet i `/systemadmin`. I et
-testmiljø kan `EPJ_TILLAT_UKJENT_VERTSNAVN: 'true'` brukes; i produksjon skal
+testmiljø kan `EPJ_ALLOW_UNKNOWN_HOSTNAME: 'true'` brukes; i produksjon skal
 det stå `false`.
 
 **Alle forespørsler havner i samme virksomhet.**
@@ -403,7 +403,7 @@ ikke startet på nytt etter at den ble satt.
 `kubectl -n epj rollout restart deployment/hapi`.
 
 **`/systemadmin` svarer 404.**
-Den er bare tilgjengelig på `EPJ_PLATTFORM_VERTSNAVN`. Kontroller at verdien i
+Den er bare tilgjengelig på `EPJ_PLATFORM_HOSTNAME`. Kontroller at verdien i
 konfigurasjonen er den samme som vertsnavnet i `11-ingress.yaml`.
 
 **Migrasjonsjobben feiler med «already exists».**

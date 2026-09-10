@@ -112,7 +112,7 @@ export async function sendSettlement(id: string, actor: AuditActor): Promise<{ o
 
 	try {
 		const receipt =
-			config.integrations.modus === 'mock'
+			config.integrations.mode === 'mock'
 				? mockInnsending(settlement)
 				: await sendToHelfo(settlement.file);
 
@@ -137,7 +137,7 @@ export async function sendSettlement(id: string, actor: AuditActor): Promise<{ o
 
 async function sendToHelfo(file: string): Promise<{ reference: string; received: string }> {
 	const url = config.integrations.helfo.settlementUrl;
-	if (!url) throw new Error('Helfo oppgjørstjeneste er ikke konfigurert (EPJ_HELFO_OPPGJOR_URL)');
+	if (!url) throw new Error('Helfo oppgjørstjeneste er ikke konfigurert (EPJ_HELFO_SETTLEMENT_URL)');
 	const response = await fetch(`${url}/oppgjor`, {
 		method: 'POST',
 		headers: { 'content-type': 'application/xml', accept: 'application/json' },
@@ -201,7 +201,7 @@ export function buildSettlementFile(
 	const root = el('Oppgjorskrav', [
 		el('Kravhode', [
 			el('KravId', id),
-			el('Konto', config.integrations.helfo.avtaleId || requireTenant().organisation_number),
+			el('Konto', config.integrations.helfo.agreementId || requireTenant().organisation_number),
 			el('Organisasjonsnummer', requireTenant().organisation_number),
 			el('Virksomhet', requireTenant().name),
 			el('PeriodeFra', from),

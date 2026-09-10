@@ -60,7 +60,7 @@ const TESTREGISTER: CommunicationParty[] = [
 ];
 
 export async function searchRecipients(search: string, message_type?: string): Promise<CommunicationParty[]> {
-	const all = config.integrations.modus === 'mock' ? TESTREGISTER : await searchLive(search);
+	const all = config.integrations.mode === 'mock' ? TESTREGISTER : await searchLive(search);
 	const key = search.toLowerCase().trim();
 	return all
 		.filter((p) => p.active)
@@ -69,7 +69,7 @@ export async function searchRecipients(search: string, message_type?: string): P
 }
 
 export async function getRecipient(herId: string): Promise<CommunicationParty | null> {
-	if (config.integrations.modus === 'mock') {
+	if (config.integrations.mode === 'mock') {
 		return TESTREGISTER.find((p) => p.herId === herId) ?? null;
 	}
 	const match = await searchLive(herId);
@@ -78,7 +78,7 @@ export async function getRecipient(herId: string): Promise<CommunicationParty | 
 
 async function searchLive(search: string): Promise<CommunicationParty[]> {
 	const url = config.integrations.nhn.addressRegistryUrl;
-	if (!url) throw new Error('Adresseregisteret er ikke konfigurert (EPJ_NHN_ADRESSEREGISTER_URL)');
+	if (!url) throw new Error('Adresseregisteret er ikke konfigurert (EPJ_NHN_ADDRESSREGISTRY_URL)');
 	const response = await fetch(`${url}/kommunikasjonsparter?sok=${encodeURIComponent(search)}`, {
 		headers: { accept: 'application/json' },
 		signal: AbortSignal.timeout(15_000)

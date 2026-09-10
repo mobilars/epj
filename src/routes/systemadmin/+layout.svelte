@@ -11,7 +11,7 @@
 
 {#if !data.platformHostname}
 	<div class="varsel varsel-advarsel" role="status">
-		<strong>EPJ_PLATTFORM_VERTSNAVN er ikke satt.</strong>
+		<strong>EPJ_PLATFORM_HOSTNAME er ikke satt.</strong>
 		Plattformadministrasjonen er da tilgjengelig på samme vertsnavn som virksomhetene.
 		I produksjon bør den ha et eget vertsnavn, slik at den kan skjermes på nettverksnivå.
 	</div>

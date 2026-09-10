@@ -27,8 +27,8 @@ variables:
   - &test_env
     EPJ_DATA_KEY: ci-nokkel-kun-for-testkjoring-000000000
     EPJ_ORG_HER_ID: '8000001'
-    EPJ_ORG_ORGNR: '994598759'
-    EPJ_INTEGRASJON_MODUS: mock
+    EPJ_ORG_NUMBER: '994598759'
+    EPJ_INTEGRATION_MODE: mock
     # Nettleserne til Playwright lastes bare ned der de faktisk brukes.
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
   - &lite_tak

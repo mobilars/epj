@@ -1,15 +1,15 @@
 # ---------------------------------------------------------------------------
-# Konfigurasjon for dette miljøet. Slås sammen med 02-konfigurasjon.yaml.
+# Configuration for this environment. Merged with 02-konfigurasjon.yaml.
 #
-# Dette er en referanseinstallasjon på epj.apps.apus.no, ikke et klinisk
-# driftsmiljø. Tre av verdiene under avviker bevisst fra grunnoppsettet, og
-# alle tre må snus før systemet ser ekte pasientopplysninger:
+# This is a reference installation on epj.apps.apus.no, not a clinical
+# production environment. Two of the values below deliberately differ from the
+# base setup, and both must be turned round before the system sees real patient
+# data:
 #
-#   EPJ_TESTINNLOGGING          brukernavn og passord i stedet for HelseID
-#   EPJ_HELSEID_ENABLED         ingen HelseID-klient er registrert for oss
-#   EPJ_INTEGRASJON_MODUS       SFM, NHN og Helfo svarer lokalt, ikke i NHN
+#   EPJ_TEST_LOGIN         username and password alongside HelseID
+#   EPJ_INTEGRATION_MODE   SFM, NHN and Helfo answer locally, not in NHN
 #
-# Se docs/apne-punkter.md.
+# See docs/apne-punkter.md.
 # ---------------------------------------------------------------------------
 apiVersion: v1
 kind: ConfigMap
@@ -19,38 +19,38 @@ metadata:
 data:
   EPJ_BASE_URL: https://epj.apps.apus.no
 
-  # Én virksomhet, ett vertsnavn. Standardvirksomheten har ikke noe vertsnavn
-  # registrert, så oppslaget må få lov til å falle tilbake på den. Settes dette
-  # til `false`, svarer journalen 404 på alt inntil vertsnavnet er registrert
-  # fra plattformadministrasjonen.
-  EPJ_TILLAT_UKJENT_VERTSNAVN: 'true'
-  # Tomt: plattformadministrasjonen har ikke eget vertsnavn her, og /systemadmin
-  # er dermed ikke eksponert. Gi den et eget navn under *.apps.apus.no for å
-  # slå den på.
-  EPJ_PLATTFORM_VERTSNAVN: ''
+  # One organisation, one hostname. The default organisation has no hostname
+  # registered, so the lookup must be allowed to fall back on it. Set to
+  # `false`, the record answers 404 to everything until the hostname is
+  # registered from platform administration.
+  EPJ_ALLOW_UNKNOWN_HOSTNAME: 'true'
+  # Empty: platform administration has no hostname of its own here, so
+  # /systemadmin is not exposed. Give it a name under *.apps.apus.no to turn
+  # it on.
+  EPJ_PLATFORM_HOSTNAME: ''
 
-  # CloudNativePG signerer tjenersertifikatet med klyngens egen CA.
+  # CloudNativePG signs the server certificate with the cluster's own CA.
   EPJ_DB_SSL: 'true'
   NODE_EXTRA_CA_CERTS: /etc/epj/postgres-ca/ca.crt
 
-  EPJ_TESTINNLOGGING: 'true'
-  EPJ_VIS_DEMOBRUKERE: 'true'
+  EPJ_TEST_LOGIN: 'true'
+  EPJ_SHOW_DEMO_USERS: 'true'
 
-  # HelseID mot NHN sitt testmiljø. Nøkkelen ligger i `epj-hemmeligheter`,
-  # aldri i git. `kid` er RFC 7638-tommelavtrykket av den offentlige nøkkelen,
-  # og er kontrollert mot nøkkelen selv.
+  # HelseID against NHN's test environment. The key lives in
+  # `epj-hemmeligheter`, never in git. `kid` is the RFC 7638 thumbprint of the
+  # public key, and has been checked against the key itself.
   #
-  # Slås på når EPJ_HELSEID_CLIENT_ID er satt: uten klient-id feiler
-  # klientassertion-en, og testinnlogging er da eneste vei inn.
-  EPJ_HELSEID_ENABLED: 'false'
+  # This is a test client at NHN. Test sign-in stays on alongside it, so the
+  # demo users still work if HelseID is unavailable.
+  EPJ_HELSEID_ENABLED: 'true'
   EPJ_HELSEID_CLIENT_ID: 5179bc26-7699-4c36-8428-32cb7f06efe1
   EPJ_HELSEID_ISSUER: https://helseid-sts.test.nhn.no
   EPJ_HELSEID_KEY_ID: oUMPVNSLU4Xj5LiEJ_X1vzVZF5iLM5C1GqUYAMlEs9U
   EPJ_HELSEID_ALG: PS256
   EPJ_HELSEID_REDIRECT_URI: https://epj.apps.apus.no/logg-inn/helseid/tilbake
-  EPJ_INTEGRASJON_MODUS: mock
+  EPJ_INTEGRATION_MODE: mock
 
-  EPJ_ORG_NAVN: Storgata Legesenter
-  EPJ_ORG_ORGNR: '999999999'
+  EPJ_ORG_NAME: Storgata Legesenter
+  EPJ_ORG_NUMBER: '999999999'
   EPJ_ORG_HER_ID: '8000001'
-  EPJ_ORG_KOMMUNENR: '0301'
+  EPJ_ORG_MUNICIPALITY_CODE: '0301'

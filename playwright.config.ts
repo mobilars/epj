@@ -19,22 +19,22 @@ const miljo = {
 	EPJ_BASE_URL: `http://127.0.0.1:${APP_PORT}`,
 	EPJ_DATA_KEY: 'e2e-nokkel-kun-for-testkjoring-00000000',
 	EPJ_HTTPS_ONLY: 'false',
-	EPJ_TESTINNLOGGING: 'true',
-	EPJ_VIS_DEMOBRUKERE: 'true',
-	EPJ_INTEGRASJON_MODUS: 'mock',
-	EPJ_ORG_NAVN: 'Storgata Legesenter',
+	EPJ_TEST_LOGIN: 'true',
+	EPJ_SHOW_DEMO_USERS: 'true',
+	EPJ_INTEGRATION_MODE: 'mock',
+	EPJ_ORG_NAME: 'Storgata Legesenter',
 	EPJ_ORG_HER_ID: '8000001',
-	EPJ_ORG_ORGNR: '994598759',
+	EPJ_ORG_NUMBER: '994598759',
 	// Plattformadministrasjonen nås på sitt eget vertsnavn. Testene kjører mot
 	// én server, så de to navnene peker på samme adresse: virksomhetene på
 	// 127.0.0.1, plattformen på localhost.
-	EPJ_PLATTFORM_VERTSNAVN: 'localhost',
+	EPJ_PLATFORM_HOSTNAME: 'localhost',
 	// Testene logger inn på nytt for hver test. Grensene heves slik at
 	// ratebegrensningen ikke slår inn - den testes for seg i enhetstestene.
 	EPJ_MAX_FAILED_LOGINS: '50',
 	EPJ_RATE_AUTH: '2000',
-	EPJ_RATE_GENERELL: '20000',
-	EPJ_RATE_LOGIN_BRUKER: '2000',
+	EPJ_RATE_GENERAL: '20000',
+	EPJ_RATE_LOGIN_USER: '2000',
 	NODE_ENV: 'test'
 };
 

@@ -82,7 +82,7 @@ på HPR-nummer, og opprettes uten roller — tilgang er alltid en administrativ
 handling som etterlater spor.
 
 **Lokal pålogging** med brukernavn, passord og TOTP finnes for testmiljø og som
-reserveløsning, og styres av `EPJ_TESTINNLOGGING`. Den bør være av i produksjon.
+reserveløsning, og styres av `EPJ_TEST_LOGIN`. Den bør være av i produksjon.
 
 * Passord: scrypt (N=16384, r=8, p=1) med tilfeldig salt.
 * Engangskode: TOTP etter RFC 6238, hemmelighet kryptert med AES-256-GCM.

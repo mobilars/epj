@@ -139,7 +139,7 @@ uten tilgang. Rolletildeling er en administrativ handling som loggføres.
 
 **K-3.3 Lokal pålogging skal kunne slås av.**
 Brukernavn, passord og engangskode finnes for testmiljø og som reserveløsning,
-og styres av `EPJ_TESTINNLOGGING`.
+og styres av `EPJ_TEST_LOGIN`.
 *Realisert:* `src/routes/logg-inn/`.
 *Testet:* `e2e/palogging.spec.ts`.
 
@@ -421,7 +421,7 @@ Migrasjoner er versjonerte SQL-filer som kjøres idempotent ved oppstart.
 *Realisert:* `src/lib/server/db/migrate.ts`.
 
 **K-10.10 Systemet skal kunne kjøres uten tilgang til nasjonale tjenester.**
-`EPJ_INTEGRASJON_MODUS=mock` gir lokale simulatorer for SFM, meldingstjeneren og
+`EPJ_INTEGRATION_MODE=mock` gir lokale simulatorer for SFM, meldingstjeneren og
 Helfo, slik at hele flyten kan øves og testes uten oppkobling.
 
 **K-10.11 Én installasjon skal kunne betjene flere virksomheter.**

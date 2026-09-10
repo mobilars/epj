@@ -56,7 +56,7 @@ export async function getCopaymentStatus(
 		}
 	}
 
-	const response = config.integrations.modus === 'mock' ? mockStatus(fnr) : await getFromHelfo(fnr);
+	const response = config.integrations.mode === 'mock' ? mockStatus(fnr) : await getFromHelfo(fnr);
 
 	await exec(
 		`INSERT INTO copayment_lookup (id, tenant_id, patient_id, performed_by, has_exemption_card, exemption_card_until, earned_ore, source)
@@ -77,11 +77,12 @@ export async function getCopaymentStatus(
 
 async function getFromHelfo(fnr: string): Promise<Omit<CopaymentStatus, 'patientId' | 'remainingOre' | 'fetchedAt'>> {
 	const url = config.integrations.helfo.copaymentUrl;
-	if (!url) throw new Error('Helfo egenandelstjeneste er ikke konfigurert (EPJ_HELFO_EGENANDEL_URL)');
+	if (!url) throw new Error('Helfo egenandelstjeneste er ikke konfigurert (EPJ_HELFO_COPAYMENT_URL)');
 	const response = await fetch(`${url}/frikortstatus`, {
 		method: 'POST',
 		headers: { 'content-type': 'application/json', accept: 'application/json' },
-		body: JSON.stringify({ foedselsnummer: fnr, avtaleId: config.integrations.helfo.avtaleId }),
+		// The field names are Helfo's, not ours: they go on the wire as they stand.
+		body: JSON.stringify({ foedselsnummer: fnr, avtaleId: config.integrations.helfo.agreementId }),
 		signal: AbortSignal.timeout(20_000)
 	});
 	if (!response.ok) throw new Error(`Helfo svarte ${response.status}`);

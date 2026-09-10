@@ -103,12 +103,12 @@ oftest må settes.
 | `EPJ_DATA_KEY`             | Krypteringsnøkkel for data at rest. **Obligatorisk.**             |
 | `EPJ_HTTPS_ONLY`           | `true` i produksjon. Setter `Secure` på informasjonskapsler og HSTS. |
 | `EPJ_REQUIRE_MFA`          | Krev totrinnsverifisering ved lokal pålogging.                    |
-| `EPJ_TESTINNLOGGING`       | Lokal brukernavn/passord-pålogging. **`false` i produksjon.**      |
+| `EPJ_TEST_LOGIN`       | Lokal brukernavn/passord-pålogging. **`false` i produksjon.**      |
 | `EPJ_HELSEID_*`            | HelseID som pålogging. Se [integrasjoner.md](integrasjoner.md).    |
-| `EPJ_INTEGRASJON_MODUS`    | `mock` kjører SFM, NHN og Helfo lokalt. `live` krever oppkobling.  |
+| `EPJ_INTEGRATION_MODE`    | `mock` kjører SFM, NHN og Helfo lokalt. `live` krever oppkobling.  |
 | `EPJ_HAPI_MULTITENANT`     | Partisjonering i HAPI. Se under.                                  |
-| `EPJ_PLATTFORM_VERTSNAVN`  | Vertsnavnet `/systemadmin` nås på.                                |
-| `EPJ_TILLAT_UKJENT_VERTSNAVN` | `false` i produksjon.                                          |
+| `EPJ_PLATFORM_HOSTNAME`  | Vertsnavnet `/systemadmin` nås på.                                |
+| `EPJ_ALLOW_UNKNOWN_HOSTNAME` | `false` i produksjon.                                          |
 
 Hemmeligheter hører ikke hjemme i `docker-compose.yml`. Compose leser `.env`
 automatisk; sørg for at filen har `chmod 600` og ikke ligger i git (den står i
@@ -139,7 +139,7 @@ legekontoret-b.example.no  →  virksomhet «legekontor-b»  →  partisjon «le
 admin.example.no           →  plattformadministrasjon (/systemadmin)
 ```
 
-Sett `EPJ_PLATTFORM_VERTSNAVN=admin.example.no`. Da er `/systemadmin` bare
+Sett `EPJ_PLATFORM_HOSTNAME=admin.example.no`. Da er `/systemadmin` bare
 tilgjengelig der, og virksomhetenes sider er utilgjengelige på det vertsnavnet.
 Det gjør det mulig å legge en nettverksbegrensning foran plattformadministrasjonen
 uten å røre resten.
@@ -174,11 +174,11 @@ imot ekte pasientopplysninger må dette gjøres:
 
 1. **Fjern publiserte porter fra `hapi` og `postgres`.** I `docker-compose.yml`
    ligger de der bare for lokal feilsøking. Kommenter ut `ports:`-blokkene.
-2. **Slå av testinnlogging:** `EPJ_TESTINNLOGGING=false`, `EPJ_VIS_DEMOBRUKERE=false`.
+2. **Slå av testinnlogging:** `EPJ_TEST_LOGIN=false`, `EPJ_SHOW_DEMO_USERS=false`.
    HelseID er hovedveien inn (`EPJ_HELSEID_ENABLED=true`).
 3. **Slå på HTTPS:** `EPJ_HTTPS_ONLY=true`, og sett `EPJ_BASE_URL` til
    `https://…`.
-4. **Avvis ukjent vertsnavn:** `EPJ_TILLAT_UKJENT_VERTSNAVN=false`.
+4. **Avvis ukjent vertsnavn:** `EPJ_ALLOW_UNKNOWN_HOSTNAME=false`.
 5. **Sett `NODE_ENV=production`** (allerede satt i compose-filen).
 6. **TLS mot PostgreSQL** og kryptert lagring på volumet. Normen krever
    kryptering av helseopplysninger i ro; `EPJ_DATA_KEY` dekker bare de
@@ -275,10 +275,10 @@ opprettes. Helsesjekken har `start_period: 120s` nettopp derfor.
 
 **«Ukjent vertsnavn» med statuskode 404.**
 Vertsnavnet er ikke registrert på noen virksomhet. Enten registrer det i
-`/systemadmin`, eller sett `EPJ_TILLAT_UKJENT_VERTSNAVN=true` i et testmiljø.
+`/systemadmin`, eller sett `EPJ_ALLOW_UNKNOWN_HOSTNAME=true` i et testmiljø.
 
 **Plattformadministrasjonen svarer 404.**
-`/systemadmin` er bare tilgjengelig på `EPJ_PLATTFORM_VERTSNAVN`. Er variabelen
+`/systemadmin` er bare tilgjengelig på `EPJ_PLATFORM_HOSTNAME`. Er variabelen
 tom, er den tilgjengelig overalt - men da bør du sette den.
 
 **«Klarte ikke å opprette FHIR-partisjon».**

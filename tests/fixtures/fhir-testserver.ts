@@ -75,14 +75,14 @@ function codeValues(v: unknown): string[] {
 /**
  * Provides a FHIR server to the tests.
  *
- * With EPJ_BRUK_EKTE_HAPI=1 the tests are pointed at a real HAPI server rather
+ * With EPJ_USE_REAL_HAPI=1 the tests are pointed at a real HAPI server rather
  * than the double. The same test suite then runs against the real
  * implementation, as the CI job `integrasjon-hapi` does.
  */
 export async function fhirForTest(): Promise<TestFhirServer> {
-	if (process.env.EPJ_BRUK_EKTE_HAPI === '1') {
+	if (process.env.EPJ_USE_REAL_HAPI === '1') {
 		const url = process.env.EPJ_HAPI_BASE_URL;
-		if (!url) throw new Error('EPJ_BRUK_EKTE_HAPI krever EPJ_HAPI_BASE_URL');
+		if (!url) throw new Error('EPJ_USE_REAL_HAPI krever EPJ_HAPI_BASE_URL');
 		return {
 			url,
 			server: null,

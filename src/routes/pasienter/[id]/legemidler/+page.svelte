@@ -6,7 +6,7 @@
 <div class="rad-mellom">
 	<h2>Legemidler</h2>
 	<div class="rad">
-		<span class="merke merke-info">Kilde: Sentral forskrivningsmodul ({data.modus})</span>
+		<span class="merke merke-info">Kilde: Sentral forskrivningsmodul ({data.mode})</span>
 
 	</div>
 </div>

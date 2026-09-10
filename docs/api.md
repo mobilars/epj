@@ -230,7 +230,7 @@ utstedes; en backend-tjeneste får aldri pasientkontekst.
 | Pålogging per brukernavn | 10 per 5 minutter |
 
 Ved overskridelse: `429` med `Retry-After`. Grensene settes med
-`EPJ_RATE_AUTH`, `EPJ_RATE_GENERELL`, `EPJ_RATE_LOGIN_BRUKER`.
+`EPJ_RATE_AUTH`, `EPJ_RATE_GENERAL`, `EPJ_RATE_LOGIN_USER`.
 
 ## CORS
 

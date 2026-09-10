@@ -18,7 +18,7 @@ export const load: LayoutServerLoad = async (event) => {
 			: null,
 		organisation: config.organisation.name,
 		miljo: {
-			integrations: config.integrations.modus,
+			integrations: config.integrations.mode,
 			testLogin: config.testLogin.aktivert,
 			produksjon: process.env.NODE_ENV === 'production'
 		}

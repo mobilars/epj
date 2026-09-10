@@ -11,7 +11,7 @@ import { rateLimit } from '$srv/http';
  * Sign-in.
  *
  * HelseID is the main way in. Local sign-in with username, password and
- * one-time code is a test mechanism, governed by `EPJ_TESTINNLOGGING`. In
+ * one-time code is a test mechanism, governed by `EPJ_TEST_LOGIN`. In
  * production with HelseID it must be turned off.
  */
 

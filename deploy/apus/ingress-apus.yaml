@@ -2,7 +2,7 @@
 # Inngang for dette miljøet. Erstatter 11-ingress.yaml.
 #
 # Én virksomhet, ett vertsnavn. Plattformadministrasjonen har ikke fått eget
-# vertsnavn her; se merknaden om EPJ_PLATTFORM_VERTSNAVN i konfigurasjon.yaml.
+# vertsnavn her; se merknaden om EPJ_PLATFORM_HOSTNAME i konfigurasjon.yaml.
 # ---------------------------------------------------------------------------
 apiVersion: networking.k8s.io/v1
 kind: Ingress

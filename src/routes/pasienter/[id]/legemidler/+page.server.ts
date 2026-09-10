@@ -14,7 +14,7 @@ import { config } from '$srv/config';
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	const parent = await event.parent();
-	if (!ctx || !parent.patient) return { list: null, history: [], canForskrive: false, modus: config.integrations.modus };
+	if (!ctx || !parent.patient) return { list: null, history: [], canForskrive: false, mode: config.integrations.mode };
 
 	const response = await getMedicationList(event.params.id, actorFromContext(ctx));
 	return {
@@ -23,7 +23,7 @@ export const load: PageServerLoad = async (event) => {
 		history: await synkHistory(event.params.id, 15),
 		canForskrive: ctx.permissions.has('resept:forskriv'),
 		canFornye: ctx.permissions.has('resept:fornye'),
-		modus: config.integrations.modus
+		mode: config.integrations.mode
 	};
 };
 

@@ -156,12 +156,12 @@ export async function sendQueue(): Promise<{ sent_at: number; failed: number }> 
  * send and receipt flow can be exercised without a health network connection.
  */
 async function transport(recipientHer: string, xml: string, message_type: string): Promise<void> {
-	if (config.integrations.modus === 'mock') {
+	if (config.integrations.mode === 'mock') {
 		await mockLevering(recipientHer, xml, message_type);
 		return;
 	}
-	const url = config.integrations.nhn.meldingstjenerUrl;
-	if (!url) throw new Error('Meldingstjeneren er ikke konfigurert (EPJ_NHN_MELDINGSTJENER_URL)');
+	const url = config.integrations.nhn.messageServerUrl;
+	if (!url) throw new Error('Meldingstjeneren er ikke konfigurert (EPJ_NHN_MESSAGE_SERVER_URL)');
 	const response = await fetch(`${url}/messages`, {
 		method: 'POST',
 		headers: {
