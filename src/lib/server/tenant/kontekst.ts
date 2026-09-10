@@ -21,7 +21,8 @@ export interface Tenant {
 	kommunenummer: string | null;
 	vertsnavn: string | null;
 	base_url: string;
-	partisjon_id: number;
+	/** Partisjonen i HAPI FHIR. NULL for systemvirksomheter uten kliniske data. */
+	partisjon_id: number | null;
 	status: 'aktiv' | 'suspendert' | 'avviklet';
 	merknad: string | null;
 	opprettet: string;

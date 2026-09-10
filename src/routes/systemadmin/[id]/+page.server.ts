@@ -50,9 +50,12 @@ export const load: PageServerLoad = async (event) => {
 		fhirBaseUrl: fhirBaseFor(tenant),
 		issuer: utstederFor(tenant),
 		wellKnown: `${utstederFor(tenant)}/.well-known/smart-configuration`,
-		partisjonFinnes: partisjoner.ok
-			? partisjoner.partisjoner.some((p) => p.navn === tenant.id)
-			: null,
+		partisjonFinnes:
+			tenant.partisjon_id === null
+				? null
+				: partisjoner.ok
+					? partisjoner.partisjoner.some((p) => p.navn === tenant.id)
+					: null,
 		partisjonsfeil: partisjoner.ok ? null : partisjoner.feil,
 		roller: brukere,
 		tall

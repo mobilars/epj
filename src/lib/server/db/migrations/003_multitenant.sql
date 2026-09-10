@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS tenant (
   -- Utadvendt adresse. Brukes som `issuer` i OAuth-metadata for virksomheten.
   base_url            TEXT NOT NULL,
   -- Partisjons-id i HAPI FHIR. Settes ved opprettelse og endres aldri.
-  partisjon_id        INTEGER NOT NULL UNIQUE CHECK (partisjon_id > 0),
+  -- NULL for systemvirksomheter som ikke har kliniske data.
+  partisjon_id        INTEGER UNIQUE CHECK (partisjon_id > 0),
   status              TEXT NOT NULL DEFAULT 'aktiv'
                         CHECK (status IN ('aktiv', 'suspendert', 'avviklet')),
   merknad             TEXT,
@@ -50,7 +51,7 @@ ON CONFLICT (id) DO NOTHING;
 -- loggføres, slik at sikkerhetsloggen kan være obligatorisk overalt.
 INSERT INTO tenant (id, navn, organisasjonsnummer, base_url, partisjon_id, status, merknad)
 VALUES ('plattform', 'Plattformadministrasjon', '999999999',
-        'http://localhost:5173', 2147483647, 'aktiv',
+        'http://localhost:5173', NULL, 'aktiv',
         'Systemvirksomhet. Har ingen FHIR-partisjon og ingen kliniske data.')
 ON CONFLICT (id) DO NOTHING;
 

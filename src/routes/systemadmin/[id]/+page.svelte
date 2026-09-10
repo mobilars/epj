@@ -40,7 +40,7 @@
 <div class="kort">
 	<h3>Adresser</h3>
 	<dl>
-		<dt>Maskinnavn / partisjon</dt><dd class="mono">{v.id} · {v.partisjonId}</dd>
+		<dt>Maskinnavn / partisjon</dt><dd class="mono">{v.id} · {v.partisjonId ?? 'ingen partisjon'}</dd>
 		<dt>FHIR-endepunkt</dt><dd class="mono">{data.fhirBaseUrl}</dd>
 		<dt>OAuth issuer</dt><dd class="mono">{data.issuer}</dd>
 		<dt>SMART-metadata</dt><dd class="mono">{data.wellKnown}</dd>

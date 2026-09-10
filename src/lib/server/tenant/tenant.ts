@@ -75,8 +75,13 @@ export async function opprettTenant(inn: NyTenant, aktor: AuditAktor): Promise<O
 		return { ok: false, feil: 'Ugyldig adresse (base_url).' };
 	}
 
+	// Partisjons-id er et heltall i HAPI. Systemvirksomheter har NULL og teller
+	// ikke med, slik at nummereringen ikke løper fra seg.
 	const neste = await en<{ n: number }>('SELECT COALESCE(MAX(partisjon_id), 0) + 1 AS n FROM tenant');
 	const partisjonId = neste?.n ?? 1;
+	if (partisjonId > 2147483646) {
+		return { ok: false, feil: 'Partisjonsnummereringen er oppbrukt.' };
+	}
 
 	const partisjon = await opprettPartisjon(partisjonId, inn.id, inn.navn);
 	if (!partisjon.ok) {
@@ -206,6 +211,8 @@ export async function tenantOversikt(): Promise<TenantOversikt[]> {
 		antallBrukere: kart.get(t.id)?.brukere ?? 0,
 		antallAuditInnslag: kart.get(t.id)?.innslag ?? 0,
 		sisteAktivitet: kart.get(t.id)?.siste ?? null,
-		partisjonFinnes: partisjoner.ok ? partisjoner.partisjoner.some((p) => p.navn === t.id) : null
+		// Systemvirksomheter har ingen partisjon, og skal ikke meldes som avvik.
+		partisjonFinnes:
+			t.partisjon_id === null ? null : partisjoner.ok ? partisjoner.partisjoner.some((p) => p.navn === t.id) : null
 	}));
 }
