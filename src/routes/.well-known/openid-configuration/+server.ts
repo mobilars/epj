@@ -23,6 +23,6 @@ export const GET: RequestHandler = () => {
 			code_challenge_methods_supported: ['S256'],
 			token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'private_key_jwt']
 		},
-		{ headers: { 'cache-control': 'public, max-age=300' } }
+		{ headers: { 'cache-control': 'public, max-age=300', 'access-control-allow-origin': '*' } }
 	);
 };
