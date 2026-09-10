@@ -103,3 +103,42 @@ spec:
           protocol: UDP
         - port: 53
           protocol: TCP
+---
+# Nettverkspolicy virker i begge ender: det holder ikke at jobben har lov til å
+# gå ut, databasen og HAPI må også ha lov til å slippe den inn. Reglene i
+# 10-nettverk.yaml kjenner bare `app: epj` og `app: hapi`.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-fra-seed
+  namespace: epj
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: epj-seed
+      ports:
+        - port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hapi-fra-seed
+  namespace: epj
+spec:
+  podSelector:
+    matchLabels:
+      app: hapi
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: epj-seed
+      ports:
+        - port: 8080

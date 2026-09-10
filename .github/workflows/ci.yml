@@ -105,12 +105,12 @@ jobs:
           HAPI_FHIR_ALLOW_EXTERNAL_REFERENCES: 'true'
           HAPI_FHIR_ALLOW_PLACEHOLDER_REFERENCES: 'true'
           HAPI_FHIR_ENFORCE_REFERENTIAL_INTEGRITY_ON_WRITE: 'false'
-          SPRING_JPA_PROPERTIES_HIBERNATE_SEARCH_ENABLED: 'false'
         ports: ['8080:8080']
-        options: >-
-          --health-cmd "curl -sf http://localhost:8080/fhir/metadata?_summary=true || exit 1"
-          --health-interval 20s --health-timeout 10s --health-retries 30
-          --health-start-period 150s
+        # Ingen --health-cmd. Bildet er distroless: det har verken skall eller
+        # curl, så en helsesjekk som kjører inne i containeren kan aldri lykkes.
+        # Den ville bare fått jobben til å vente til den ga opp - i praksis ti
+        # minutter, med «unhealthy» som eneste spor. Steget «Vent på HAPI» under
+        # gjør det samme fra selve løperen, der curl finnes.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -155,25 +155,6 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U epj"
           --health-interval 5s --health-timeout 5s --health-retries 20
-      hapi:
-        image: hapiproject/hapi:v8.0.0
-        env:
-          HAPI_FHIR_FHIR_VERSION: R5
-          HAPI_FHIR_ALLOW_EXTERNAL_REFERENCES: 'true'
-          HAPI_FHIR_ALLOW_PLACEHOLDER_REFERENCES: 'true'
-          HAPI_FHIR_ENFORCE_REFERENTIAL_INTEGRITY_ON_WRITE: 'false'
-          SPRING_JPA_PROPERTIES_HIBERNATE_SEARCH_ENABLED: 'false'
-          # Partisjonering: én partisjon per virksomhet, med partisjonsnavnet i
-          # FHIR-URL-en. Referanser på tvers er slått av - det er den regelen
-          # isolasjonen mellom virksomheter hviler på.
-          HAPI_FHIR_TENANT_IDENTIFICATION_STRATEGY: URL_BASED
-          HAPI_FHIR_PARTITIONING_ALLOW_REFERENCES_ACROSS_PARTITIONS: 'false'
-          HAPI_FHIR_PARTITIONING_CROSS_PARTITION_REFERENCE_MODE: 'NOT_ALLOWED'
-        ports: ['8080:8080']
-        options: >-
-          --health-cmd "curl -sf http://localhost:8080/fhir/DEFAULT/metadata?_summary=true || exit 1"
-          --health-interval 20s --health-timeout 10s --health-retries 30
-          --health-start-period 150s
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -181,13 +162,24 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # HAPI startes som et steg, ikke som en tjenestecontainer: partisjonering
+      # kan bare slås på gjennom en konfigurasjonsfil, og en tjenestecontainer
+      # starter før kildekoden er sjekket ut og har ingenting å montere.
+      - name: Start HAPI med partisjonering
+        run: |
+          docker run -d --name hapi -p 8080:8080 \
+            -v "$PWD/docker/hapi-ci.yaml:/etc/hapi/application.yaml:ro" \
+            -e SPRING_CONFIG_ADDITIONAL_LOCATION=file:/etc/hapi/ \
+            hapiproject/hapi:v8.0.0
       - name: Vent på HAPI
         run: |
           for i in $(seq 1 60); do
             curl -sf "http://127.0.0.1:8080/fhir/DEFAULT/metadata?_summary=true" > /dev/null && exit 0
             sleep 5
           done
-          echo "HAPI startet ikke" && exit 1
+          echo "HAPI startet ikke. Svarer /fhir/DEFAULT/ 404, er partisjoneringen av."
+          docker logs hapi 2>&1 | tail -50
+          exit 1
       - name: Isolasjonstester mot ekte HAPI
         run: npx vitest run tests/multitenancy.test.ts
         env:

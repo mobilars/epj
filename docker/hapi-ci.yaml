@@ -1,0 +1,32 @@
+# ---------------------------------------------------------------------------
+# HAPI FHIR for CI: H2 i minnet, med partisjonering slått på.
+#
+# H2 starter raskere enn PostgreSQL og holder for kontrakttesting. Dialekten er
+# da bildets egen standard, så den trenger vi ikke sette.
+#
+# Konfigurasjonen ligger i en fil, ikke i miljøvariabler, av samme grunn som i
+# docker/hapi-application.yaml: HAPI sine nøkler har understrek i navnet, og
+# Spring gjør understrek om til punktum når det binder miljøvariabler. Verdien
+# havner et sted ingen leser, og HAPI kjører videre på standardverdien uten
+# varsel. Det er nettopp det som gjorde at partisjoneringen aldri ble slått på.
+# ---------------------------------------------------------------------------
+spring:
+  jpa:
+    properties:
+      hibernate.search.enabled: false
+hapi:
+  fhir:
+    fhir_version: R5
+    allow_external_references: true
+    allow_placeholder_references: true
+    enforce_referential_integrity_on_write: false
+
+    # Én partisjon per virksomhet, med partisjonsnavnet i FHIR-URL-en.
+    # Nøkkelen heter `request_tenant_partitioning_mode`;
+    # `tenant_identification_strategy` finnes ikke i v8.0.0.
+    partitioning:
+      request_tenant_partitioning_mode: true
+      # Referanser på tvers er slått av - det er regelen isolasjonen mellom
+      # virksomheter hviler på.
+      allow_references_across_partitions: false
+      partitioning_include_in_search_hashes: false
