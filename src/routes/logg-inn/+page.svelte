@@ -36,7 +36,7 @@
 	}
 </script>
 
-<div class="smal">
+<div class="paloggingsside">
 	<h1>Logg inn</h1>
 	<p class="svak">{data.organisation}</p>
 
@@ -108,33 +108,23 @@
 				<p class="svak">
 					Trykk på en bruker for å logge inn som den. Passord for alle:
 					<span class="mono">{data.demoPassword}</span>. Engangskoden er en TOTP-kode, ikke et
-					fast tall - den regnes ut fra hemmeligheten
+					fast tall – den regnes ut fra hemmeligheten
 					<span class="mono">{data.demoTotpSecret}</span>, som kan legges inn i en
 					autentiseringsapp.
 				</p>
-				<div class="tabell-omslag">
-					<table>
-						<thead><tr><th>Brukernavn</th><th>Navn</th><th>Rolle</th><th></th></tr></thead>
-						<tbody>
-							{#each data.demoUsers as d (d.username)}
-								<tr>
-									<td class="mono">{d.username}</td>
-									<td>{d.name}</td>
-									<td>{d.role}</td>
-									<td>
-										<button
-											type="button"
-											class="liten"
-											disabled={filling !== ''}
-											onclick={() => fillIn(d.username)}
-										>
-											{filling === d.username ? 'Logger inn …' : 'Logg inn'}
-										</button>
-									</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
+				<div class="demobrukere">
+					{#each data.demoUsers as d (d.username)}
+						<button
+							type="button"
+							class="demobruker"
+							disabled={filling !== ''}
+							onclick={() => fillIn(d.username)}
+						>
+							<span class="navn">{d.name}</span>
+							<span class="rolle">{d.role}</span>
+							<span class="brukernavn">{filling === d.username ? 'logger inn …' : d.username}</span>
+						</button>
+					{/each}
 				</div>
 			{/if}
 		</div>
