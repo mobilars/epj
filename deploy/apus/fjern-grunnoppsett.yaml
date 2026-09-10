@@ -1,0 +1,37 @@
+# Tas ut av grunnoppsettet i dette miljøet: PostgreSQL driftes av
+# CloudNativePG (postgres-cnpg.yaml), og vertsnavnene er våre egne
+# (ingress-apus.yaml).
+$patch: delete
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: epj
+---
+$patch: delete
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: epj
+---
+$patch: delete
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: epj
+---
+$patch: delete
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: epj
+  namespace: epj
+---
+$patch: delete
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: epj-plattform
+  namespace: epj

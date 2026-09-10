@@ -198,11 +198,18 @@ Ingen målepunkter (metrics). Et journalsystem i drift bør minst eksponere
 svartider, feilrater, køstørrelse for meldinger og antall aktive sesjoner - per
 virksomhet.
 
-### 4.6 Styrt database **[V]**
+### 4.6 Styrt database **[V]** - delvis gjort
 
-`deploy/kubernetes/03-postgres.yaml` er én instans uten replikering. For drift
-bør den byttes ut med CloudNativePG, Crunchy Postgres eller en driftet tjeneste
-med punkt-i-tid-gjenoppretting.
+`deploy/kubernetes/03-postgres.yaml` er fortsatt én instans uten replikering.
+[`deploy/apus/`](../deploy/apus) viser hvordan den byttes ut med CloudNativePG,
+og det oppsettet kjører. Det som gjenstår er det som gjør en styrt database
+verdt navnet:
+
+- `backup` mot objektlager, slik at WAL-arkiveringen faktisk tar vare på noe.
+  Uten det er punkt-i-tid-gjenoppretting bare en mulighet, ikke en rutine.
+- Mer enn én instans. `instances: 1` gir omstart, ikke failover.
+- Testet gjenoppretting. En sikkerhetskopi ingen har gjenopprettet fra er en
+  antakelse.
 
 ### 4.7 Rader per virksomhet i databasen (RLS) **[N]**
 
@@ -286,6 +293,28 @@ CI-jobben `integrasjon-hapi` kjører testene mot `hapiproject/hapi`, men det er
 ikke kjørt lokalt i utviklingsmiljøet (ingen Docker-motor tilgjengelig).
 Partisjoneringen er testet mot en partisjonsbevisst testdobbel over ekte HTTP -
 det er ikke det samme som mot HAPI selv. Se [apne-punkter.md](apne-punkter.md).
+
+Utrullingen i september 2026 viste hva forskjellen koster. Testdobbelen godtok
+partisjonsstien `/fhir/<virksomhet>/` uten videre; HAPI selv svarte 404 «Unknown
+resource type», fordi partisjoneringen aldri ble slått på. Manifestene satte
+den med miljøvariabler HAPI ikke leser. Det ble ikke fanget av noen test, fordi
+ingen test snakker med den ekte serveren slik den er konfigurert i drift.
+
+Det som mangler er en test som starter HAPI med *manifestenes egen*
+konfigurasjon og kontrollerer at partisjonsstien svarer.
+
+### 6.6 Kontrakttest av manifestenes HAPI-konfigurasjon **[V]**
+
+Følger av 6.5. To feil i `04-hapi.yaml` overlevde all testing fordi de bare
+finnes i manifestet:
+
+1. Dialekten ble ikke satt, så HAPI bygde skjemaet med `clob`/`blob`.
+2. Partisjoneringen ble ikke slått på, så `/fhir/<virksomhet>/` svarte 404.
+
+Begge kommer av det samme: Spring kan ikke uttrykke nøkler med punktum eller
+understrek gjennom miljøvariabler. Rettet ved å bruke `SPRING_APPLICATION_JSON`.
+En test som starter bildet med manifestets miljø og sjekker
+`/fhir/standard/metadata` ville fanget begge på under et minutt.
 
 ---
 

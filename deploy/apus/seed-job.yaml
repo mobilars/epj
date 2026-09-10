@@ -1,0 +1,69 @@
+# ---------------------------------------------------------------------------
+# Demodata.
+#
+# Hører ikke hjemme i et klinisk driftsmiljø, og finnes derfor bare i dette
+# overlaget. Jobben er idempotent: den avslutter uten å gjøre noe hvis
+# virksomheten allerede har brukere. Krever at HAPI svarer, siden den også
+# legger inn kliniske ressurser.
+#
+#   kubectl -n epj delete job epj-seed --ignore-not-found
+#   kubectl -n epj apply -f deploy/apus/seed-job.yaml
+#   kubectl -n epj logs job/epj-seed
+#
+# TOTP-hemmelighetene skrives til loggen. Les dem der, og slett jobben etterpå.
+# ---------------------------------------------------------------------------
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: epj-seed
+  namespace: epj
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: epj
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: seed
+          image: ghcr.io/mobilars/epj:latest
+          command: ['node', 'build/verktoy/seed.js']
+          envFrom:
+            - configMapRef:
+                name: epj-konfigurasjon
+          env:
+            - name: EPJ_DATA_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: epj-hemmeligheter
+                  key: EPJ_DATA_KEY
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: epj-hemmeligheter
+                  key: POSTGRES_PASSWORD
+            - name: EPJ_DATABASE_URL
+              value: postgres://epj:$(POSTGRES_PASSWORD)@postgres-rw:5432/epj
+          volumeMounts:
+            - name: postgres-ca
+              mountPath: /etc/epj/postgres-ca
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']
+      volumes:
+        - name: postgres-ca
+          secret:
+            secretName: postgres-ca
+            items:
+              - key: ca.crt
+                path: ca.crt

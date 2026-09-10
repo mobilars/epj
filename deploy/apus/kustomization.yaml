@@ -1,0 +1,45 @@
+# ---------------------------------------------------------------------------
+# Overlag for apus-klyngen.
+#
+#   kubectl apply -k deploy/apus
+#
+# Klyngen er microk8s med Calico, ingress-nginx i navnerommet `ingress`,
+# cert-manager med utstederen `letsencrypt-prod`, CloudNativePG, og et
+# containerregister i klyngen på localhost:32000.
+#
+# Grunnoppsettet i deploy/kubernetes er uendret og fortsatt generisk. Her ligger bare
+# det som er sant for akkurat denne klyngen:
+#
+#   * PostgreSQL driftes av CloudNativePG i stedet for et StatefulSet
+#   * vertsnavnet er epj.apps.apus.no
+#   * inngangskontrolleren ligger i et annet navnerom enn malen antar
+#   * bildet hentes fra registeret i klyngen
+#   * innlogging med brukernavn og passord, og integrasjonene svarer lokalt
+#   * én instans av journalen, og mindre minne til HAPI - nodene er små
+#
+# Utenfor overlaget, fordi en Job er uforanderlig og skal kjøres bevisst:
+#
+#   kubectl -n epj apply -f seed-job.yaml     # demodata, én gang
+# ---------------------------------------------------------------------------
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: epj
+
+resources:
+  - ../kubernetes
+  - postgres-cnpg.yaml
+  - nettverk-apus.yaml
+  - ingress-apus.yaml
+
+patches:
+  - path: fjern-grunnoppsett.yaml
+  - path: konfigurasjon.yaml
+  - path: epj-patch.yaml
+  - path: hapi-patch.yaml
+  - path: hpa-patch.yaml
+  - path: pdb-patch.yaml
+
+images:
+  - name: ghcr.io/mobilars/epj
+    newName: localhost:32000/epj
+    newTag: latest

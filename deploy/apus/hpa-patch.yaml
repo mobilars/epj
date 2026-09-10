@@ -1,0 +1,10 @@
+# Autoskaleringen følger etter replicas i epj-patch.yaml. Med minReplicas: 2
+# ville den umiddelbart skalert opp igjen det overlaget nettopp skalerte ned.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: epj
+  namespace: epj
+spec:
+  minReplicas: 1
+  maxReplicas: 3

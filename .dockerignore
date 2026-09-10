@@ -1,0 +1,17 @@
+# Byggekonteksten skal bare inneholde det bildet faktisk trenger. `COPY . .`
+# tar ellers med seg git-historikk, testrapporter og manifester, som både gjør
+# laget større og gjør at bildet bygges på nytt av endringer det ikke bryr seg om.
+.git
+.github
+node_modules
+build
+.svelte-kit
+playwright-report
+test-results
+deploy
+docs
+e2e
+tests
+.env
+.env.*
+!.env.example

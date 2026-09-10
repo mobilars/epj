@@ -1,0 +1,114 @@
+# ---------------------------------------------------------------------------
+# Kontinuerlig integrasjon.
+#
+# Kjører på Woodpecker med Kubernetes-motoren. Hvert steg er en pod i
+# navnerommet `woodpecker`, og arbeidsmappen er et volum som følger med gjennom
+# hele kjøringen.
+#
+# Rekkefølgen er valgt slik at det som feiler oftest, feiler først: typene, så
+# enhetstestene, så nettleseren, og til slutt bildet.
+# ---------------------------------------------------------------------------
+when:
+  - event: [push, pull_request, manual]
+
+variables:
+  - &node node:22-alpine
+  - &register registry.container-registry.svc.cluster.local:5000/epj
+  # Testene skriver til databasen. Én instans per kjøring, kastes etterpå.
+  - &postgres_env
+    POSTGRES_USER: epj
+    POSTGRES_PASSWORD: epj
+    POSTGRES_DB: epj
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment: *postgres_env
+
+steps:
+  typekontroll:
+    image: *node
+    environment:
+      # Nettleserne til Playwright trengs ikke for typekontroll og bygg.
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    commands:
+      - npm ci
+      - npm run check
+      - npm run build
+
+  enhetstester:
+    image: *node
+    environment:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      EPJ_DATA_KEY: ci-nokkel-kun-for-testkjoring-000000000
+      EPJ_ORG_HER_ID: '8000001'
+      EPJ_ORG_ORGNR: '994598759'
+      EPJ_INTEGRASJON_MODUS: mock
+      EPJ_TEST_DATABASE_URL: postgres://epj:epj@postgres:5432/postgres
+    commands:
+      - npm ci
+      - until nc -z postgres 5432; do sleep 1; done
+      - npm test
+
+  ende-til-ende:
+    image: mcr.microsoft.com/playwright:v1.63.0-noble
+    environment:
+      EPJ_DATA_KEY: ci-nokkel-kun-for-testkjoring-000000000
+      EPJ_BASE_URL: http://127.0.0.1:4173
+      EPJ_ORG_HER_ID: '8000001'
+      EPJ_ORG_ORGNR: '994598759'
+      EPJ_INTEGRASJON_MODUS: mock
+      E2E_DATABASE_URL: postgres://epj:epj@postgres:5432/epj_e2e
+    commands:
+      - npm ci
+      - npx playwright test
+
+  bygg-bilde:
+    image: gcr.io/kaniko-project/executor:v1.23.2-debug
+    commands:
+      # `--compressed-caching=false` og `--snapshot-mode=redo` holder minnebruken
+      # nede. Uten dem blir kaniko drept av kjernen på et node_modules av denne
+      # størrelsen, lenge før bildet er ferdig.
+      - >-
+        /kaniko/executor
+        --context="$CI_WORKSPACE"
+        --dockerfile="$CI_WORKSPACE/docker/Dockerfile"
+        --destination="registry.container-registry.svc.cluster.local:5000/epj:$CI_COMMIT_SHA"
+        --destination="registry.container-registry.svc.cluster.local:5000/epj:latest"
+        --insecure
+        --skip-tls-verify
+        --compressed-caching=false
+        --snapshot-mode=redo
+    when:
+      - event: [push, manual]
+        branch: [main, master]
+
+  rull-ut:
+    image: bitnami/kubectl:1.33
+    # Tjenestekontoen har bare lov til å bytte image i navnerommet `epj`.
+    # Se deploy/apus/ci-rbac.yaml.
+    backend_options:
+      kubernetes:
+        serviceAccountName: epj-deployer
+    commands:
+      - kubectl -n epj set image deployment/epj epj=localhost:32000/epj:$CI_COMMIT_SHA
+      - kubectl -n epj rollout status deployment/epj --timeout=10m
+    when:
+      - event: [push, manual]
+        branch: [main, master]
+
+  varsle-e-post:
+    image: drillster/drone-email
+    settings:
+      host: smtp-relay.brevo.com
+      port: 587
+      username: ae59ac001@smtp-brevo.com
+      password:
+        from_secret: brevo_smtp_key
+      from: lars@roland.bz
+      recipients:
+        - lars@roland.bz
+      recipients_only: true
+      subject: '[${CI_PIPELINE_STATUS}] ${CI_REPO} bygg #${CI_PIPELINE_NUMBER}'
+    when:
+      - status: [failure]

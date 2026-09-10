@@ -46,8 +46,16 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-epj}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-epj}
       SPRING_DATASOURCE_DRIVERCLASSNAME: org.postgresql.Driver
-      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgres94Dialect
-      SPRING_JPA_PROPERTIES_HIBERNATE_SEARCH_ENABLED: 'false'
+      # Dialekten må settes med SPRING_APPLICATION_JSON. Bildets
+      # application.yaml har punktum i selve nøkkelen
+      # (`hibernate.dialect: ...HapiFhirH2Dialect`), og en miljøvariabel binder
+      # til en annen nøkkel i det samme kartet - HAPI blir da stående på
+      # H2-dialekten og bygger skjemaet med `clob`- og `blob`-kolonner
+      # PostgreSQL ikke har. Verifisert mot hapiproject/hapi:v8.0.0.
+      SPRING_APPLICATION_JSON: >-
+        {"spring.jpa.properties.hibernate.dialect":
+        "ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgres94Dialect",
+        "spring.jpa.properties.hibernate.search.enabled": false}
       # R5 er datamodellen for hele journalen.
       HAPI_FHIR_FHIR_VERSION: R5
       HAPI_FHIR_SERVER_ADDRESS: http://hapi:8080/fhir

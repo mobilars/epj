@@ -1,0 +1,9 @@
+# Med én instans ville minAvailable: 1 blokkert enhver frivillig utflytting,
+# og dermed også nodevedlikehold.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: epj
+  namespace: epj
+spec:
+  minAvailable: 0

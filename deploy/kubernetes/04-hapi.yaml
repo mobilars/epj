@@ -35,11 +35,12 @@ spec:
   selector:
     matchLabels:
       app: hapi
+  # HAPI er én instans mot ett skjema, og bygger skjemaet ved oppstart. En
+  # rullerende oppdatering ville kjørt to instanser mot den samme databasen
+  # samtidig - to skjemaoppdateringer i parallell - og krevd dobbelt minne av
+  # den tyngste komponenten i oppsettet. Vi tar heller nedetiden.
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
+    type: Recreate
   template:
     metadata:
       labels:
@@ -65,10 +66,22 @@ spec:
                   key: POSTGRES_PASSWORD
             - name: SPRING_DATASOURCE_DRIVERCLASSNAME
               value: org.postgresql.Driver
-            - name: SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT
-              value: ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgres94Dialect
-            - name: SPRING_JPA_PROPERTIES_HIBERNATE_SEARCH_ENABLED
-              value: 'false'
+            # Dialekten settes med SPRING_APPLICATION_JSON, ikke som egen
+            # miljøvariabel. Bildets application.yaml har punktum i selve
+            # nøkkelen (`hibernate.dialect: ...HapiFhirH2Dialect`), og en
+            # miljøvariabel binder til en annen nøkkel i det samme kartet.
+            # Følgen er at HAPI blir stående på H2-dialekten og bygger skjemaet
+            # med `clob`- og `blob`-kolonner PostgreSQL ikke har. Verifisert mot
+            # hapiproject/hapi:v8.0.0.
+            - name: SPRING_APPLICATION_JSON
+              value: >-
+                {"spring.jpa.properties.hibernate.dialect":
+                "ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgres94Dialect",
+                "spring.jpa.properties.hibernate.search.enabled": false,
+                "hapi.fhir.tenant_identification_strategy": "URL_BASED",
+                "hapi.fhir.partitioning.allow_references_across_partitions": false,
+                "hapi.fhir.partitioning.partitioning_include_in_search_hashes": false,
+                "hapi.fhir.partitioning.conditional_create_duplicate_identifiers_enabled": false}
 
             # R5 er datamodellen for hele journalen.
             - name: HAPI_FHIR_FHIR_VERSION
@@ -78,17 +91,18 @@ spec:
 
             # --- Multitenancy ---------------------------------------------
             # Hver virksomhet har sin egen partisjon, og partisjonsnavnet
-            # inngår i FHIR-URL-en: /fhir/<virksomhet>/Patient/123.
-            - name: HAPI_FHIR_TENANT_IDENTIFICATION_STRATEGY
-              value: URL_BASED
-            # Dette er det som gjør at en ressurs i én virksomhet ikke kan
-            # peke inn i en annen - heller ikke ved en feil i vår egen kode.
-            - name: HAPI_FHIR_PARTITIONING_ALLOW_REFERENCES_ACROSS_PARTITIONS
-              value: 'false'
-            - name: HAPI_FHIR_PARTITIONING_CROSS_PARTITION_REFERENCE_MODE
-              value: 'NOT_ALLOWED'
-            - name: HAPI_FHIR_PARTITIONING_PARTITIONING_INCLUDE_IN_SEARCH_HASHES
-              value: 'false'
+            # inngår i FHIR-URL-en: /fhir/<virksomhet>/Patient/123. Nøklene
+            # står i SPRING_APPLICATION_JSON over, ikke som egne
+            # miljøvariabler: `tenant_identification_strategy` og
+            # `allow_references_across_partitions` har understrek i navnet, og
+            # Spring leser `HAPI_FHIR_TENANT_IDENTIFICATION_STRATEGY` som
+            # `hapi.fhir.tenant.identification.strategy` - en annen nøkkel, som
+            # ingen leser. Uten dette er partisjoneringen av, og /fhir/<v>/
+            # svarer 404 «Unknown resource type».
+            #
+            # `allow_references_across_partitions: false` er det som gjør at en
+            # ressurs i én virksomhet ikke kan peke inn i en annen - heller
+            # ikke ved en feil i vår egen kode.
             - name: HAPI_FHIR_PARTITIONING_CONDITIONAL_CREATE_DUPLICATE_IDENTIFIERS_ENABLED
               value: 'false'
 

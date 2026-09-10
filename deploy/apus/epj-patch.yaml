@@ -1,0 +1,41 @@
+# Databasen ligger i operatørens klynge, ikke i StatefulSet-et fra
+# grunnoppsettet, og forbindelsen er TLS-beskyttet. Applikasjonen må derfor
+# både peke et annet sted og stole på klyngens egen CA.
+#
+# Én instans, ikke to: dette er en referanseinstallasjon på en liten klynge.
+# Applikasjonen er fortsatt tilstandsløs, så tallet er et ressursvalg og ikke
+# en begrensning i koden.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: epj
+  namespace: epj
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: epj
+          # POSTGRES_PASSWORD må stå foran EPJ_DATABASE_URL: Kubernetes
+          # utvider `$(...)` bare med variabler som er definert tidligere i
+          # lista, og en strategisk fletting flytter feltene den rører fremst.
+          # Uten dette havner det uutvidede `$(POSTGRES_PASSWORD)` i URL-en.
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: epj-hemmeligheter
+                  key: POSTGRES_PASSWORD
+            - name: EPJ_DATABASE_URL
+              value: postgres://epj:$(POSTGRES_PASSWORD)@postgres-rw:5432/epj
+          volumeMounts:
+            - name: postgres-ca
+              mountPath: /etc/epj/postgres-ca
+              readOnly: true
+      volumes:
+        - name: postgres-ca
+          secret:
+            secretName: postgres-ca
+            items:
+              - key: ca.crt
+                path: ca.crt

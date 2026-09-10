@@ -1,0 +1,26 @@
+# ---------------------------------------------------------------------------
+# Grunnoppsettet, samlet.
+#
+#   kubectl apply -k deploy/kubernetes
+#
+# Hemmelighetene (01-hemmeligheter.yaml) er ikke med: de lages fra
+# kommandolinjen, se filen selv. Migrasjonsjobben (06-migrasjon.yaml) er heller
+# ikke med - en Job er uforanderlig, og skal kjøres som et eget, kontrollert
+# steg før utrullingen, ikke som en del av den.
+#
+# Miljøspesifikke oppsett legger seg som et overlag over denne mappen. Se
+# `apus/` for et eksempel: der byttes PostgreSQL ut med en operatørdrevet
+# klynge, og vertsnavnene med virkelige.
+# ---------------------------------------------------------------------------
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: epj
+
+resources:
+  - 00-namespace.yaml
+  - 02-konfigurasjon.yaml
+  - 03-postgres.yaml
+  - 04-hapi.yaml
+  - 05-epj.yaml
+  - 10-nettverk.yaml
+  - 11-ingress.yaml

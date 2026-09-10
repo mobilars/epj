@@ -1,0 +1,34 @@
+# ---------------------------------------------------------------------------
+# Inngang for dette miljøet. Erstatter 11-ingress.yaml.
+#
+# Én virksomhet, ett vertsnavn. Plattformadministrasjonen har ikke fått eget
+# vertsnavn her; se merknaden om EPJ_PLATTFORM_VERTSNAVN i konfigurasjon.yaml.
+# ---------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: epj-apus
+  namespace: epj
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+    # Journalen setter sine egne sikkerhetsheadere; ingressen skal ikke
+    # overstyre dem.
+    nginx.ingress.kubernetes.io/proxy-body-size: 16m
+spec:
+  ingressClassName: public
+  tls:
+    - hosts:
+        - epj.apps.apus.no
+      secretName: epj-tls
+  rules:
+    - host: epj.apps.apus.no
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: epj
+                port:
+                  number: 80

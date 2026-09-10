@@ -1,0 +1,64 @@
+# ---------------------------------------------------------------------------
+# PostgreSQL, driftet av CloudNativePG-operatoren.
+#
+# Erstatter `03-postgres.yaml` fra grunnoppsettet, slik den filen selv legger
+# opp til: resten av manifestene bryr seg bare om at det finnes en tjeneste
+# som heter `postgres` på port 5432, med brukeren `epj` og databasene `epj`
+# og `hapi`. Det er nøyaktig det denne filen gir dem.
+#
+# Hva operatoren gir oss som StatefulSet-oppsettet ikke gjør:
+#
+#   * failover og omstart uten at noen må gjøre noe manuelt
+#   * WAL-arkivering og punkt-i-tid-gjenoppretting når `backup` settes opp
+#   * TLS på klientforbindelsen med sertifikater operatoren selv fornyer
+#   * rullerende oppgradering av PostgreSQL-versjonen
+#
+# Operatøren lager tjenestene `postgres-rw`, `postgres-ro` og `postgres-r`.
+# Overlaget peker `epj` og `hapi` på `postgres-rw`; StatefulSet-et og tjenesten
+# `postgres` fra grunnoppsettet tas ut i kustomization.yaml.
+# ---------------------------------------------------------------------------
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres
+  namespace: epj
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.3
+
+  # Podene arver `app: postgres`, slik at nettverkspolicyene i 10-nettverk.yaml
+  # treffer dem uten at den filen må endres.
+  inheritedMetadata:
+    labels:
+      app: postgres
+
+  storage:
+    size: 20Gi
+    storageClass: microk8s-hostpath
+
+  bootstrap:
+    initdb:
+      database: epj
+      owner: epj
+      dataChecksums: true
+      # Samme passord som `epj-hemmeligheter` gir resten av oppsettet, slik at
+      # 04-hapi.yaml og 05-epj.yaml kobler seg til uendret. Se LESMEG.md.
+      secret:
+        name: postgres-legitimasjon
+      postInitSQL:
+        # Kliniske data ligger i sin egen database, atskilt fra identitet,
+        # tilgangsstyring og sikkerhetslogg - som i 03-postgres.yaml.
+        - CREATE DATABASE hapi OWNER epj
+
+  postgresql:
+    parameters:
+      max_connections: '200'
+      shared_buffers: 256MB
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: '2'
+      memory: 2Gi

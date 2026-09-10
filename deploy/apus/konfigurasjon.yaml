@@ -1,0 +1,44 @@
+# ---------------------------------------------------------------------------
+# Konfigurasjon for dette miljøet. Slås sammen med 02-konfigurasjon.yaml.
+#
+# Dette er en referanseinstallasjon på epj.apps.apus.no, ikke et klinisk
+# driftsmiljø. Tre av verdiene under avviker bevisst fra grunnoppsettet, og
+# alle tre må snus før systemet ser ekte pasientopplysninger:
+#
+#   EPJ_TESTINNLOGGING          brukernavn og passord i stedet for HelseID
+#   EPJ_HELSEID_ENABLED         ingen HelseID-klient er registrert for oss
+#   EPJ_INTEGRASJON_MODUS       SFM, NHN og Helfo svarer lokalt, ikke i NHN
+#
+# Se docs/apne-punkter.md.
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: epj-konfigurasjon
+  namespace: epj
+data:
+  EPJ_BASE_URL: https://epj.apps.apus.no
+
+  # Én virksomhet, ett vertsnavn. Standardvirksomheten har ikke noe vertsnavn
+  # registrert, så oppslaget må få lov til å falle tilbake på den. Settes dette
+  # til `false`, svarer journalen 404 på alt inntil vertsnavnet er registrert
+  # fra plattformadministrasjonen.
+  EPJ_TILLAT_UKJENT_VERTSNAVN: 'true'
+  # Tomt: plattformadministrasjonen har ikke eget vertsnavn her, og /systemadmin
+  # er dermed ikke eksponert. Gi den et eget navn under *.apps.apus.no for å
+  # slå den på.
+  EPJ_PLATTFORM_VERTSNAVN: ''
+
+  # CloudNativePG signerer tjenersertifikatet med klyngens egen CA.
+  EPJ_DB_SSL: 'true'
+  NODE_EXTRA_CA_CERTS: /etc/epj/postgres-ca/ca.crt
+
+  EPJ_TESTINNLOGGING: 'true'
+  EPJ_VIS_DEMOBRUKERE: 'true'
+  EPJ_HELSEID_ENABLED: 'false'
+  EPJ_INTEGRASJON_MODUS: mock
+
+  EPJ_ORG_NAVN: Storgata Legesenter
+  EPJ_ORG_ORGNR: '999999999'
+  EPJ_ORG_HER_ID: '8000001'
+  EPJ_ORG_KOMMUNENR: '0301'

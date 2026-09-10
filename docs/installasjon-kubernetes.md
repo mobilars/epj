@@ -9,6 +9,7 @@ gang på én maskin, er [installasjon-docker.md](installasjon-docker.md) kortere
 - [Tegningen](#tegningen)
 - [Krav](#krav)
 - [Installasjon](#installasjon)
+- [Miljøspesifikke overlag](#miljøspesifikke-overlag)
 - [Nettverkspolicyene](#nettverkspolicyene)
 - [Multitenancy](#multitenancy)
 - [Oppgradering](#oppgradering)
@@ -150,6 +151,72 @@ registreres på en virksomhet i `/systemadmin`, ellers avvises forespørslene.
 kubectl -n epj get pods
 curl -s https://legekontoret-a.example.no/api/helse | jq
 ```
+
+## Miljøspesifikke overlag
+
+Manifestene i denne mappen er generiske. De har `example.no` som vertsnavn,
+`nginx` som ingressklasse og et StatefulSet som database - verdier som er riktige
+som utgangspunkt og gale i enhver konkret klynge.
+
+Legg derfor miljøet ditt som et kustomize-overlag ved siden av, ikke som
+endringer i disse filene:
+
+```
+deploy/
+  kubernetes/     # generisk, uendret
+  apus/           # én klynge:  kubectl apply -k deploy/apus
+```
+
+[`deploy/apus/`](../deploy/apus) er et fullstendig eksempel, og er i drift. Det
+bytter ut PostgreSQL med CloudNativePG, setter våre vertsnavn og
+sertifikatutsteder, henter bildet fra registeret i klyngen, og skrur ned
+ressursbruken til noder på under 4 GB. Se
+[`deploy/apus/LESMEG.md`](../deploy/apus/LESMEG.md).
+
+### HAPI leser ikke alle innstillinger fra miljøvariabler
+
+Dette er den fellen som koster mest tid, og den gir ingen feilmelding som peker
+på årsaken.
+
+Spring binder miljøvariabler ved å gjøre om understrek til punktum.
+`HAPI_FHIR_TENANT_IDENTIFICATION_STRATEGY` blir altså
+`hapi.fhir.tenant.identification.strategy`. Nøkkelen HAPI faktisk leser heter
+`hapi.fhir.tenant_identification_strategy`, med understrek. De to er ikke det
+samme, og verdien havner et sted ingen ser etter.
+
+Det samme gjelder `spring.jpa.properties.hibernate.dialect`: der ligger
+punktumet inne i selve nøkkelen i kartet, og en miljøvariabel lager en annen
+oppføring ved siden av istedenfor å overstyre den som er der.
+
+Følgene, slik de så ut i en klynge:
+
+| Innstilling som ikke ble lest | Hva som skjedde |
+| --- | --- |
+| `hibernate.dialect` | HAPI ble stående på H2-dialekten og bygde skjemaet med `clob`- og `blob`-kolonner. PostgreSQL avviste 27 tabeller. Serveren startet likevel, og feilet først på første søk med «relation "hfj_resource" does not exist» |
+| `tenant_identification_strategy` | `/fhir/<virksomhet>/` svarte 404 «Unknown resource type». `/api/helse` meldte `"fhir": false`, mens `/fhir/metadata` svarte 200 |
+
+Løsningen er `SPRING_APPLICATION_JSON`, som lar nøkkelen skrives ordrett og har
+høyere presedens enn konfigurasjonsfila i bildet. `04-hapi.yaml` gjør dette.
+Ikke gjør om disse tilbake til miljøvariabler fordi de ser penere ut.
+
+Kontroller etter oppgradering av HAPI:
+
+```bash
+kubectl -n epj exec deploy/epj -- node -e   "fetch('http://hapi:8080/fhir/standard/metadata').then(r=>console.log(r.status))"
+```
+
+`200` betyr at partisjoneringen er på. `404` betyr at den ikke er det.
+
+### Rekkefølgen på miljøvariabler betyr noe
+
+`EPJ_DATABASE_URL` bruker `$(POSTGRES_PASSWORD)`. Kubernetes utvider bare
+variabler som er definert *tidligere* i `env`-lista. Står de i motsatt
+rekkefølge, sendes strengen `$(POSTGRES_PASSWORD)` til databasen som passord, og
+loggen viser `password authentication failed`.
+
+Dette er lett å ødelegge med et overlag: en strategisk fletting flytter feltene
+den rører fremst i lista. Et overlag som setter `EPJ_DATABASE_URL` må derfor
+sette `POSTGRES_PASSWORD` også, og sette den først.
 
 ## Nettverkspolicyene
 

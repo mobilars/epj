@@ -2,6 +2,11 @@
 
 FROM node:22-alpine AS bygg
 WORKDIR /app
+# Produksjonsbygget skal verken laste ned nettlesere til Playwright eller be om
+# et V8-heap som ikke finnes. Uten dette drar `npm ci` med seg noen hundre
+# megabyte bildet aldri bruker, og byggetrinnet blir drept for minne i CI.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV NODE_OPTIONS=--max-old-space-size=1536
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .

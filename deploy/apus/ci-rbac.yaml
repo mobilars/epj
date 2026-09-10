@@ -1,0 +1,48 @@
+# ---------------------------------------------------------------------------
+# Rettighetene CI trenger for å rulle ut.
+#
+# Woodpecker kjører byggetrinnene som pods i navnerommet `woodpecker`. Denne
+# tjenestekontoen er alt CI får lov til i `epj`: bytte image på de to
+# deploymentene, og lese hvordan utrullingen gikk. Ingen tilgang til
+# hemmeligheter, ingen tilgang til databaseklyngen, ingen sletting.
+#
+# Ligger utenfor kustomization.yaml fordi den lager en tjenestekonto i et annet
+# navnerom enn overlaget, og navneromstransformeringen ville flyttet den:
+#
+#   kubectl apply -f deploy/apus/ci-rbac.yaml
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: epj-deployer
+  namespace: woodpecker
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: epj-deployer
+  namespace: epj
+rules:
+  - apiGroups: ['apps']
+    resources: ['deployments']
+    verbs: ['get', 'list', 'watch', 'patch']
+  - apiGroups: ['apps']
+    resources: ['deployments/status']
+    verbs: ['get']
+  - apiGroups: ['']
+    resources: ['pods']
+    verbs: ['get', 'list']
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: epj-deployer
+  namespace: epj
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: epj-deployer
+subjects:
+  - kind: ServiceAccount
+    name: epj-deployer
+    namespace: woodpecker
