@@ -101,16 +101,22 @@ export async function startLogin(cookies: Cookies, returnTo: string): Promise<st
 		maxAge: 600
 	});
 
-	return oidc
-		.buildAuthorizationUrl(configuration, {
-			redirect_uri: redirectUri(),
-			scope: config.integrations.healthId.scopes.join(' '),
-			state,
-			nonce,
-			code_challenge: codeChallenge,
-			code_challenge_method: 'S256'
-		})
-		.toString();
+	const parameters = {
+		redirect_uri: redirectUri(),
+		scope: config.integrations.healthId.scopes.join(' '),
+		state,
+		nonce,
+		code_challenge: codeChallenge,
+		code_challenge_method: 'S256'
+	};
+
+	// HelseID requires the request to be pushed to the authorization server
+	// first (RFC 9126), so the parameters never travel through the browser. The
+	// push is authenticated with the same client assertion as the token call.
+	const url = configuration.serverMetadata().pushed_authorization_request_endpoint
+		? await oidc.buildAuthorizationUrlWithPAR(configuration, parameters)
+		: oidc.buildAuthorizationUrl(configuration, parameters);
+	return url.toString();
 }
 
 export function redirectUri(): string {
