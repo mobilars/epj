@@ -6,6 +6,7 @@ import { createSession } from '$srv/auth/session';
 import { isConfigured as healthIdConfigured } from '$srv/auth/helseid';
 import { log } from '$srv/audit';
 import { rateLimit } from '$srv/http';
+import { requireTenant } from '$srv/tenant/context';
 import { DEMO_PASSWORD, DEMO_TOTP_SECRET, DEMO_USERS } from '$srv/auth/demo';
 
 /**
@@ -33,7 +34,9 @@ export const load: PageServerLoad = async (event) => {
 		demoPassword: config.testLogin.showDemoUsers ? DEMO_PASSWORD : '',
 		demoTotpSecret: config.testLogin.showDemoUsers ? DEMO_TOTP_SECRET : '',
 		returnTo: trygtReturnTo(event.url.searchParams.get('retur')),
-		organisation: config.organisation.name
+		// The organisation the hostname resolves to - not the one in the
+		// configuration, which is only the fallback used to seed the first one.
+		organisation: requireTenant().name
 	};
 };
 
