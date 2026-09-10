@@ -45,6 +45,7 @@ export const RETTIGHETER = [
 	'journal:signer',
 	'journal:rett',
 	'journal:slett-begjaering',
+	'journal:utlever',
 	'resept:forskriv',
 	'resept:fornye',
 	'melding:les',
@@ -86,7 +87,7 @@ export const ROLLE_DEFINISJONER: Record<Rolle, RolleDefinisjon> = {
 		navn: 'Lege',
 		beskrivelse: 'Fastlege med fullt behandleransvar.',
 		scopes: [...KLINISK_LESE, ...KLINISK_SKRIVE, 'user/MedicationRequest.cruds', 'user/Patient.cruds', 'user/DiagnosticReport.cruds', 'user/Claim.cruds', 'user/Communication.cruds', 'user/Consent.rs'],
-		rettigheter: ['journal:les', 'journal:skriv', 'journal:signer', 'journal:rett', 'journal:slett-begjaering', 'resept:forskriv', 'resept:fornye', 'melding:les', 'melding:send', 'melding:signer', 'oppgjor:registrer', 'time:administrer', 'pasient:opprett', 'pasient:sperr', 'logg:innsyn'],
+		rettigheter: ['journal:les', 'journal:skriv', 'journal:signer', 'journal:rett', 'journal:slett-begjaering', 'journal:utlever', 'resept:forskriv', 'resept:fornye', 'melding:les', 'melding:send', 'melding:signer', 'oppgjor:registrer', 'time:administrer', 'pasient:opprett', 'pasient:sperr', 'logg:innsyn'],
 		kanNodrett: true,
 		kanSeAllePasienter: false
 	},
@@ -94,7 +95,7 @@ export const ROLLE_DEFINISJONER: Record<Rolle, RolleDefinisjon> = {
 		navn: 'Vikarlege',
 		beskrivelse: 'Lege som dekker et fastlegehjemmel i et avgrenset tidsrom.',
 		scopes: [...KLINISK_LESE, ...KLINISK_SKRIVE, 'user/MedicationRequest.cruds', 'user/Claim.cruds', 'user/Communication.cruds'],
-		rettigheter: ['journal:les', 'journal:skriv', 'journal:signer', 'resept:forskriv', 'resept:fornye', 'melding:les', 'melding:send', 'melding:signer', 'oppgjor:registrer'],
+		rettigheter: ['journal:les', 'journal:skriv', 'journal:signer', 'journal:utlever', 'resept:forskriv', 'resept:fornye', 'melding:les', 'melding:send', 'melding:signer', 'oppgjor:registrer'],
 		kanNodrett: true,
 		kanSeAllePasienter: false
 	},
@@ -118,7 +119,7 @@ export const ROLLE_DEFINISJONER: Record<Rolle, RolleDefinisjon> = {
 		navn: 'Helsesekretær',
 		beskrivelse: 'Administrativ oppfølging, timebok og oppgjør. Begrenset innsyn i kliniske notater.',
 		scopes: ['user/Patient.rs', 'user/Appointment.cruds', 'user/Encounter.rs', 'user/Communication.rs', 'user/Coverage.rs', 'user/Claim.cruds', 'user/Practitioner.rs', 'user/Organization.rs'],
-		rettigheter: ['journal:les', 'melding:les', 'time:administrer', 'pasient:opprett', 'oppgjor:registrer', 'oppgjor:send'],
+		rettigheter: ['journal:les', 'journal:utlever', 'melding:les', 'time:administrer', 'pasient:opprett', 'oppgjor:registrer', 'oppgjor:send'],
 		kanNodrett: false,
 		kanSeAllePasienter: false
 	},
@@ -134,7 +135,7 @@ export const ROLLE_DEFINISJONER: Record<Rolle, RolleDefinisjon> = {
 		navn: 'Jordmor',
 		beskrivelse: 'Svangerskapsomsorg.',
 		scopes: [...KLINISK_LESE, ...KLINISK_SKRIVE],
-		rettigheter: ['journal:les', 'journal:skriv', 'journal:signer', 'melding:les', 'melding:send', 'oppgjor:registrer'],
+		rettigheter: ['journal:les', 'journal:skriv', 'journal:signer', 'journal:utlever', 'melding:les', 'melding:send', 'oppgjor:registrer'],
 		kanNodrett: true,
 		kanSeAllePasienter: false
 	},
@@ -142,7 +143,7 @@ export const ROLLE_DEFINISJONER: Record<Rolle, RolleDefinisjon> = {
 		navn: 'Psykolog',
 		beskrivelse: 'Psykologfaglig utredning og behandling.',
 		scopes: [...KLINISK_LESE, ...KLINISK_SKRIVE],
-		rettigheter: ['journal:les', 'journal:skriv', 'journal:signer', 'melding:les', 'melding:send', 'oppgjor:registrer'],
+		rettigheter: ['journal:les', 'journal:skriv', 'journal:signer', 'journal:utlever', 'melding:les', 'melding:send', 'oppgjor:registrer'],
 		kanNodrett: true,
 		kanSeAllePasienter: false
 	},
@@ -158,7 +159,7 @@ export const ROLLE_DEFINISJONER: Record<Rolle, RolleDefinisjon> = {
 		navn: 'Personvernombud',
 		beskrivelse: 'Kontrollerer sikkerhetsloggen og behandler innsynsbegjæringer.',
 		scopes: ['user/AuditEvent.rs', 'user/Consent.rs', 'user/Patient.rs'],
-		rettigheter: ['admin:logg', 'logg:innsyn'],
+		rettigheter: ['admin:logg', 'logg:innsyn', 'journal:utlever'],
 		kanNodrett: false,
 		kanSeAllePasienter: true
 	},
@@ -183,7 +184,7 @@ export const ROLLE_DEFINISJONER: Record<Rolle, RolleDefinisjon> = {
 		navn: 'Pasient',
 		beskrivelse: 'Innbygger med innsyn i egen journal og egen logg.',
 		scopes: ['patient/Patient.rs', 'patient/Observation.rs', 'patient/Condition.rs', 'patient/MedicationRequest.rs', 'patient/AllergyIntolerance.rs', 'patient/Immunization.rs', 'patient/DocumentReference.rs', 'patient/Encounter.rs', 'patient/Appointment.rs', 'patient/AuditEvent.rs'],
-		rettigheter: ['logg:innsyn'],
+		rettigheter: ['logg:innsyn', 'journal:utlever'],
 		kanNodrett: false,
 		kanSeAllePasienter: false
 	}

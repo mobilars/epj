@@ -11,6 +11,7 @@
 		nodrett: boolean;
 		sperret: boolean;
 		kanBeOmNodrett: boolean;
+		kanUtlevere: boolean;
 		krevErEngangskode: boolean;
 	};
 
@@ -25,7 +26,8 @@
 		{ href: `/pasienter/${data.patientId}/meldinger`, tekst: 'Meldinger' },
 		{ href: `/pasienter/${data.patientId}/oppgjor`, tekst: 'Oppgjør' },
 		{ href: `/pasienter/${data.patientId}/apper`, tekst: 'Apper' },
-		{ href: `/pasienter/${data.patientId}/logg`, tekst: 'Innsynslogg' }
+		{ href: `/pasienter/${data.patientId}/logg`, tekst: 'Innsynslogg' },
+		...(data.kanUtlevere ? [{ href: `/pasienter/${data.patientId}/utlevering`, tekst: 'Utlevering' }] : [])
 	]);
 </script>
 

@@ -66,6 +66,7 @@ export const load: LayoutServerLoad = async (event) => {
 		sperret: sperringer.length > 0,
 		sperringer: sperringer.map((s) => ({ omfang: s.omfang, begrunnelse: s.begrunnelse, registrert: s.registrert })),
 		kanBeOmNodrett: kanNodrett(ctx.roller),
+		kanUtlevere: ctx.rettigheter.has('journal:utlever'),
 		krevErEngangskode: config.security.requireMfa && ctx.amr !== 'helseid'
 	};
 };
