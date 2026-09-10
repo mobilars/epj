@@ -5,6 +5,35 @@
 	// The form works without JavaScript: the one-time code field is always there,
 	// and the username is filled in server-side after a failed attempt.
 	const errorFromUrl = $derived(page.url.searchParams.get('feil'));
+
+	let usernameField = $state<HTMLInputElement>();
+	let passwordField = $state<HTMLInputElement>();
+	let oneTimeCodeField = $state<HTMLInputElement>();
+	let filling = $state('');
+
+	/**
+	 * Fills the form for a demo account.
+	 *
+	 * The one-time code is fetched rather than rendered with the page: it is
+	 * valid for half a minute, so a code from page load would usually be stale
+	 * by the time anyone clicked. Without JavaScript the account details are
+	 * still listed, and the code can be produced from the TOTP secret below.
+	 */
+	async function fillIn(username: string) {
+		filling = username;
+		if (!usernameField || !passwordField || !oneTimeCodeField) return;
+		usernameField.value = username;
+		passwordField.value = data.demoPassword;
+		try {
+			const response = await fetch(`/logg-inn/demokode?brukernavn=${encodeURIComponent(username)}`);
+			if (response.ok) oneTimeCodeField.value = (await response.json()).code;
+		} catch {
+			/* leave the code field to the user */
+		}
+		filling = '';
+		if (oneTimeCodeField.value) passwordField.form?.requestSubmit();
+		else oneTimeCodeField.focus();
+	}
 </script>
 
 <div class="smal">
@@ -45,11 +74,18 @@
 					<!-- Feltet fylles bevisst ikke ut på nytt etter et mislykket forsøk:
 					     en reaktiv verdi på et input-felt overskriver det brukeren
 					     rekker å taste før siden er ferdig hydrert. -->
-					<input id="brukernavn" name="brukernavn" autocomplete="username" required />
+					<input id="brukernavn" name="brukernavn" autocomplete="username" required bind:this={usernameField} />
 				</div>
 				<div class="felt">
 					<label for="passord">Passord</label>
-					<input id="passord" name="passord" type="password" autocomplete="current-password" required />
+					<input
+						id="passord"
+						name="passord"
+						type="password"
+						autocomplete="current-password"
+						required
+						bind:this={passwordField}
+					/>
 				</div>
 				<div class="felt">
 					<label for="engangskode">Engangskode</label>
@@ -59,6 +95,7 @@
 						inputmode="numeric"
 						autocomplete="one-time-code"
 						placeholder="000000"
+						bind:this={oneTimeCodeField}
 					/>
 					<small>Seks siffer fra autentiseringsappen din.</small>
 				</div>
@@ -68,16 +105,32 @@
 			{#if data.demoUsers.length}
 				<hr />
 				<h3>Demobrukere</h3>
-				<p class="svak">Passord for alle: <span class="mono">Testpassord1!</span> · engangskode: <span class="mono">000000</span></p>
+				<p class="svak">
+					Trykk på en bruker for å logge inn som den. Passord for alle:
+					<span class="mono">{data.demoPassword}</span>. Engangskoden er en TOTP-kode, ikke et
+					fast tall - den regnes ut fra hemmeligheten
+					<span class="mono">{data.demoTotpSecret}</span>, som kan legges inn i en
+					autentiseringsapp.
+				</p>
 				<div class="tabell-omslag">
 					<table>
-						<thead><tr><th>Brukernavn</th><th>Navn</th><th>Rolle</th></tr></thead>
+						<thead><tr><th>Brukernavn</th><th>Navn</th><th>Rolle</th><th></th></tr></thead>
 						<tbody>
 							{#each data.demoUsers as d (d.username)}
 								<tr>
 									<td class="mono">{d.username}</td>
 									<td>{d.name}</td>
 									<td>{d.role}</td>
+									<td>
+										<button
+											type="button"
+											class="liten"
+											disabled={filling !== ''}
+											onclick={() => fillIn(d.username)}
+										>
+											{filling === d.username ? 'Logger inn …' : 'Logg inn'}
+										</button>
+									</td>
 								</tr>
 							{/each}
 						</tbody>

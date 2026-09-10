@@ -1,8 +1,10 @@
 # ---------------------------------------------------------------------------
-# Inngang for dette miljøet. Erstatter 11-ingress.yaml.
+# Ingress for this environment. Replaces 11-ingress.yaml.
 #
-# Én virksomhet, ett vertsnavn. Plattformadministrasjonen har ikke fått eget
-# vertsnavn her; se merknaden om EPJ_PLATFORM_HOSTNAME i konfigurasjon.yaml.
+# Two hostnames on the same service: the practice, and platform
+# administration. Which organisation a request concerns is derived from the
+# hostname, and /systemadmin exists only on the platform's own name - so it
+# needs a name of its own to be reachable at all.
 # ---------------------------------------------------------------------------
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -12,17 +14,28 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/ssl-redirect: 'true'
-    # Journalen setter sine egne sikkerhetsheadere; ingressen skal ikke
-    # overstyre dem.
+    # The record sets its own security headers; the ingress must not override
+    # them.
     nginx.ingress.kubernetes.io/proxy-body-size: 16m
 spec:
   ingressClassName: public
   tls:
     - hosts:
         - epj.apps.apus.no
+        - epj-admin.apps.apus.no
       secretName: epj-tls
   rules:
     - host: epj.apps.apus.no
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: epj
+                port:
+                  number: 80
+    - host: epj-admin.apps.apus.no
       http:
         paths:
           - path: /

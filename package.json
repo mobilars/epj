@@ -20,7 +20,8 @@
 		"fhir:test": "vite-node -c scripts/vite.config.ts scripts/test-fhir-server.ts",
 		"test:e2e": "playwright test",
 		"test:alle": "vitest run && playwright test",
-		"build:verktoy": "vite build --config scripts/vite.verktoy.config.ts"
+		"build:verktoy": "vite build --config scripts/vite.verktoy.config.ts",
+		"seed:helseid": "vite-node -c scripts/vite.config.ts scripts/seed-helseid-test-users.ts"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.63.0",

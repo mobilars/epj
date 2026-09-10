@@ -19,10 +19,8 @@ import { newTotpSecret } from '../src/lib/server/auth/totp';
 import { newId } from '../src/lib/server/util/ids';
 import type { FhirResource } from '../src/lib/server/fhir/types';
 
-const PASSWORD = 'Testpassord1!';
+import { DEMO_PASSWORD as PASSWORD, DEMO_TOTP_SECRET as DEMO_TOTP } from '../src/lib/server/auth/demo';
 
-/** Fixed TOTP secret in the demo, so the code can always be computed. */
-const DEMO_TOTP = 'JBSWY3DPEHPK3PXP';
 
 interface DemoPatient {
 	fnr: string;

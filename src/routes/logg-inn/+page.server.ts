@@ -6,6 +6,7 @@ import { createSession } from '$srv/auth/session';
 import { isConfigured as healthIdConfigured } from '$srv/auth/helseid';
 import { log } from '$srv/audit';
 import { rateLimit } from '$srv/http';
+import { DEMO_PASSWORD, DEMO_TOTP_SECRET, DEMO_USERS } from '$srv/auth/demo';
 
 /**
  * Sign-in.
@@ -28,14 +29,9 @@ export const load: PageServerLoad = async (event) => {
 	return {
 		healthId: healthIdConfigured(),
 		testLogin: config.testLogin.aktivert,
-		demoUsers: config.testLogin.showDemoUsers
-			? [
-					{ username: 'lege', name: 'Dr. Ingrid Fastlege', role: 'Lege' },
-					{ username: 'sykepleier', name: 'Kari Sykepleier', role: 'Sykepleier' },
-					{ username: 'sekretaer', name: 'Ola Helsesekretær', role: 'Helsesekretær' },
-					{ username: 'admin', name: 'Systemansvarlig', role: 'Systemansvarlig' }
-				]
-			: [],
+		demoUsers: config.testLogin.showDemoUsers ? DEMO_USERS : [],
+		demoPassword: config.testLogin.showDemoUsers ? DEMO_PASSWORD : '',
+		demoTotpSecret: config.testLogin.showDemoUsers ? DEMO_TOTP_SECRET : '',
 		returnTo: trygtReturnTo(event.url.searchParams.get('retur')),
 		organisation: config.organisation.name
 	};

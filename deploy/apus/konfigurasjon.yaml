@@ -24,10 +24,9 @@ data:
   # `false`, the record answers 404 to everything until the hostname is
   # registered from platform administration.
   EPJ_ALLOW_UNKNOWN_HOSTNAME: 'true'
-  # Empty: platform administration has no hostname of its own here, so
-  # /systemadmin is not exposed. Give it a name under *.apps.apus.no to turn
-  # it on.
-  EPJ_PLATFORM_HOSTNAME: ''
+  # Platform administration has its own hostname. /systemadmin exists only
+  # there, and the practice's own name never exposes it.
+  EPJ_PLATFORM_HOSTNAME: epj-admin.apps.apus.no
 
   # CloudNativePG signs the server certificate with the cluster's own CA.
   EPJ_DB_SSL: 'true'

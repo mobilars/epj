@@ -323,9 +323,17 @@ export function describeOAuthError(err: unknown): string {
 /**
  * Finds the local user for a HelseID identity, or creates it.
  *
- * Linking is on `sub` (stable in HelseID) and secondarily on HPR number, so a
- * user pre-registered by the system administrator is linked automatically on
- * first sign-in. New users are created without roles and without access.
+ * Linking is on `sub` first (stable in HelseID), then on the national identity
+ * number, then on HPR number - so a user pre-registered by the system
+ * administrator is linked automatically on first sign-in and keeps the roles
+ * they were given.
+ *
+ * The national identity number comes before HPR because not everyone at a
+ * practice has an HPR number: it is held by registered health personnel, while
+ * a medical secretary or an office manager has none. The fødselsnummer is the
+ * identifier everyone has, and the one HelseID identifies a person by.
+ *
+ * Users not pre-registered are created without roles and without access.
  */
 export async function linkToLocalUser(
 	claims: HelseIdClaims
@@ -337,23 +345,38 @@ export async function linkToLocalUser(
 			[claims.sub, tenantId]
 		);
 
+		if (!row && claims.pid) {
+			row = await one<{ id: string }>(
+				'SELECT id FROM user_account WHERE national_id = $1 AND tenant_id = $2 AND helseid_sub IS NULL',
+				[claims.pid, tenantId]
+			);
+		}
 		if (!row && claims.hprNumber) {
 			row = await one<{ id: string }>(
 				'SELECT id FROM user_account WHERE hpr_number = $1 AND tenant_id = $2 AND helseid_sub IS NULL',
 				[claims.hprNumber, tenantId]
 			);
-			if (row) {
-				await exec('UPDATE user_account SET helseid_sub = $2, name = $3, updated_at = now() WHERE id = $1', [row.id, claims.sub, claims.name]);
-			}
 		}
 
 		if (row) {
-			await exec('UPDATE user_account SET last_login = now(), failed_attempts = 0, locked_until = NULL WHERE id = $1', [row.id]);
+			// Fill in what the pre-registered account did not have. COALESCE, so a
+			// claim HelseID left out never blanks a value already recorded.
+			await exec(
+				`UPDATE user_account
+				 SET helseid_sub = $2, name = $3,
+				     national_id = COALESCE($4, national_id),
+				     hpr_number = COALESCE($5, hpr_number),
+				     last_login = now(), failed_attempts = 0, locked_until = NULL, updated_at = now()
+				 WHERE id = $1`,
+				[row.id, claims.sub, claims.name, claims.pid, claims.hprNumber]
+			);
 			const user = await getUser(row.id);
 			if (!user) throw new Error('Fant ikke brukeren etter kobling');
 			return { user, roles: await rolesFor(user.id), newUser: false };
 		}
 
+		// The username is a handle for signing in and for the admin lists, so the
+		// national identity number is deliberately not used for it.
 		const username = claims.hprNumber ? `hpr-${claims.hprNumber}` : `helseid-${claims.sub.slice(0, 12)}`;
 		const user = await createUser({
 			username,
@@ -361,7 +384,10 @@ export async function linkToLocalUser(
 			hprNumber: claims.hprNumber ?? undefined,
 			roles: [] // roles are assigned by the system administrator
 		});
-		await exec('UPDATE user_account SET helseid_sub = $2, must_change_password = false, last_login = now() WHERE id = $1', [user.id, claims.sub]);
+		await exec(
+			'UPDATE user_account SET helseid_sub = $2, national_id = $3, must_change_password = false, last_login = now() WHERE id = $1',
+			[user.id, claims.sub, claims.pid]
+		);
 		const updated = await getUser(user.id);
 		return { user: updated ?? user, roles: [], newUser: true };
 	});
