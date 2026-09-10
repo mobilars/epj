@@ -156,7 +156,43 @@ bygget: rekvisisjon og svarrapport for lab og radiologi (utover mottak),
 pleie- og omsorgsmeldinger (PLO), fødselsepikrise, og melding om
 legemiddelutlevering.
 
-### 3.5 Øvrige NHN-tjenester **[N]**
+### 3.5 CDS Hooks: flere kroker, og en ekte kilde **[N]**
+
+Bygget: `patient-view` og `medication-prescribe`, tjenesteregister per
+virksomhet, kort på pasientens forside, og tre egne tjenester
+(`kritisk-informasjon`, `manglende-maalinger`, `interaksjonssjekk`).
+
+Ikke bygget:
+
+- **`order-select`, `order-sign`, `appointment-book`** — krokene som fyrer
+  under bestilling og timeavtale.
+- **Suggestions og `system-actions`.** Et kort kan i dag si noe; det kan ikke
+  foreslå en endring journalen kan utføre med ett trykk. Det er den delen som
+  krever mest omtanke: et forslag som utføres, er en skriving en tjeneste har
+  fått gjøre.
+- **Signerte forespørsler.** Tjenesten får i dag ingen måte å vite at det
+  virkelig er journalen som spør. CDS Hooks beskriver et JWT i
+  `Authorization` — det bør på plass før noen tjeneste utenfor huset tas i
+  bruk.
+- **Interaksjonssjekken må få en vedlikeholdt kilde** (FEST). Dagens liste er
+  tre oppføringer og er merket som demonstrasjon i koden. Et råd som ser
+  autoritativt ut uten å være det, er verre enn ingen råd: tausheten blir lest
+  som en bekreftelse.
+
+<https://cds-hooks.hl7.org/>
+
+### 3.6 Inferno: kjør sertifiseringstestene **[V]**
+
+ONC sin testpakke for SMART App Launch prøver nøyaktig det vi har skrevet selv
+— oppdagelse, launch, token, scope-håndheving, fornyelse. Vi har funnet seks
+feil i denne kjeden med én nettleserbasert røyktest; Inferno er den samme
+øvelsen gjort grundig, av noen som ikke har skrevet koden.
+
+Bør kjøres mot `https://epj.apps.apus.no` før flere apper slippes til.
+
+<https://inferno.healthit.gov/test-kits/smart-app-launch/>
+
+### 3.7 Øvrige NHN-tjenester **[N]**
 
 Norsk helsenett dokumenterer API-ene sine på **<https://utviklerportal.nhn.no/>**
 — HelseID, Adresseregisteret, Grunndata/personoppslag, Kjernejournal, SFM,
@@ -367,6 +403,33 @@ En test som starter bildet med manifestets miljø og sjekker
 `/fhir/standard/metadata` ville fanget begge på under et minutt.
 
 ---
+
+## 6b. Apper og plattform
+
+Journalen er delt opp i apper: notatfeltet, legemiddellisten og kritisk
+informasjon er SMART-apper, ikke sider journalen selv eier. En app kan ta over
+en fane, ligge i sidepanelet eller på den store flaten, og en virksomhet kan
+bytte den ut uten at vi slipper en ny versjon.
+
+Ikke gjort:
+
+- **Versjonering av kataloginnslag.** Endrer en utvikler en godkjent app, går
+  den til vurdering på nytt — men virksomheter som allerede har installert den,
+  får ingen beskjed om at det finnes en nyere utgave.
+- **Avinstallering fjerner ikke klienten.** Den kobler bare appen fra
+  katalogen; klienten står igjen i registeret og må sperres for seg.
+- **Ingen apper med bakgrunnstilgang i katalogen.** Alt i katalogen er
+  offentlige klienter med PKCE. En backend-tjeneste trenger nøkler og en annen
+  vurdering.
+- **Utvikleren kan ikke prøve appen selv.** Det burde finnes et sandkassemiljø
+  med syntetiske pasienter, slik at en app kan testes før den sendes inn.
+- **R4 mot R5.** Journalen er R5. Flere apper der ute er R4 — blant annet
+  `sveltelims`, som skriver `DocumentReference.context.encounter` slik R4 gjør.
+  Enten må appene lære seg begge, eller så må journalen tilby en R4-visning.
+  Dette er et veivalg, ikke en feilretting.
+- **`Binary` er ikke eksponert.** Det stopper enhver app som vil lagre et
+  vedlegg. Løsningen står i `searchparams.ts`: utled pasienten fra
+  `DocumentReference`-en som peker på ressursen, og vurder tilgangen mot den.
 
 ## 7. Mindre ting
 
