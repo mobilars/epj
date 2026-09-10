@@ -1,10 +1,10 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { krevTenant, utstederFor } from '$srv/tenant/kontekst';
+import { requireTenant, issuerFor } from '$srv/tenant/context';
 
 /** OpenID Connect discovery, brukt av apper som logger inn med `openid`-scope. */
 export const GET: RequestHandler = () => {
-	const base = utstederFor(krevTenant());
+	const base = issuerFor(requireTenant());
 	return json(
 		{
 			issuer: base,

@@ -1,52 +1,52 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { aktorFraKontekst } from '$srv/audit';
-import { lesRessursHvisFinnes } from '$srv/fhir/internt';
-import { alderFra } from '$srv/fhir/visning';
-import { listKort, opprettRegningskort, hentKort } from '$srv/integrasjoner/helfo/regningskort';
-import { hentEgenandelstatus } from '$srv/integrasjoner/helfo/egenandel';
-import { oreTilKroner, TAKSTER, TAKSTREGISTER_GYLDIG_FRA } from '$srv/integrasjoner/helfo/takster';
+import { actorFromContext } from '$srv/audit';
+import { readResourceHvisExists } from '$srv/fhir/internal';
+import { ageFrom } from '$srv/fhir/display';
+import { listCard, createBillingCard, getCard } from '$srv/integrations/helfo/billing';
+import { getCopaymentStatus } from '$srv/integrations/helfo/copayment';
+import { oreToKroner, TARIFFS, TAKSTREGISTER_VALID_FROM } from '$srv/integrations/helfo/tariffs';
 
 /** Regningskort for én pasient, med frikortstatus og takstvalg. */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
-	const forelder = await event.parent();
-	if (!ctx || !forelder.pasient) return { kort: [], takster: [], egenandel: null, kanRegistrere: false, gyldigFra: TAKSTREGISTER_GYLDIG_FRA };
+	const parent = await event.parent();
+	if (!ctx || !parent.patient) return { card: [], tariffs: [], copayment: null, canRegistrere: false, validFrom: TAKSTREGISTER_VALID_FROM };
 
-	const kort = await listKort({ patientId: event.params.id, grense: 50 });
-	const egenandel = forelder.pasient.fodselsnummer
-		? await hentEgenandelstatus(event.params.id, forelder.pasient.fodselsnummer, aktorFraKontekst(ctx)).catch(() => null)
+	const card = await listCard({ patientId: event.params.id, limit: 50 });
+	const copayment = parent.patient.nationalId
+		? await getCopaymentStatus(event.params.id, parent.patient.nationalId, actorFromContext(ctx)).catch(() => null)
 		: null;
 
 	return {
-		kanRegistrere: ctx.rettigheter.has('oppgjor:registrer'),
-		gyldigFra: TAKSTREGISTER_GYLDIG_FRA,
-		takster: TAKSTER.map((t) => ({
-			kode: t.kode, tekst: t.tekst, gruppe: t.gruppe,
-			refusjon: oreTilKroner(t.refusjonOre), egenandel: oreTilKroner(t.egenandelOre),
+		canRegistrere: ctx.permissions.has('oppgjor:registrer'),
+		validFrom: TAKSTREGISTER_VALID_FROM,
+		tariffs: TARIFFS.map((t) => ({
+			code: t.code, text: t.text, group: t.group,
+			reimbursement: oreToKroner(t.reimbursementOre), copayment: oreToKroner(t.copaymentOre),
 			repeterbar: t.repeterbar ?? false
 		})),
-		egenandel: egenandel && {
-			harFrikort: egenandel.harFrikort,
-			gyldigTil: egenandel.frikortGyldigTil,
-			opptjent: oreTilKroner(egenandel.opptjentOre),
-			gjenstaende: oreTilKroner(egenandel.gjenstaendeOre),
-			kilde: egenandel.kilde
+		copayment: copayment && {
+			hasExemptionCard: copayment.hasExemptionCard,
+			validTo: copayment.exemptionCardValidTo,
+			earned: oreToKroner(copayment.earnedOre),
+			remaining: oreToKroner(copayment.remainingOre),
+			source: copayment.source
 		},
-		kort: await Promise.all(
-			kort.map(async (k) => {
-				const detalj = await hentKort(k.id);
+		card: await Promise.all(
+			card.map(async (k) => {
+				const detalj = await getCard(k.id);
 				return {
 					id: k.id,
-					dato: k.dato,
+					date: k.date,
 					status: k.status,
 					kontakttype: k.kontakttype,
-					diagnose: k.diagnose_kode ?? '',
-					refusjon: oreTilKroner(k.refusjon_ore),
-					egenandel: oreTilKroner(k.egenandel_ore),
-					fritak: k.fritak_grunn ?? '',
-					avvisning: k.avvisning ?? '',
-					linjer: (detalj?.linjer ?? []).map((l) => `${l.takstkode}×${l.antall}`)
+					diagnosis: k.diagnosis_code ?? '',
+					reimbursement: oreToKroner(k.reimbursement_ore),
+					copayment: oreToKroner(k.copayment_ore),
+					exemption: k.exemption_reason ?? '',
+					rejection: k.rejection ?? '',
+					lines: (detalj?.lines ?? []).map((l) => `${l.tariff_code}×${l.count}`)
 				};
 			})
 		)
@@ -54,42 +54,42 @@ export const load: PageServerLoad = async (event) => {
 };
 
 export const actions: Actions = {
-	nytt: async (event) => {
+	newValue: async (event) => {
 		const ctx = event.locals.auth;
 		if (!ctx) redirect(303, '/logg-inn');
-		if (!ctx.rettigheter.has('oppgjor:registrer')) return fail(403, { feil: 'Rollen din kan ikke registrere regningskort.' });
+		if (!ctx.permissions.has('oppgjor:registrer')) return fail(403, { error: 'Rollen din kan ikke registrere regningskort.' });
 
 		const form = await event.request.formData();
 		const takstkoder = form.getAll('takst').map(String).filter(Boolean);
-		if (takstkoder.length === 0) return fail(400, { feil: 'Velg minst én takst.' });
+		if (takstkoder.length === 0) return fail(400, { error: 'Velg minst én takst.' });
 
 		// Handlinger har ikke tilgang til forelderens data; pasienten hentes på nytt
 		// gjennom vokteren, som samtidig kontrollerer at brukeren har tilgang.
-		const pasient = await lesRessursHvisFinnes(ctx, 'Patient', event.params.id);
-		const alder = pasient?.birthDate ? alderFra(pasient.birthDate as string) : undefined;
+		const patient = await readResourceHvisExists(ctx, 'Patient', event.params.id);
+		const age = patient?.birthDate ? ageFrom(patient.birthDate as string) : undefined;
 
-		const takster = takstkoder.map((kode) => ({
-			takstkode: kode,
-			antall: Number(form.get(`antall_${kode}`) ?? 1)
+		const tariffs = takstkoder.map((code) => ({
+			tariff_code: code,
+			count: Number(form.get(`antall_${code}`) ?? 1)
 		}));
 
-		const svar = await opprettRegningskort(
+		const response = await createBillingCard(
 			{
 				patientId: event.params.id,
 				encounterId: String(form.get('encounterId') ?? '') || null,
-				behandlerId: ctx.actorRef.replace('Practitioner/', ''),
-				hprNummer: String(form.get('hpr') ?? '') || null,
-				dato: String(form.get('dato') ?? new Date().toISOString().slice(0, 10)),
+				practitionerId: ctx.actorRef.replace('Practitioner/', ''),
+				hprNumber: String(form.get('hpr') ?? '') || null,
+				date: String(form.get('dato') ?? new Date().toISOString().slice(0, 10)),
 				kontakttype: String(form.get('kontakttype') ?? 'kontor') as 'kontor',
-				diagnoseKode: String(form.get('diagnoseKode') ?? '').trim() || null,
-				takster,
-				erSpesialistAllmennmedisin: form.get('spesialist') === 'på',
-				pasientAlder: alder
+				diagnosisCode: String(form.get('diagnoseKode') ?? '').trim() || null,
+				tariffs,
+				isSpesialistAllmennmedisin: form.get('spesialist') === 'på',
+				patientAge: age
 			},
-			aktorFraKontekst(ctx)
+			actorFromContext(ctx)
 		);
 
-		if (!svar.ok) return fail(400, { feil: svar.feil?.join(' · ') });
-		return { ok: true, advarsler: svar.advarsler ?? [] };
+		if (!response.ok) return fail(400, { error: response.error?.join(' · ') });
+		return { ok: true, warnings: response.warnings ?? [] };
 	}
 };

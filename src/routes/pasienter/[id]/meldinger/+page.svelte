@@ -1,7 +1,7 @@
 <script lang="ts">
 	let { data, form } = $props();
 
-	const kanTa = (typer: string[], type: string) => typer.includes(type);
+	const canTa = (types: string[], type: string) => types.includes(type);
 </script>
 
 <div class="rad-mellom">
@@ -9,9 +9,9 @@
 
 </div>
 
-{#if form?.feil}<div class="varsel varsel-feil" role="alert">{form.feil}</div>{/if}
+{#if form?.error}<div class="varsel varsel-feil" role="alert">{form.error}</div>{/if}
 
-{#if data.kanSende}
+{#if data.canSende}
 	<section class="kort">
 		<h3>Ny dialogmelding</h3>
 		<form method="POST" action="?/dialog">
@@ -20,8 +20,8 @@
 				<label for="mottaker-d">Mottaker</label>
 				<select id="mottaker-d" name="mottaker" required>
 					<option value="">Velg mottaker</option>
-					{#each data.mottakere.filter((m) => kanTa(m.typer, 'DIALOG_HELSEFAGLIG') || kanTa(m.typer, 'DIALOG_NOTAT') || kanTa(m.typer, 'DIALOG_FORESPORSEL')) as m (m.herId)}
-						<option value={m.herId}>{m.navn}</option>
+					{#each data.recipients.filter((m) => canTa(m.types, 'DIALOG_HELSEFAGLIG') || canTa(m.types, 'DIALOG_NOTAT') || canTa(m.types, 'DIALOG_FORESPORSEL')) as m (m.herId)}
+						<option value={m.herId}>{m.name}</option>
 					{/each}
 				</select>
 			</div>
@@ -44,8 +44,8 @@
 				<label for="mottaker-h">Mottaker</label>
 				<select id="mottaker-h" name="mottaker" required>
 					<option value="">Velg mottaker</option>
-					{#each data.mottakere.filter((m) => kanTa(m.typer, 'HENVIS')) as m (m.herId)}
-						<option value={m.herId}>{m.navn}</option>
+					{#each data.recipients.filter((m) => canTa(m.types, 'HENVIS')) as m (m.herId)}
+						<option value={m.herId}>{m.name}</option>
 					{/each}
 				</select>
 			</div>
@@ -71,16 +71,16 @@
 {/if}
 
 <div class="kort tabell-omslag">
-	{#if data.meldinger.length === 0}
+	{#if data.messages.length === 0}
 		<p class="svak">Ingen meldinger for denne pasienten.</p>
 	{:else}
 		<table>
 			<thead><tr><th>Tidspunkt</th><th>Retning</th><th>Type</th><th>Part</th><th>Status</th><th>Kvittering</th></tr></thead>
 			<tbody>
-				{#each data.meldinger as m (m.id)}
+				{#each data.messages as m (m.id)}
 					<tr>
-						<td class="svak">{m.opprettet}</td>
-						<td>{m.retning === 'ut' ? 'Sendt' : 'Mottatt'}</td>
+						<td class="svak">{m.created_at}</td>
+						<td>{m.direction === 'ut' ? 'Sendt' : 'Mottatt'}</td>
 						<td><a href="/meldinger/{m.id}">{m.type}</a></td>
 						<td>{m.part}</td>
 						<td>

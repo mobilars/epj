@@ -1,11 +1,11 @@
-import { en, exec, query, transaction } from '../db';
-import { medTenant, PLATTFORM_TENANT, type Tenant } from './kontekst';
+import { one, exec, query, transaction } from '../db';
+import { withTenant, PLATFORM_TENANT, type Tenant } from './context';
 import { config } from '../config';
-import { opprettPartisjon, listPartisjoner } from './partisjon';
-import { logg, type AuditAktor } from '../audit';
-import { gyldigOrganisasjonsnummer } from '../fhir/kodeverk';
-import { opprettBruker } from '../auth/brukere';
-import { nyToken } from '../util/ids';
+import { createPartition, listPartitions } from './partition';
+import { log, type AuditActor } from '../audit';
+import { validOrganisationNumber } from '../fhir/codesystems';
+import { createUser } from '../auth/users';
+import { newToken } from '../util/ids';
 
 /**
  * Virksomhetsregister.
@@ -15,8 +15,8 @@ import { nyToken } from '../util/ids';
  * plattformadministrasjonen.
  */
 
-const FELT = `id, navn, organisasjonsnummer, her_id, kommunenummer, vertsnavn, base_url,
-	partisjon_id, status, merknad, opprettet`;
+const FIELD = `id, name, organisation_number, her_id, municipality_code, hostname, base_url,
+	partition_id, status, note, created_at`;
 
 /**
  * Holder standardvirksomheten i takt med konfigurasjonen.
@@ -32,36 +32,36 @@ const FELT = `id, navn, organisasjonsnummer, her_id, kommunenummer, vertsnavn, b
  *
  * Kjøres ved oppstart, etter migrasjonene.
  */
-export async function sikreStandardvirksomhet(): Promise<void> {
-	const utsteder = config.baseUrl.replace(/\/$/, '');
+export async function ensureDefaultOrganisation(): Promise<void> {
+	const issuer = config.baseUrl.replace(/\/$/, '');
 	await exec(
 		`UPDATE tenant SET
-			navn = $2, organisasjonsnummer = $3, her_id = $4, kommunenummer = $5, base_url = $6
-		 WHERE id = $1 AND oppdatert = opprettet
-		   AND (navn, organisasjonsnummer, her_id, kommunenummer, base_url)
+			name = $2, organisation_number = $3, her_id = $4, municipality_code = $5, base_url = $6
+		 WHERE id = $1 AND updated_at = created_at
+		   AND (name, organisation_number, her_id, municipality_code, base_url)
 		       IS DISTINCT FROM ($2, $3, $4, $5, $6)`,
 		[
-			config.tenant.standard,
-			config.organisasjon.navn,
-			config.organisasjon.organisasjonsnummer,
-			config.organisasjon.herId,
-			config.organisasjon.kommunenummer,
-			utsteder
+			config.tenant.defaultValue,
+			config.organisation.name,
+			config.organisation.organisation_number,
+			config.organisation.herId,
+			config.organisation.municipality_code,
+			issuer
 		]
 	);
 	// Plattformadministrasjonen nås på sitt eget vertsnavn når det er satt.
 	// Porten beholdes, slik at et testmiljø på en annen port virker.
-	let plattformUrl = utsteder;
-	if (config.tenant.plattformVertsnavn) {
-		const adresse = new URL(utsteder);
-		adresse.hostname = config.tenant.plattformVertsnavn;
-		plattformUrl = adresse.origin;
+	let platformUrl = issuer;
+	if (config.tenant.platformHostname) {
+		const address = new URL(issuer);
+		address.hostname = config.tenant.platformHostname;
+		platformUrl = address.origin;
 	}
 	await exec(
-		`UPDATE tenant SET base_url = $2, vertsnavn = $3
-		 WHERE id = $1 AND oppdatert = opprettet
-		   AND (base_url, vertsnavn) IS DISTINCT FROM ($2, $3)`,
-		[PLATTFORM_TENANT, plattformUrl, config.tenant.plattformVertsnavn || null]
+		`UPDATE tenant SET base_url = $2, hostname = $3
+		 WHERE id = $1 AND updated_at = created_at
+		   AND (base_url, hostname) IS DISTINCT FROM ($2, $3)`,
+		[PLATFORM_TENANT, platformUrl, config.tenant.platformHostname || null]
 	);
 
 	// Standardvirksomheten trenger sin partisjon i HAPI på samme måte som
@@ -72,49 +72,49 @@ export async function sikreStandardvirksomhet(): Promise<void> {
 	// å starte. Avviket vises i plattformoversikten, og retter seg selv ved neste
 	// oppstart når serveren er tilbake.
 	if (config.fhirServer.multitenant) {
-		const standard = await hentTenant(config.tenant.standard);
-		if (standard?.partisjon_id) {
-			const partisjoner = await listPartisjoner();
-			if (partisjoner.ok && !partisjoner.partisjoner.some((p) => p.navn === standard.id)) {
-				const svar = await opprettPartisjon(standard.partisjon_id, standard.id, standard.navn);
-				if (!svar.ok) {
-					console.warn(`[oppstart] klarte ikke å opprette partisjonen «${standard.id}»: ${svar.feil}`);
+		const defaultValue = await getTenant(config.tenant.defaultValue);
+		if (defaultValue?.partition_id) {
+			const partitions = await listPartitions();
+			if (partitions.ok && !partitions.partitions.some((p) => p.name === defaultValue.id)) {
+				const response = await createPartition(defaultValue.partition_id, defaultValue.id, defaultValue.name);
+				if (!response.ok) {
+					console.warn(`[oppstart] klarte ikke å opprette partisjonen «${defaultValue.id}»: ${response.error}`);
 				}
 			}
 		}
 	}
 }
 
-export async function hentTenant(id: string): Promise<Tenant | null> {
-	return en<Tenant>(`SELECT ${FELT} FROM tenant WHERE id = $1`, [id]);
+export async function getTenant(id: string): Promise<Tenant | null> {
+	return one<Tenant>(`SELECT ${FIELD} FROM tenant WHERE id = $1`, [id]);
 }
 
-export async function hentTenantPaVertsnavn(vertsnavn: string): Promise<Tenant | null> {
-	return en<Tenant>(`SELECT ${FELT} FROM tenant WHERE lower(vertsnavn) = lower($1)`, [vertsnavn]);
+export async function getTenantOnHostname(hostname: string): Promise<Tenant | null> {
+	return one<Tenant>(`SELECT ${FIELD} FROM tenant WHERE lower(hostname) = lower($1)`, [hostname]);
 }
 
 export async function listTenanter(): Promise<Tenant[]> {
-	return query<Tenant>(`SELECT ${FELT} FROM tenant ORDER BY navn`);
+	return query<Tenant>(`SELECT ${FIELD} FROM tenant ORDER BY name`);
 }
 
-export interface NyTenant {
+export interface NewTenant {
 	id: string;
-	navn: string;
-	organisasjonsnummer: string;
+	name: string;
+	organisation_number: string;
 	herId?: string;
-	kommunenummer?: string;
-	vertsnavn?: string;
+	municipality_code?: string;
+	hostname?: string;
 	baseUrl: string;
-	merknad?: string;
+	note?: string;
 	/** Første administratorbruker i virksomheten. */
-	adminBrukernavn?: string;
-	adminNavn?: string;
-	opprettetAv?: string;
+	adminUsername?: string;
+	adminName?: string;
+	createdOf?: string;
 }
 
-export type OpprettResultat =
-	| { ok: true; tenant: Tenant; adminBrukernavn?: string; midlertidigPassord?: string }
-	| { ok: false; feil: string };
+export type CreateResult =
+	| { ok: true; tenant: Tenant; adminUsername?: string; temporaryPassword?: string }
+	| { ok: false; error: string };
 
 /**
  * Oppretter en virksomhet.
@@ -124,163 +124,163 @@ export type OpprettResultat =
  * finnes - og en virksomhet uten fungerende klinisk lager er verre enn ingen
  * virksomhet.
  */
-export async function opprettTenant(inn: NyTenant, aktor: AuditAktor): Promise<OpprettResultat> {
-	if (!/^[a-z][a-z0-9-]{1,30}$/.test(inn.id)) {
-		return { ok: false, feil: 'Maskinnavnet må starte med en bokstav og bare inneholde små bokstaver, tall og bindestrek.' };
+export async function createTenant(inValue: NewTenant, actor: AuditActor): Promise<CreateResult> {
+	if (!/^[a-z][a-z0-9-]{1,30}$/.test(inValue.id)) {
+		return { ok: false, error: 'Maskinnavnet må starte med en bokstav og bare inneholde små bokstaver, tall og bindestrek.' };
 	}
-	if (!gyldigOrganisasjonsnummer(inn.organisasjonsnummer)) {
-		return { ok: false, feil: 'Ugyldig organisasjonsnummer (mod11-kontroll feilet).' };
+	if (!validOrganisationNumber(inValue.organisation_number)) {
+		return { ok: false, error: 'Ugyldig organisasjonsnummer (mod11-kontroll feilet).' };
 	}
-	if (await hentTenant(inn.id)) {
-		return { ok: false, feil: `Virksomheten «${inn.id}» finnes allerede.` };
+	if (await getTenant(inValue.id)) {
+		return { ok: false, error: `Virksomheten «${inValue.id}» finnes allerede.` };
 	}
-	if (inn.vertsnavn && (await hentTenantPaVertsnavn(inn.vertsnavn))) {
-		return { ok: false, feil: `Vertsnavnet ${inn.vertsnavn} er allerede i bruk.` };
+	if (inValue.hostname && (await getTenantOnHostname(inValue.hostname))) {
+		return { ok: false, error: `Vertsnavnet ${inValue.hostname} er allerede i bruk.` };
 	}
 	try {
-		new URL(inn.baseUrl);
+		new URL(inValue.baseUrl);
 	} catch {
-		return { ok: false, feil: 'Ugyldig adresse (base_url).' };
+		return { ok: false, error: 'Ugyldig adresse (base_url).' };
 	}
 
 	// Partisjons-id er et heltall i HAPI. Systemvirksomheter har NULL og teller
 	// ikke med, slik at nummereringen ikke løper fra seg.
-	const neste = await en<{ n: number }>('SELECT COALESCE(MAX(partisjon_id), 0) + 1 AS n FROM tenant');
-	const partisjonId = neste?.n ?? 1;
-	if (partisjonId > 2147483646) {
-		return { ok: false, feil: 'Partisjonsnummereringen er oppbrukt.' };
+	const next = await one<{ n: number }>('SELECT COALESCE(MAX(partition_id), 0) + 1 AS n FROM tenant');
+	const partitionId = next?.n ?? 1;
+	if (partitionId > 2147483646) {
+		return { ok: false, error: 'Partisjonsnummereringen er oppbrukt.' };
 	}
 
-	const partisjon = await opprettPartisjon(partisjonId, inn.id, inn.navn);
-	if (!partisjon.ok) {
-		return { ok: false, feil: `Klarte ikke å opprette FHIR-partisjon: ${partisjon.feil}` };
+	const partition = await createPartition(partitionId, inValue.id, inValue.name);
+	if (!partition.ok) {
+		return { ok: false, error: `Klarte ikke å opprette FHIR-partisjon: ${partition.error}` };
 	}
 
 	const tenant = await transaction(async () => {
 		await exec(
-			`INSERT INTO tenant (id, navn, organisasjonsnummer, her_id, kommunenummer, vertsnavn,
-				base_url, partisjon_id, merknad, opprettet_av)
+			`INSERT INTO tenant (id, name, organisation_number, her_id, municipality_code, hostname,
+				base_url, partition_id, note, created_by)
 			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
 			[
-				inn.id, inn.navn, inn.organisasjonsnummer, inn.herId ?? null, inn.kommunenummer ?? null,
-				inn.vertsnavn ?? null, inn.baseUrl.replace(/\/$/, ''), partisjonId,
-				inn.merknad ?? null, aktor.userId
+				inValue.id, inValue.name, inValue.organisation_number, inValue.herId ?? null, inValue.municipality_code ?? null,
+				inValue.hostname ?? null, inValue.baseUrl.replace(/\/$/, ''), partitionId,
+				inValue.note ?? null, actor.userId
 			]
 		);
-		return (await hentTenant(inn.id)) as Tenant;
+		return (await getTenant(inValue.id)) as Tenant;
 	});
 
-	let adminBrukernavn: string | undefined;
-	let midlertidigPassord: string | undefined;
-	if (inn.adminBrukernavn) {
-		midlertidigPassord = nyToken(9);
+	let adminUsername: string | undefined;
+	let temporaryPassword: string | undefined;
+	if (inValue.adminUsername) {
+		temporaryPassword = newToken(9);
 		// Brukeren opprettes i den nye virksomhetens kontekst.
-		await medTenant(tenant, async () => {
-			await opprettBruker({
-				brukernavn: inn.adminBrukernavn as string,
-				navn: inn.adminNavn ?? 'Systemansvarlig',
-				passord: midlertidigPassord,
-				roller: ['systemansvarlig'],
-				opprettetAv: aktor.userId ?? undefined
+		await withTenant(tenant, async () => {
+			await createUser({
+				username: inValue.adminUsername as string,
+				name: inValue.adminName ?? 'Systemansvarlig',
+				password: temporaryPassword,
+				roles: ['systemansvarlig'],
+				createdOf: actor.userId ?? undefined
 			});
 		});
-		adminBrukernavn = inn.adminBrukernavn;
+		adminUsername = inValue.adminUsername;
 	}
 
-	await logg(
+	await log(
 		{
-			type: 'admin', subtype: 'tenant:opprettet', handling: 'C', utfall: '0',
+			type: 'admin', subtype: 'tenant:opprettet', action: 'C', outcome: '0',
 			entityRef: `Organization/${tenant.id}`,
-			detaljer: { navn: tenant.navn, orgnr: tenant.organisasjonsnummer, partisjon: partisjonId }
+			details: { name: tenant.name, orgnr: tenant.organisation_number, partition: partitionId }
 		},
-		aktor,
+		actor,
 		tenant.id
 	);
 
-	return { ok: true, tenant, adminBrukernavn, midlertidigPassord };
+	return { ok: true, tenant, adminUsername, temporaryPassword };
 }
 
-export async function settTenantstatus(
+export async function setTenantstatus(
 	id: string,
 	status: 'aktiv' | 'suspendert' | 'avviklet',
-	aktor: AuditAktor
+	actor: AuditActor
 ): Promise<void> {
 	await transaction(async () => {
-		await exec('UPDATE tenant SET status = $2, oppdatert = now() WHERE id = $1', [id, status]);
+		await exec('UPDATE tenant SET status = $2, updated_at = now() WHERE id = $1', [id, status]);
 		if (status !== 'aktiv') {
 			// Suspensjon skal virke umiddelbart, ikke ved neste utløp.
-			await exec('UPDATE user_session SET avsluttet = true WHERE user_id IN (SELECT id FROM user_account WHERE tenant_id = $1)', [id]);
+			await exec('UPDATE user_session SET ended = true WHERE user_id IN (SELECT id FROM user_account WHERE tenant_id = $1)', [id]);
 			await exec(
-				"UPDATE oauth_token SET tilbakekalt = true, tilbakekalt_grunn = $2 WHERE tenant_id = $1 AND tilbakekalt = false",
+				"UPDATE oauth_token SET revoked = true, revoked_reason = $2 WHERE tenant_id = $1 AND revoked = false",
 				[id, `virksomhet ${status}`]
 			);
 		}
 	});
-	await logg(
-		{ type: 'admin', subtype: 'tenant:status', handling: 'U', utfall: '0', entityRef: `Organization/${id}`, detaljer: { status } },
-		aktor,
+	await log(
+		{ type: 'admin', subtype: 'tenant:status', action: 'U', outcome: '0', entityRef: `Organization/${id}`, details: { status } },
+		actor,
 		id
 	);
 }
 
-export async function oppdaterTenant(
+export async function updateTenant(
 	id: string,
-	endring: { navn?: string; vertsnavn?: string | null; baseUrl?: string; herId?: string | null; kommunenummer?: string | null; merknad?: string | null },
-	aktor: AuditAktor
-): Promise<{ ok: boolean; feil?: string }> {
-	if (endring.vertsnavn) {
-		const annen = await hentTenantPaVertsnavn(endring.vertsnavn);
-		if (annen && annen.id !== id) return { ok: false, feil: 'Vertsnavnet er allerede i bruk.' };
+	change: { name?: string; hostname?: string | null; baseUrl?: string; herId?: string | null; municipality_code?: string | null; note?: string | null },
+	actor: AuditActor
+): Promise<{ ok: boolean; error?: string }> {
+	if (change.hostname) {
+		const annen = await getTenantOnHostname(change.hostname);
+		if (annen && annen.id !== id) return { ok: false, error: 'Vertsnavnet er allerede i bruk.' };
 	}
 	await exec(
 		`UPDATE tenant SET
-			navn = COALESCE($2, navn),
-			vertsnavn = COALESCE($3, vertsnavn),
+			name = COALESCE($2, name),
+			hostname = COALESCE($3, hostname),
 			base_url = COALESCE($4, base_url),
 			her_id = COALESCE($5, her_id),
-			kommunenummer = COALESCE($6, kommunenummer),
-			merknad = COALESCE($7, merknad),
-			oppdatert = now()
+			municipality_code = COALESCE($6, municipality_code),
+			note = COALESCE($7, note),
+			updated_at = now()
 		 WHERE id = $1`,
-		[id, endring.navn ?? null, endring.vertsnavn ?? null, endring.baseUrl ?? null,
-		 endring.herId ?? null, endring.kommunenummer ?? null, endring.merknad ?? null]
+		[id, change.name ?? null, change.hostname ?? null, change.baseUrl ?? null,
+		 change.herId ?? null, change.municipality_code ?? null, change.note ?? null]
 	);
-	await logg(
-		{ type: 'admin', subtype: 'tenant:endret', handling: 'U', utfall: '0', entityRef: `Organization/${id}` },
-		aktor,
+	await log(
+		{ type: 'admin', subtype: 'tenant:endret', action: 'U', outcome: '0', entityRef: `Organization/${id}` },
+		actor,
 		id
 	);
 	return { ok: true };
 }
 
-export interface TenantOversikt extends Tenant {
-	antallBrukere: number;
-	antallAuditInnslag: number;
-	sisteAktivitet: string | null;
-	partisjonFinnes: boolean | null;
+export interface TenantOverview extends Tenant {
+	countUsers: number;
+	countAuditEntry: number;
+	lastAktivitet: string | null;
+	partitionExists: boolean | null;
 }
 
 /** Oversikt for plattformadministrasjonen, med kontroll mot HAPI. */
-export async function tenantOversikt(): Promise<TenantOversikt[]> {
+export async function tenantOverview(): Promise<TenantOverview[]> {
 	const tenanter = await listTenanter();
-	const partisjoner = await listPartisjoner();
+	const partitions = await listPartitions();
 
-	const tall = await query<{ tenant_id: string; brukere: number; innslag: number; siste: string | null }>(
+	const number = await query<{ tenant_id: string; users: number; entry: number; last: string | null }>(
 		`SELECT t.id AS tenant_id,
-			(SELECT count(*)::int FROM user_account u WHERE u.tenant_id = t.id) AS brukere,
-			(SELECT count(*)::int FROM audit_event a WHERE a.tenant_id = t.id) AS innslag,
-			(SELECT max(a.recorded)::text FROM audit_event a WHERE a.tenant_id = t.id) AS siste
+			(SELECT count(*)::int FROM user_account u WHERE u.tenant_id = t.id) AS users,
+			(SELECT count(*)::int FROM audit_event a WHERE a.tenant_id = t.id) AS entry,
+			(SELECT max(a.recorded)::text FROM audit_event a WHERE a.tenant_id = t.id) AS last
 		 FROM tenant t`
 	);
-	const kart = new Map(tall.map((r) => [r.tenant_id, r]));
+	const map = new Map(number.map((r) => [r.tenant_id, r]));
 
 	return tenanter.map((t) => ({
 		...t,
-		antallBrukere: kart.get(t.id)?.brukere ?? 0,
-		antallAuditInnslag: kart.get(t.id)?.innslag ?? 0,
-		sisteAktivitet: kart.get(t.id)?.siste ?? null,
+		countUsers: map.get(t.id)?.users ?? 0,
+		countAuditEntry: map.get(t.id)?.entry ?? 0,
+		lastAktivitet: map.get(t.id)?.last ?? null,
 		// Systemvirksomheter har ingen partisjon, og skal ikke meldes som avvik.
-		partisjonFinnes:
-			t.partisjon_id === null ? null : partisjoner.ok ? partisjoner.partisjoner.some((p) => p.navn === t.id) : null
+		partitionExists:
+			t.partition_id === null ? null : partitions.ok ? partitions.partitions.some((p) => p.name === t.id) : null
 	}));
 }

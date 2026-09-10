@@ -1,17 +1,17 @@
 import { createHash } from 'node:crypto';
-import { en, exec } from '../db';
-import { krevTenant, utstederFor, fhirBaseFor } from '../tenant/kontekst';
+import { one, exec } from '../db';
+import { requireTenant, issuerFor, fhirBaseFor } from '../tenant/context';
 import { config } from '../config';
 import { tokenHash } from '../util/crypto';
-import { nyId, nyToken } from '../util/ids';
-import { aktivSigneringsnokkel, jwks } from './keys';
-import { signer, verifiser } from './jws';
+import { newId, newToken } from '../util/ids';
+import { activeSigningKey, jwks } from './keys';
+import { sign, verify } from './jws';
 import { parseScopes } from '../authz/scopes';
-import type { AuthContext, LaunchKontekst } from '../authz/context';
-import { rettigheterForRoller, type Rolle } from '../authz/roles';
-import { rollerFor, hentBruker } from './brukere';
+import type { AuthContext, LaunchContext } from '../authz/context';
+import { permissionsForRoles, type Role } from '../authz/roles';
+import { rolesFor, getUser } from './users';
 
-export interface UtstedtToken {
+export interface IssuedToken {
 	access_token: string;
 	token_type: 'Bearer';
 	expires_in: number;
@@ -26,13 +26,13 @@ export interface UtstedtToken {
 	[key: string]: unknown;
 }
 
-export interface UtstedelseInn {
+export interface UtstedelseIn {
 	clientId: string;
 	userId: string | null;
 	scope: string;
-	launch: LaunchKontekst;
+	launch: LaunchContext;
 	/** Utsted refresh token (krever `offline_access` eller `online_access`). */
-	medRefresh: boolean;
+	withRefresh: boolean;
 	nonce?: string | null;
 }
 
@@ -44,226 +44,226 @@ export interface UtstedelseInn {
  * trekke tilbake tokens ved mistanke om misbruk, og tilbakekalling er et krav
  * i Normen ved avslutning av arbeidsforhold.
  */
-export async function utstedTokens(inn: UtstedelseInn): Promise<UtstedtToken> {
-	const tenant = krevTenant();
-	const nokkel = await aktivSigneringsnokkel();
-	const nå = Math.floor(Date.now() / 1000);
-	const jti = nyId();
-	const familie = nyId();
+export async function issueTokens(inValue: UtstedelseIn): Promise<IssuedToken> {
+	const tenant = requireTenant();
+	const key = await activeSigningKey();
+	const now = Math.floor(Date.now() / 1000);
+	const jti = newId();
+	const familie = newId();
 
-	const roller = inn.userId ? await rollerFor(inn.userId) : [];
-	const bruker = inn.userId ? await hentBruker(inn.userId) : null;
-	const fhirUser = bruker?.practitioner_id
-		? `${fhirBaseFor(tenant)}/Practitioner/${bruker.practitioner_id}`
+	const roles = inValue.userId ? await rolesFor(inValue.userId) : [];
+	const user = inValue.userId ? await getUser(inValue.userId) : null;
+	const fhirUser = user?.practitioner_id
+		? `${fhirBaseFor(tenant)}/Practitioner/${user.practitioner_id}`
 		: undefined;
 
 	const payload = {
-		iss: utstederFor(tenant),
-		sub: inn.userId ?? inn.clientId,
+		iss: issuerFor(tenant),
+		sub: inValue.userId ?? inValue.clientId,
 		aud: fhirBaseFor(tenant),
 		// Virksomheten tokenet gjelder. Kontrolleres ved validering, slik at et
 		// token fra én virksomhet ikke kan brukes mot en annen.
 		tenant: tenant.id,
-		client_id: inn.clientId,
-		scope: inn.scope,
+		client_id: inValue.clientId,
+		scope: inValue.scope,
 		jti,
-		iat: nå,
-		exp: nå + config.oauth.accessTokenTtl,
-		...(roller.length ? { roles: roller } : {}),
-		...(inn.launch.patientId ? { patient: inn.launch.patientId } : {}),
-		...(inn.launch.encounterId ? { encounter: inn.launch.encounterId } : {}),
+		iat: now,
+		exp: now + config.oauth.accessTokenTtl,
+		...(roles.length ? { roles: roles } : {}),
+		...(inValue.launch.patientId ? { patient: inValue.launch.patientId } : {}),
+		...(inValue.launch.encounterId ? { encounter: inValue.launch.encounterId } : {}),
 		...(fhirUser ? { fhirUser } : {})
 	};
-	const accessToken = signer(payload, nokkel.privatePem, nokkel.kid, 'at+jwt');
+	const accessToken = sign(payload, key.privatePem, key.kid, 'at+jwt');
 
 	await exec(
-		`INSERT INTO oauth_token (id, tenant_id, kind, token_hash, client_id, user_id, scope, launch_context, familie, utloper)
+		`INSERT INTO oauth_token (id, tenant_id, kind, token_hash, client_id, user_id, scope, launch_context, familie, expires_at)
 		 VALUES ($1,$9,'access',$2,$3,$4,$5,$6,$7,to_timestamp($8))`,
-		[jti, tokenHash(accessToken), inn.clientId, inn.userId, inn.scope, JSON.stringify(inn.launch), familie, payload.exp, tenant.id]
+		[jti, tokenHash(accessToken), inValue.clientId, inValue.userId, inValue.scope, JSON.stringify(inValue.launch), familie, payload.exp, tenant.id]
 	);
 
-	const resultat: UtstedtToken = {
+	const result: IssuedToken = {
 		access_token: accessToken,
 		token_type: 'Bearer',
 		expires_in: config.oauth.accessTokenTtl,
-		scope: inn.scope
+		scope: inValue.scope
 	};
 
-	if (inn.medRefresh) {
-		resultat.refresh_token = await utstedRefreshToken(inn, familie);
+	if (inValue.withRefresh) {
+		result.refresh_token = await issueRefreshToken(inValue, familie);
 	}
 
 	// SMART launch-parametere returneres sammen med tokenet.
-	if (inn.launch.patientId) resultat.patient = inn.launch.patientId;
-	if (inn.launch.encounterId) resultat.encounter = inn.launch.encounterId;
-	if (fhirUser) resultat.fhirUser = fhirUser;
-	resultat.need_patient_banner = !inn.launch.patientId;
-	resultat.smart_style_url = `${utstederFor(tenant)}/smart-style.json`;
+	if (inValue.launch.patientId) result.patient = inValue.launch.patientId;
+	if (inValue.launch.encounterId) result.encounter = inValue.launch.encounterId;
+	if (fhirUser) result.fhirUser = fhirUser;
+	result.need_patient_banner = !inValue.launch.patientId;
+	result.smart_style_url = `${issuerFor(tenant)}/smart-style.json`;
 
-	if (inn.scope.split(/\s+/).includes('openid') && inn.userId) {
-		resultat.id_token = signer(
+	if (inValue.scope.split(/\s+/).includes('openid') && inValue.userId) {
+		result.id_token = sign(
 			{
-				iss: utstederFor(tenant),
-				sub: inn.userId,
-				aud: inn.clientId,
+				iss: issuerFor(tenant),
+				sub: inValue.userId,
+				aud: inValue.clientId,
 				tenant: tenant.id,
-				iat: nå,
-				exp: nå + config.oauth.accessTokenTtl,
-				...(inn.nonce ? { nonce: inn.nonce } : {}),
-				name: bruker?.navn,
+				iat: now,
+				exp: now + config.oauth.accessTokenTtl,
+				...(inValue.nonce ? { nonce: inValue.nonce } : {}),
+				name: user?.name,
 				...(fhirUser ? { fhirUser } : {}),
-				...(roller.length ? { roles: roller } : {})
+				...(roles.length ? { roles: roles } : {})
 			},
-			nokkel.privatePem,
-			nokkel.kid
+			key.privatePem,
+			key.kid
 		);
 	}
 
-	return resultat;
+	return result;
 }
 
-async function utstedRefreshToken(inn: UtstedelseInn, familie: string): Promise<string> {
-	const token = nyToken(48);
+async function issueRefreshToken(inValue: UtstedelseIn, familie: string): Promise<string> {
+	const token = newToken(48);
 	await exec(
-		`INSERT INTO oauth_token (id, tenant_id, kind, token_hash, client_id, user_id, scope, launch_context, familie, utloper)
+		`INSERT INTO oauth_token (id, tenant_id, kind, token_hash, client_id, user_id, scope, launch_context, familie, expires_at)
 		 VALUES ($1,$9,'refresh',$2,$3,$4,$5,$6,$7, now() + ($8 || ' seconds')::interval)`,
-		[nyId(), tokenHash(token), inn.clientId, inn.userId, inn.scope, JSON.stringify(inn.launch), familie, String(config.oauth.refreshTokenTtl), krevTenant().id]
+		[newId(), tokenHash(token), inValue.clientId, inValue.userId, inValue.scope, JSON.stringify(inValue.launch), familie, String(config.oauth.refreshTokenTtl), requireTenant().id]
 	);
 	return token;
 }
 
-export interface RefreshResultat {
+export interface RefreshResult {
 	ok: boolean;
-	feil?: string;
-	tokens?: UtstedtToken;
+	error?: string;
+	tokens?: IssuedToken;
 }
 
 /**
  * Bytter inn et refresh token. Tokenet roteres, og gjenbruk av et allerede
  * innbyttet token tolkes som tyveri: hele token-familien trekkes tilbake.
  */
-export async function fornyMedRefreshToken(refreshToken: string, clientId: string, nyttScope?: string): Promise<RefreshResultat> {
+export async function renewWithRefreshToken(refreshToken: string, clientId: string, newScope?: string): Promise<RefreshResult> {
 	const hash = tokenHash(refreshToken);
-	const rad = await en<{
+	const row = await one<{
 		id: string; client_id: string; user_id: string | null; scope: string;
-		launch_context: LaunchKontekst; familie: string; tilbakekalt: boolean; utloper: string;
+		launch_context: LaunchContext; familie: string; revoked: boolean; expires_at: string;
 	}>(
-		`SELECT id, client_id, user_id, scope, launch_context, familie, tilbakekalt, utloper
+		`SELECT id, client_id, user_id, scope, launch_context, familie, revoked, expires_at
 		 FROM oauth_token WHERE token_hash = $1 AND kind = 'refresh' AND tenant_id = $2`,
-		[hash, krevTenant().id]
+		[hash, requireTenant().id]
 	);
-	if (!rad) return { ok: false, feil: 'Ukjent refresh token' };
-	if (rad.client_id !== clientId) return { ok: false, feil: 'Tokenet tilhører en annen klient' };
-	if (rad.tilbakekalt) {
+	if (!row) return { ok: false, error: 'Ukjent refresh token' };
+	if (row.client_id !== clientId) return { ok: false, error: 'Tokenet tilhører en annen klient' };
+	if (row.revoked) {
 		await exec(
-			"UPDATE oauth_token SET tilbakekalt = true, tilbakekalt_grunn = 'gjenbruk av refresh token' WHERE familie = $1 AND tenant_id = $2",
-			[rad.familie, krevTenant().id]
+			"UPDATE oauth_token SET revoked = true, revoked_reason = 'gjenbruk av refresh token' WHERE familie = $1 AND tenant_id = $2",
+			[row.familie, requireTenant().id]
 		);
-		return { ok: false, feil: 'Tokenet er allerede brukt - hele sesjonen er trukket tilbake' };
+		return { ok: false, error: 'Tokenet er allerede brukt - hele sesjonen er trukket tilbake' };
 	}
-	if (new Date(rad.utloper).getTime() <= Date.now()) return { ok: false, feil: 'Refresh token er utløpt' };
+	if (new Date(row.expires_at).getTime() <= Date.now()) return { ok: false, error: 'Refresh token er utløpt' };
 
 	if (config.oauth.rotateRefreshTokens) {
-		await exec("UPDATE oauth_token SET tilbakekalt = true, tilbakekalt_grunn = 'rotert' WHERE id = $1 AND tenant_id = $2", [rad.id, krevTenant().id]);
+		await exec("UPDATE oauth_token SET revoked = true, revoked_reason = 'rotert' WHERE id = $1 AND tenant_id = $2", [row.id, requireTenant().id]);
 	}
 
 	// Scope kan snevres inn, aldri utvides.
-	const opprinnelige = new Set(rad.scope.split(/\s+/));
-	const scope = nyttScope
-		? nyttScope.split(/\s+/).filter((s) => opprinnelige.has(s)).join(' ')
-		: rad.scope;
+	const opprinnelige = new Set(row.scope.split(/\s+/));
+	const scope = newScope
+		? newScope.split(/\s+/).filter((s) => opprinnelige.has(s)).join(' ')
+		: row.scope;
 
-	const tokens = await utstedTokens({
-		clientId, userId: rad.user_id, scope,
-		launch: rad.launch_context ?? {},
-		medRefresh: true
+	const tokens = await issueTokens({
+		clientId, userId: row.user_id, scope,
+		launch: row.launch_context ?? {},
+		withRefresh: true
 	});
 	return { ok: true, tokens };
 }
 
-export async function tilbakekallToken(token: string, clientId: string): Promise<boolean> {
+export async function revokeToken(token: string, clientId: string): Promise<boolean> {
 	const n = await exec(
-		"UPDATE oauth_token SET tilbakekalt = true, tilbakekalt_grunn = 'revocation endpoint' WHERE token_hash = $1 AND client_id = $2 AND tenant_id = $3",
-		[tokenHash(token), clientId, krevTenant().id]
+		"UPDATE oauth_token SET revoked = true, revoked_reason = 'revocation endpoint' WHERE token_hash = $1 AND client_id = $2 AND tenant_id = $3",
+		[tokenHash(token), clientId, requireTenant().id]
 	);
 	return n > 0;
 }
 
-export async function tilbakekallForBruker(userId: string, grunn: string): Promise<number> {
+export async function revokeForUser(userId: string, reason: string): Promise<number> {
 	return exec(
-		'UPDATE oauth_token SET tilbakekalt = true, tilbakekalt_grunn = $2 WHERE user_id = $1 AND tenant_id = $3 AND tilbakekalt = false',
-		[userId, grunn, krevTenant().id]
+		'UPDATE oauth_token SET revoked = true, revoked_reason = $2 WHERE user_id = $1 AND tenant_id = $3 AND revoked = false',
+		[userId, reason, requireTenant().id]
 	);
 }
 
-export interface TokenValidering {
-	gyldig: boolean;
-	feil?: string;
+export interface TokenValidation {
+	valid: boolean;
+	error?: string;
 	ctx?: Omit<AuthContext, 'ip' | 'requestId'>;
 	payload?: Record<string, unknown>;
 }
 
 /** Validerer et Bearer-token og bygger tilgangskonteksten. */
-export async function validerAccessToken(token: string): Promise<TokenValidering> {
+export async function validateAccessToken(token: string): Promise<TokenValidation> {
 	let payload: Record<string, unknown>;
 	try {
-		payload = verifiser(token, (await jwks()).keys) as Record<string, unknown>;
+		payload = verify(token, (await jwks()).keys) as Record<string, unknown>;
 	} catch (err) {
-		return { gyldig: false, feil: (err as Error).message };
+		return { valid: false, error: (err as Error).message };
 	}
-	const tenant = krevTenant();
-	if (payload.iss !== utstederFor(tenant)) return { gyldig: false, feil: 'Ugyldig utsteder' };
+	const tenant = requireTenant();
+	if (payload.iss !== issuerFor(tenant)) return { valid: false, error: 'Ugyldig utsteder' };
 	// Tokenet må være utstedt for virksomheten forespørselen gjelder.
 	if (payload.tenant && payload.tenant !== tenant.id) {
-		return { gyldig: false, feil: 'Tokenet er utstedt for en annen virksomhet' };
+		return { valid: false, error: 'Tokenet er utstedt for en annen virksomhet' };
 	}
 
-	const rad = await en<{ tilbakekalt: boolean; user_id: string | null; launch_context: LaunchKontekst; client_id: string }>(
-		"SELECT tilbakekalt, user_id, launch_context, client_id FROM oauth_token WHERE token_hash = $1 AND kind = 'access' AND tenant_id = $2",
+	const row = await one<{ revoked: boolean; user_id: string | null; launch_context: LaunchContext; client_id: string }>(
+		"SELECT revoked, user_id, launch_context, client_id FROM oauth_token WHERE token_hash = $1 AND kind = 'access' AND tenant_id = $2",
 		[tokenHash(token), tenant.id]
 	);
-	if (!rad) return { gyldig: false, feil: 'Tokenet er ukjent' };
-	if (rad.tilbakekalt) return { gyldig: false, feil: 'Tokenet er trukket tilbake' };
+	if (!row) return { valid: false, error: 'Tokenet er ukjent' };
+	if (row.revoked) return { valid: false, error: 'Tokenet er trukket tilbake' };
 
-	const userId = rad.user_id;
-	const roller: Rolle[] = userId ? await rollerFor(userId) : [];
-	const bruker = userId ? await hentBruker(userId) : null;
+	const userId = row.user_id;
+	const roles: Role[] = userId ? await rolesFor(userId) : [];
+	const user = userId ? await getUser(userId) : null;
 	const scope = String(payload.scope ?? '');
-	const launch = rad.launch_context ?? {};
+	const launch = row.launch_context ?? {};
 
 	// Backend-tjenester har ingen bruker; rettighetene styres da av scope alene,
 	// og de kan aldri få `patient/`-scope.
-	const rettigheter = userId
-		? rettigheterForRoller(roller)
+	const permissions = userId
+		? permissionsForRoles(roles)
 		: new Set<never>(['journal:les', 'journal:skriv'] as never[]);
 
 	return {
-		gyldig: true,
+		valid: true,
 		payload,
 		ctx: {
 			mate: userId ? 'smart-app' : 'backend-service',
 			userId,
-			actorRef: bruker?.practitioner_id ? `Practitioner/${bruker.practitioner_id}` : `Device/${rad.client_id}`,
-			navn: bruker?.navn ?? `Systemklient ${rad.client_id}`,
-			roller,
-			rettigheter: rettigheter as never,
+			actorRef: user?.practitioner_id ? `Practitioner/${user.practitioner_id}` : `Device/${row.client_id}`,
+			name: user?.name ?? `Systemklient ${row.client_id}`,
+			roles,
+			permissions: permissions as never,
 			scopes: parseScopes(scope),
-			clientId: rad.client_id,
-			clientNavn: null,
+			clientId: row.client_id,
+			clientName: null,
 			launch,
 			sessionId: null,
 			tokenId: String(payload.jti ?? ''),
 			amr: userId ? 'delegert' : 'client_credentials',
-			elevertTil: null
+			elevatedTo: null
 		}
 	};
 }
 
 /** RFC 7662 token introspection. */
 export async function introspiser(token: string): Promise<Record<string, unknown>> {
-	const validering = await validerAccessToken(token);
-	if (!validering.gyldig || !validering.payload) return { active: false };
-	const p = validering.payload;
+	const validation = await validateAccessToken(token);
+	if (!validation.valid || !validation.payload) return { active: false };
+	const p = validation.payload;
 	return {
 		active: true,
 		scope: p.scope,
@@ -280,11 +280,11 @@ export async function introspiser(token: string): Promise<Record<string, unknown
 }
 
 /** Vedlikehold. Går bevisst på tvers av virksomheter: sletter bare utløpte rader. */
-export async function ryddUtlopteTokens(): Promise<number> {
-	return exec("DELETE FROM oauth_token WHERE utloper < now() - interval '7 days'");
+export async function purgeUtlopteTokens(): Promise<number> {
+	return exec("DELETE FROM oauth_token WHERE expires_at < now() - interval '7 days'");
 }
 
 /** S256 code challenge for PKCE. */
-export function pkceUtfordring(verifier: string): string {
+export function pkceChallenge(verifier: string): string {
 	return createHash('sha256').update(verifier).digest('base64url');
 }

@@ -11,29 +11,29 @@
 	</div>
 </div>
 
-{#if data.feil}
-	<div class="varsel varsel-feil" role="alert">Kunne ikke hente legemiddellisten: {data.feil}</div>
+{#if data.error}
+	<div class="varsel varsel-feil" role="alert">Kunne ikke hente legemiddellisten: {data.error}</div>
 {/if}
-{#if form?.feil}
-	<div class="varsel varsel-feil" role="alert">{form.feil}</div>
+{#if form?.error}
+	<div class="varsel varsel-feil" role="alert">{form.error}</div>
 {/if}
 {#if form?.ok}
 	<div class="varsel varsel-ok" role="status">
-		Resept {form.reseptId} er sendt til e-resept.
-		{#if form.varsler?.length}
-			<ul>{#each form.varsler as v}<li>{v}</li>{/each}</ul>
+		Resept {form.prescriptionId} er sendt til e-resept.
+		{#if form.alerts?.length}
+			<ul>{#each form.alerts as v}<li>{v}</li>{/each}</ul>
 		{/if}
 	</div>
 {/if}
 
-{#if data.liste?.avvik?.length}
+{#if data.list?.deviation?.length}
 	<div class="varsel varsel-advarsel">
 		<strong>Avvik som må avklares</strong>
-		<ul>{#each data.liste.avvik as a}<li>{a}</li>{/each}</ul>
+		<ul>{#each data.list.deviation as a}<li>{a}</li>{/each}</ul>
 	</div>
 {/if}
 
-{#if data.kanForskrive}
+{#if data.canForskrive}
 	<!-- <details> framfor en JavaScript-styrt bryter: skjemaet virker også før
 	     siden er hydrert, og for brukere uten JavaScript. -->
 	<section class="kort">
@@ -65,7 +65,7 @@
 
 <div class="kort">
 	<h3>Legemiddelliste</h3>
-	{#if !data.liste || data.liste.legemidler.length === 0}
+	{#if !data.list || data.list.medications.length === 0}
 		<p class="svak">Ingen legemidler registrert.</p>
 	{:else}
 		<div class="tabell-omslag">
@@ -74,25 +74,25 @@
 					<tr><th>Legemiddel</th><th>Dosering</th><th>ATC</th><th>Status</th><th>Refusjon</th><th></th></tr>
 				</thead>
 				<tbody>
-					{#each data.liste.legemidler as l (l.reseptId)}
+					{#each data.list.medications as l (l.prescriptionId)}
 						<tr>
-							<td>{l.navn}</td>
-							<td>{l.dosering}</td>
+							<td>{l.name}</td>
+							<td>{l.dosage}</td>
 							<td class="mono">{l.atc ?? ''}</td>
 							<td>
 								<span class="merke" class:merke-ok={l.status === 'aktiv'} class:merke-advarsel={l.status === 'seponert'}>{l.status}</span>
 							</td>
-							<td>{l.refusjon ? `${l.refusjon.hjemmel} ${l.refusjon.kode}` : ''}</td>
+							<td>{l.reimbursement ? `${l.reimbursement.legalBasis} ${l.reimbursement.code}` : ''}</td>
 							<td class="hoyre">
-								{#if l.status === 'aktiv' && data.kanForskrive}
+								{#if l.status === 'aktiv' && data.canForskrive}
 									<form method="POST" action="?/seponer" class="rad">
-										<input type="hidden" name="reseptId" value={l.reseptId} />
+										<input type="hidden" name="reseptId" value={l.prescriptionId} />
 										<input name="arsak" placeholder="Årsak" style="width: 9rem" />
 										<button type="submit" class="liten">Seponer</button>
 									</form>
-								{:else if l.status === 'aktiv' && data.kanFornye}
+								{:else if l.status === 'aktiv' && data.canFornye}
 									<form method="POST" action="?/fornye">
-										<input type="hidden" name="reseptId" value={l.reseptId} />
+										<input type="hidden" name="reseptId" value={l.prescriptionId} />
 										<button type="submit" class="liten">Forny</button>
 									</form>
 								{/if}
@@ -102,7 +102,7 @@
 				</tbody>
 			</table>
 		</div>
-		<p class="svak">Sist oppdatert fra SFM: {data.liste.oppdatert}</p>
+		<p class="svak">Sist oppdatert fra SFM: {data.list.updated_at}</p>
 	{/if}
 </div>
 
@@ -111,10 +111,10 @@
 	<table>
 		<thead><tr><th>Tidspunkt</th><th>Operasjon</th><th>Status</th><th>Resept</th><th>Feil</th></tr></thead>
 		<tbody>
-			{#each data.historikk as h (h.id)}
+			{#each data.history as h (h.id)}
 				<tr>
-					<td class="svak">{h.opprettet}</td>
-					<td>{h.operasjon}</td>
+					<td class="svak">{h.created_at}</td>
+					<td>{h.operation}</td>
 					<td><span class="merke" class:merke-ok={h.status === 'ok'} class:merke-fare={h.status === 'feilet'}>{h.status}</span></td>
 					<td class="mono">{h.reseptid ?? ''}</td>
 					<td class="svak">{h.feilmelding ?? ''}</td>

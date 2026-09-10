@@ -1,63 +1,63 @@
 import { redirect } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { avsluttFlyt, fullforPalogging } from '$srv/auth/helseid';
-import { opprettSesjon } from '$srv/auth/session';
-import { logg } from '$srv/audit';
+import { endFlow, fullforLogin } from '$srv/auth/helseid';
+import { createSession } from '$srv/auth/session';
+import { log } from '$srv/audit';
 
 /** Tilbakekall fra HelseID etter autentisering. */
 export const GET: RequestHandler = async (event) => {
-	const aktor = {
+	const actor = {
 		userId: null,
 		actorRef: 'Person/ukjent',
-		navn: 'HelseID',
-		rolle: null,
+		name: 'HelseID',
+		role: null,
 		clientId: null,
 		ip: event.locals.clientIp,
 		requestId: event.locals.requestId
 	};
 
-	const feilKode = event.url.searchParams.get('error');
-	if (feilKode) {
-		avsluttFlyt(event.cookies);
-		await logg({ type: 'login', subtype: 'helseid', handling: 'E', utfall: '4', utfallBeskrivelse: feilKode }, aktor);
+	const errorCode = event.url.searchParams.get('error');
+	if (errorCode) {
+		endFlow(event.cookies);
+		await log({ type: 'login', subtype: 'helseid', action: 'E', outcome: '4', outcomeDescription: errorCode }, actor);
 		redirect(303, `/logg-inn?feil=${encodeURIComponent('HelseID avbrøt påloggingen')}`);
 	}
 
-	const kode = event.url.searchParams.get('code');
+	const code = event.url.searchParams.get('code');
 	const state = event.url.searchParams.get('state');
-	if (!kode || !state) redirect(303, '/logg-inn?feil=Mangler%20kode%20fra%20HelseID');
+	if (!code || !state) redirect(303, '/logg-inn?feil=Mangler%20kode%20fra%20HelseID');
 
-	const resultat = await fullforPalogging(event.cookies, kode, state);
-	if (!resultat.ok) {
-		await logg({ type: 'login', subtype: 'helseid', handling: 'E', utfall: '4', utfallBeskrivelse: resultat.feil }, aktor);
-		redirect(303, `/logg-inn?feil=${encodeURIComponent(resultat.feil)}`);
+	const result = await fullforLogin(event.cookies, code, state);
+	if (!result.ok) {
+		await log({ type: 'login', subtype: 'helseid', action: 'E', outcome: '4', outcomeDescription: result.error }, actor);
+		redirect(303, `/logg-inn?feil=${encodeURIComponent(result.error)}`);
 	}
 
-	if (resultat.bruker.status !== 'aktiv') {
-		await logg({ type: 'login', subtype: 'helseid', handling: 'E', utfall: '4', utfallBeskrivelse: 'Kontoen er ikke aktiv' }, { ...aktor, userId: resultat.bruker.id, navn: resultat.bruker.navn });
+	if (result.user.status !== 'aktiv') {
+		await log({ type: 'login', subtype: 'helseid', action: 'E', outcome: '4', outcomeDescription: 'Kontoen er ikke aktiv' }, { ...actor, userId: result.user.id, name: result.user.name });
 		redirect(303, '/logg-inn?feil=Kontoen%20er%20ikke%20aktiv');
 	}
 
-	await opprettSesjon(resultat.bruker.id, 'helseid', event.locals.clientIp, event.request.headers.get('user-agent'), event.cookies);
-	await logg(
+	await createSession(result.user.id, 'helseid', event.locals.clientIp, event.request.headers.get('user-agent'), event.cookies);
+	await log(
 		{
-			type: 'login', subtype: 'helseid', handling: 'E', utfall: '0',
-			detaljer: {
-				hpr: resultat.krav.hprNummer,
-				sikkerhetsniva: resultat.krav.sikkerhetsniva,
-				nyBruker: resultat.nyBruker,
-				roller: resultat.roller.join(',')
+			type: 'login', subtype: 'helseid', action: 'E', outcome: '0',
+			details: {
+				hpr: result.requirement.hprNumber,
+				sikkerhetsniva: result.requirement.sikkerhetsniva,
+				newUser: result.newUser,
+				roles: result.roles.join(',')
 			}
 		},
 		{
-			...aktor,
-			userId: resultat.bruker.id,
-			actorRef: resultat.bruker.practitioner_id ? `Practitioner/${resultat.bruker.practitioner_id}` : `Person/${resultat.bruker.id}`,
-			navn: resultat.bruker.navn,
-			rolle: resultat.roller[0] ?? null
+			...actor,
+			userId: result.user.id,
+			actorRef: result.user.practitioner_id ? `Practitioner/${result.user.practitioner_id}` : `Person/${result.user.id}`,
+			name: result.user.name,
+			role: result.roles[0] ?? null
 		}
 	);
 
 	// Ny bruker uten roller har ingen tilgang før systemansvarlig har tildelt rolle.
-	redirect(303, resultat.roller.length === 0 ? '/ingen-tilgang' : resultat.retur);
+	redirect(303, result.roles.length === 0 ? '/ingen-tilgang' : result.returnTo);
 };

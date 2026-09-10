@@ -16,16 +16,16 @@ const p = (kind: ParamKind, paths: string | string[], extra: Partial<SearchParam
 });
 
 /** Søkeparametere som gjelder alle ressurstyper. */
-export const FELLES_PARAMS: Record<string, SearchParamDef> = {
+export const SHARED_PARAMS: Record<string, SearchParamDef> = {
 	_id: p('token', 'id'),
-	_lastUpdated: p('date', 'meta.lastUpdated'),
+	_loadUpdated: p('date', 'meta.lastUpdated'),
 	_profile: p('uri', 'meta.profile'),
 	_tag: p('token', 'meta.tag'),
 	_security: p('token', 'meta.security'),
 	_source: p('uri', 'meta.source')
 };
 
-const pasientRef = (sti = 'subject') => p('reference', sti, { targets: ['Patient', 'Group'] });
+const patientRef = (path = 'subject') => p('reference', path, { targets: ['Patient', 'Group'] });
 
 export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 	Patient: {
@@ -73,8 +73,8 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		partof: p('reference', 'partOf', { targets: ['Organization'] })
 	},
 	Encounter: {
-		patient: pasientRef(),
-		subject: pasientRef(),
+		patient: patientRef(),
+		subject: patientRef(),
 		status: p('token', 'status'),
 		class: p('token', 'class'),
 		type: p('token', 'type'),
@@ -86,8 +86,8 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		'reason-code': p('token', 'reason.value.concept')
 	},
 	Condition: {
-		patient: pasientRef(),
-		subject: pasientRef(),
+		patient: patientRef(),
+		subject: patientRef(),
 		code: p('token', 'code'),
 		'clinical-status': p('token', 'clinicalStatus'),
 		'verification-status': p('token', 'verificationStatus'),
@@ -98,8 +98,8 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		severity: p('token', 'severity')
 	},
 	Observation: {
-		patient: pasientRef(),
-		subject: pasientRef(),
+		patient: patientRef(),
+		subject: patientRef(),
 		code: p('token', 'code'),
 		category: p('token', 'category'),
 		date: p('date', ['effectiveDateTime', 'effectivePeriod', 'effectiveInstant']),
@@ -112,8 +112,8 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		'has-member': p('reference', 'hasMember', { targets: ['Observation'] })
 	},
 	MedicationRequest: {
-		patient: pasientRef(),
-		subject: pasientRef(),
+		patient: patientRef(),
+		subject: patientRef(),
 		status: p('token', 'status'),
 		intent: p('token', 'intent'),
 		code: p('token', ['medication.concept', 'medication.reference']),
@@ -124,15 +124,15 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		category: p('token', 'category')
 	},
 	MedicationStatement: {
-		patient: pasientRef(),
-		subject: pasientRef(),
+		patient: patientRef(),
+		subject: patientRef(),
 		status: p('token', 'status'),
 		code: p('token', 'medication.concept'),
 		effective: p('date', ['effectiveDateTime', 'effectivePeriod'])
 	},
 	MedicationDispense: {
-		patient: pasientRef(),
-		subject: pasientRef(),
+		patient: patientRef(),
+		subject: patientRef(),
 		status: p('token', 'status'),
 		code: p('token', 'medication.concept'),
 		prescription: p('reference', 'authorizingPrescription', { targets: ['MedicationRequest'] }),
@@ -159,16 +159,16 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		'lot-number': p('string', 'lotNumber')
 	},
 	Procedure: {
-		patient: pasientRef(),
-		subject: pasientRef(),
+		patient: patientRef(),
+		subject: patientRef(),
 		code: p('token', 'code'),
 		status: p('token', 'status'),
 		date: p('date', ['occurrenceDateTime', 'occurrencePeriod']),
 		encounter: p('reference', 'encounter', { targets: ['Encounter'] })
 	},
 	DiagnosticReport: {
-		patient: pasientRef(),
-		subject: pasientRef(),
+		patient: patientRef(),
+		subject: patientRef(),
 		code: p('token', 'code'),
 		category: p('token', 'category'),
 		status: p('token', 'status'),
@@ -178,8 +178,8 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		result: p('reference', 'result', { targets: ['Observation'] })
 	},
 	ServiceRequest: {
-		patient: pasientRef(),
-		subject: pasientRef(),
+		patient: patientRef(),
+		subject: patientRef(),
 		status: p('token', 'status'),
 		intent: p('token', 'intent'),
 		code: p('token', 'code.concept'),
@@ -191,8 +191,8 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		identifier: p('token', 'identifier')
 	},
 	DocumentReference: {
-		patient: pasientRef(),
-		subject: pasientRef(),
+		patient: patientRef(),
+		subject: patientRef(),
 		type: p('token', 'type'),
 		category: p('token', 'category'),
 		status: p('token', 'status'),
@@ -202,8 +202,8 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		encounter: p('reference', 'context.encounter', { targets: ['Encounter'] })
 	},
 	Composition: {
-		patient: pasientRef(),
-		subject: pasientRef(),
+		patient: patientRef(),
+		subject: patientRef(),
 		type: p('token', 'type'),
 		status: p('token', 'status'),
 		date: p('date', 'date'),
@@ -213,15 +213,15 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		title: p('string', 'title')
 	},
 	CarePlan: {
-		patient: pasientRef(),
-		subject: pasientRef(),
+		patient: patientRef(),
+		subject: patientRef(),
 		status: p('token', 'status'),
 		category: p('token', 'category'),
 		date: p('date', 'period')
 	},
 	Goal: {
-		patient: pasientRef(),
-		subject: pasientRef(),
+		patient: patientRef(),
+		subject: patientRef(),
 		'lifecycle-status': p('token', 'lifecycleStatus'),
 		category: p('token', 'category')
 	},
@@ -245,8 +245,8 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		start: p('date', 'start')
 	},
 	Communication: {
-		patient: pasientRef(),
-		subject: pasientRef(),
+		patient: patientRef(),
+		subject: patientRef(),
 		status: p('token', 'status'),
 		category: p('token', 'category'),
 		sent: p('date', 'sent'),
@@ -256,7 +256,7 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		identifier: p('token', 'identifier')
 	},
 	CommunicationRequest: {
-		patient: pasientRef(),
+		patient: patientRef(),
 		status: p('token', 'status'),
 		authored: p('date', 'authoredOn')
 	},
@@ -301,7 +301,7 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		outcome: p('token', 'outcome')
 	},
 	ChargeItem: {
-		patient: pasientRef(),
+		patient: patientRef(),
 		code: p('token', 'code'),
 		'entered-date': p('date', 'enteredDate'),
 		status: p('token', 'status'),
@@ -326,15 +326,15 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		code: p('token', 'code')
 	},
 	QuestionnaireResponse: {
-		patient: pasientRef(),
-		subject: pasientRef(),
+		patient: patientRef(),
+		subject: patientRef(),
 		questionnaire: p('uri', 'questionnaire'),
 		status: p('token', 'status'),
 		authored: p('date', 'authored'),
 		encounter: p('reference', 'encounter', { targets: ['Encounter'] })
 	},
 	Flag: {
-		patient: pasientRef(),
+		patient: patientRef(),
 		status: p('token', 'status'),
 		category: p('token', 'category'),
 		date: p('date', 'period')
@@ -345,12 +345,12 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		status: p('token', 'status')
 	},
 	RiskAssessment: {
-		patient: pasientRef(),
+		patient: patientRef(),
 		status: p('token', 'status'),
 		date: p('date', 'occurrenceDateTime')
 	},
 	List: {
-		patient: pasientRef(),
+		patient: patientRef(),
 		code: p('token', 'code'),
 		status: p('token', 'status'),
 		date: p('date', 'date')
@@ -403,22 +403,22 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 
 export const STOTTEDE_RESSURSTYPER = Object.keys(SEARCH_PARAMS);
 
-export function paramDef(resourceType: string, navn: string): SearchParamDef | undefined {
-	return SEARCH_PARAMS[resourceType]?.[navn] ?? FELLES_PARAMS[navn];
+export function paramDef(resourceType: string, name: string): SearchParamDef | undefined {
+	return SEARCH_PARAMS[resourceType]?.[name] ?? SHARED_PARAMS[name];
 }
 
 /**
  * Ressurstyper som alltid gjelder én pasient. Brukes av tilgangskontrollen til å
  * avgjøre om et kall må avgrenses til pasienter brukeren har tjenstlig behov for.
  */
-export const PASIENTKOMPARTMENT: Record<string, string[]> = Object.fromEntries(
+export const PATIENTCOMPARTMENT: Record<string, string[]> = Object.fromEntries(
 	Object.entries(SEARCH_PARAMS)
 		.map(([type, params]) => {
-			const pasientParams = Object.entries(params)
-				.filter(([navn, def]) => def.kind === 'reference' && (navn === 'patient' || navn === 'subject' || navn === 'beneficiary'))
+			const patientParams = Object.entries(params)
+				.filter(([name, def]) => def.kind === 'reference' && (name === 'patient' || name === 'subject' || name === 'beneficiary'))
 				.filter(([, def]) => !def.targets || def.targets.includes('Patient'))
-				.map(([navn]) => navn);
-			return [type, pasientParams] as const;
+				.map(([name]) => name);
+			return [type, patientParams] as const;
 		})
 		.filter(([, params]) => params.length > 0)
 );

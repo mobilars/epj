@@ -1,14 +1,14 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
-import { utfor } from '$srv/fhir/gateway';
+import { execute } from '$srv/fhir/gateway';
 import { FhirError } from '$srv/fhir/outcome';
-import { tilPasientVisning } from '$srv/fhir/visning';
-import { aktivNodrett, harBehandlingsrelasjon } from '$srv/authz/tilgang';
+import { toPatientDisplay } from '$srv/fhir/display';
+import { activeEmergencyAccess, hasCareRelationship } from '$srv/authz/access';
 import { query } from '$srv/db';
-import { krevTenant } from '$srv/tenant/kontekst';
+import { requireTenant } from '$srv/tenant/context';
 import { config } from '$srv/config';
-import { kanNodrett } from '$srv/authz/roles';
-import { fhirKlient } from '$srv/fhir/client';
+import { canEmergencyAccess } from '$srv/authz/roles';
+import { fhirClient } from '$srv/fhir/client';
 
 /**
  * Rammen rundt én pasientjournal.
@@ -21,16 +21,16 @@ import { fhirKlient } from '$srv/fhir/client';
 export const load: LayoutServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx) redirect(303, `/logg-inn?retur=${encodeURIComponent(event.url.pathname)}`);
-	if (!ctx.rettigheter.has('journal:les')) {
+	if (!ctx.permissions.has('journal:les')) {
 		error(403, 'Rollen din har ikke tilgang til pasientopplysninger.');
 	}
 	const patientId = event.params.id;
 
-	let pasient = null;
+	let patient = null;
 	let nektet: string | null = null;
 	try {
-		const svar = await utfor({ ctx, metode: 'GET', sti: `Patient/${patientId}`, sok: new URLSearchParams() });
-		pasient = tilPasientVisning(svar.ressurs);
+		const response = await execute({ ctx, method: 'GET', path: `Patient/${patientId}`, search: new URLSearchParams() });
+		patient = toPatientDisplay(response.resource);
 	} catch (err) {
 		if (err instanceof FhirError && (err.status === 403 || err.status === 404)) {
 			nektet = err.issues[0]?.diagnostics ?? 'Ingen tilgang';
@@ -39,34 +39,34 @@ export const load: LayoutServerLoad = async (event) => {
 		}
 	}
 
-	const [nodrett, relasjon, sperringer] = await Promise.all([
-		aktivNodrett(ctx.userId, patientId),
-		harBehandlingsrelasjon(ctx.userId, patientId),
-		query<{ omfang: string; begrunnelse: string | null; registrert: string }>(
-			'SELECT omfang, begrunnelse, registrert FROM journal_sperring WHERE patient_id = $1 AND tenant_id = $2 AND opphevet = false',
-			[patientId, krevTenant().id]
+	const [emergencyAccess, relationship, restrictions] = await Promise.all([
+		activeEmergencyAccess(ctx.userId, patientId),
+		hasCareRelationship(ctx.userId, patientId),
+		query<{ scope_extent: string; justification: string | null; registered_at: string }>(
+			'SELECT scope_extent, justification, registered_at FROM record_restriction WHERE patient_id = $1 AND tenant_id = $2 AND lifted = false',
+			[patientId, requireTenant().id]
 		)
 	]);
 
 	// Navnet vises i nødrettsdialogen selv uten tilgang til journalinnholdet,
 	// slik at brukeren kan kontrollere at hen ber om tilgang til riktig person.
-	let minimaltNavn: string | null = null;
-	if (!pasient && nektet) {
-		const rå = await fhirKlient.les('Patient', patientId).catch(() => null);
-		if (rå) minimaltNavn = tilPasientVisning(rå).navn;
+	let minimaltName: string | null = null;
+	if (!patient && nektet) {
+		const raw = await fhirClient.read('Patient', patientId).catch(() => null);
+		if (raw) minimaltName = toPatientDisplay(raw).name;
 	}
 
 	return {
 		patientId,
-		pasient,
+		patient,
 		nektet,
-		minimaltNavn,
-		nodrett,
-		relasjon,
-		sperret: sperringer.length > 0,
-		sperringer: sperringer.map((s) => ({ omfang: s.omfang, begrunnelse: s.begrunnelse, registrert: s.registrert })),
-		kanBeOmNodrett: kanNodrett(ctx.roller),
-		kanUtlevere: ctx.rettigheter.has('journal:utlever'),
-		krevErEngangskode: config.security.requireMfa && ctx.amr !== 'helseid'
+		minimaltName,
+		emergencyAccess,
+		relationship,
+		blocked: restrictions.length > 0,
+		restrictions: restrictions.map((s) => ({ scope_extent: s.scope_extent, justification: s.justification, registered_at: s.registered_at })),
+		canBeAboutEmergencyAccess: canEmergencyAccess(ctx.roles),
+		canUtlevere: ctx.permissions.has('journal:utlever'),
+		requireIsOneTimeCode: config.security.requireMfa && ctx.amr !== 'helseid'
 	};
 };

@@ -1,10 +1,10 @@
 import type { RequestEvent, RequestHandler } from './$types';
 import { config } from '$srv/config';
-import { krevTenant, utstederFor } from '$srv/tenant/kontekst';
+import { requireTenant, issuerFor } from '$srv/tenant/context';
 import { FhirError, operationOutcome, issue } from '$srv/fhir/outcome';
-import { utfor } from '$srv/fhir/gateway';
+import { execute } from '$srv/fhir/gateway';
 import { corsHeadere } from '$srv/http';
-import { listKlienter } from '$srv/auth/klienter';
+import { listClients } from '$srv/auth/clients';
 
 /**
  * FHIR R5-endepunktet.
@@ -17,18 +17,18 @@ import { listKlienter } from '$srv/auth/klienter';
 
 const FHIR_JSON = 'application/fhir+json; charset=utf-8';
 
-const opphavsCache = new Map<string, { verdi: string[]; til: number }>();
+const opphavsCache = new Map<string, { value: string[]; to: number }>();
 
 /** Tillatte CORS-opphav utledes fra registrerte SMART-apper sine redirect-URI-er. */
-async function tillatteOpphav(): Promise<string[]> {
+async function allowedOpphav(): Promise<string[]> {
 	// Mellomlageret er per virksomhet: apper godkjent hos én virksomhet skal
 	// ikke gi CORS-tilgang hos en annen.
-	const tenantId = krevTenant().id;
-	const cachet = opphavsCache.get(tenantId);
-	if (cachet && Date.now() < cachet.til) return cachet.verdi;
-	const klienter = await listKlienter();
-	const opphav = new Set<string>([new URL(utstederFor(krevTenant())).origin]);
-	for (const k of klienter) {
+	const tenantId = requireTenant().id;
+	const cached = opphavsCache.get(tenantId);
+	if (cached && Date.now() < cached.to) return cached.value;
+	const clients = await listClients();
+	const opphav = new Set<string>([new URL(issuerFor(requireTenant())).origin]);
+	for (const k of clients) {
 		if (k.status !== 'aktiv') continue;
 		for (const uri of k.redirect_uris) {
 			try {
@@ -38,28 +38,28 @@ async function tillatteOpphav(): Promise<string[]> {
 			}
 		}
 	}
-	const verdi = [...opphav];
-	opphavsCache.set(tenantId, { verdi, til: Date.now() + 60_000 });
-	return verdi;
+	const value = [...opphav];
+	opphavsCache.set(tenantId, { value, to: Date.now() + 60_000 });
+	return value;
 }
 
-async function lesKropp(event: RequestEvent): Promise<unknown> {
+async function readBody(event: RequestEvent): Promise<unknown> {
 	const type = event.request.headers.get('content-type') ?? '';
 	if (event.request.method === 'GET' || event.request.method === 'DELETE') return undefined;
 	if (type.includes('x-www-form-urlencoded')) {
 		return new URLSearchParams(await event.request.text());
 	}
-	const tekst = await event.request.text();
-	if (!tekst) return undefined;
+	const text = await event.request.text();
+	if (!text) return undefined;
 	try {
-		return JSON.parse(tekst);
+		return JSON.parse(text);
 	} catch {
-		throw FhirError.ugyldig('Kroppen er ikke gyldig JSON');
+		throw FhirError.invalid('Kroppen er ikke gyldig JSON');
 	}
 }
 
-async function håndter(event: RequestEvent): Promise<Response> {
-	const cors = corsHeadere(event.request.headers.get('origin'), await tillatteOpphav());
+async function handle(event: RequestEvent): Promise<Response> {
+	const cors = corsHeadere(event.request.headers.get('origin'), await allowedOpphav());
 	const ctx = event.locals.auth;
 
 	if (!ctx) {
@@ -67,25 +67,25 @@ async function håndter(event: RequestEvent): Promise<Response> {
 			status: 401,
 			headers: {
 				'content-type': FHIR_JSON,
-				'www-authenticate': `Bearer realm="${utstederFor(krevTenant())}"`,
+				'www-authenticate': `Bearer realm="${issuerFor(requireTenant())}"`,
 				...cors
 			}
 		});
 	}
 
 	try {
-		const svar = await utfor({
+		const response = await execute({
 			ctx,
-			metode: event.request.method,
-			sti: event.params.sti ?? '',
-			sok: event.url.searchParams,
-			kropp: await lesKropp(event),
+			method: event.request.method,
+			path: event.params.sti ?? '',
+			search: event.url.searchParams,
+			body: await readBody(event),
 			ifMatch: event.request.headers.get('if-match') ?? undefined,
 			ifNoneExist: event.request.headers.get('if-none-exist') ?? undefined
 		});
-		return new Response(JSON.stringify(svar.ressurs), {
-			status: svar.status,
-			headers: { 'content-type': FHIR_JSON, ...svar.headers, ...cors }
+		return new Response(JSON.stringify(response.resource), {
+			status: response.status,
+			headers: { 'content-type': FHIR_JSON, ...response.headers, ...cors }
 		});
 	} catch (err) {
 		if (err instanceof FhirError) {
@@ -93,7 +93,7 @@ async function håndter(event: RequestEvent): Promise<Response> {
 				status: err.status,
 				headers: {
 					'content-type': FHIR_JSON,
-					...(err.status === 401 ? { 'www-authenticate': `Bearer realm="${utstederFor(krevTenant())}", error="invalid_token"` } : {}),
+					...(err.status === 401 ? { 'www-authenticate': `Bearer realm="${issuerFor(requireTenant())}", error="invalid_token"` } : {}),
 					...cors
 				}
 			});
@@ -106,13 +106,13 @@ async function håndter(event: RequestEvent): Promise<Response> {
 	}
 }
 
-export const GET: RequestHandler = håndter;
-export const POST: RequestHandler = håndter;
-export const PUT: RequestHandler = håndter;
-export const PATCH: RequestHandler = håndter;
-export const DELETE: RequestHandler = håndter;
+export const GET: RequestHandler = handle;
+export const POST: RequestHandler = handle;
+export const PUT: RequestHandler = handle;
+export const PATCH: RequestHandler = handle;
+export const DELETE: RequestHandler = handle;
 
 export const OPTIONS: RequestHandler = async (event) => {
-	const cors = corsHeadere(event.request.headers.get('origin'), await tillatteOpphav());
+	const cors = corsHeadere(event.request.headers.get('origin'), await allowedOpphav());
 	return new Response(null, { status: 204, headers: cors });
 };

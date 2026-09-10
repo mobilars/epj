@@ -1,25 +1,25 @@
 import type { LayoutServerLoad } from './$types';
 import { config } from '$srv/config';
-import { ROLLE_DEFINISJONER } from '$srv/authz/roles';
+import { ROLE_DEFINISJONER } from '$srv/authz/roles';
 
 /** Felles data for hele applikasjonen: hvem er pålogget, og i hvilket miljø. */
 export const load: LayoutServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	return {
-		bruker: ctx
+		user: ctx
 			? {
-					navn: ctx.navn,
-					roller: ctx.roller,
-					rollenavn: ctx.roller.map((r) => ROLLE_DEFINISJONER[r]?.navn ?? r),
-					rettigheter: [...ctx.rettigheter],
+					name: ctx.name,
+					roles: ctx.roles,
+					rollenavn: ctx.roles.map((r) => ROLE_DEFINISJONER[r]?.name ?? r),
+					permissions: [...ctx.permissions],
 					mate: ctx.mate,
 					amr: ctx.amr
 				}
 			: null,
-		organisasjon: config.organisasjon.navn,
+		organisation: config.organisation.name,
 		miljo: {
-			integrasjoner: config.integrasjoner.modus,
-			testinnlogging: config.testinnlogging.aktivert,
+			integrations: config.integrations.modus,
+			testLogin: config.testLogin.aktivert,
 			produksjon: process.env.NODE_ENV === 'production'
 		}
 	};

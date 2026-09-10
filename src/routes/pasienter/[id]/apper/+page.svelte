@@ -9,10 +9,10 @@
 	oppslag appen gjør blir loggført på deg.
 </p>
 
-{#if form?.feil}<div class="varsel varsel-feil" role="alert">{form.feil}</div>{/if}
+{#if form?.error}<div class="varsel varsel-feil" role="alert">{form.error}</div>{/if}
 {#if form?.ok}
 	<div class="varsel varsel-ok" role="status">
-		<strong>{form.appNavn}</strong> er klar til å åpnes.<br />
+		<strong>{form.appName}</strong> er klar til å åpnes.<br />
 		<a href={form.url} rel="noopener noreferrer" target="_blank">Åpne appen</a><br />
 		<span class="svak mono">launch: {form.launchId}</span>
 	</div>
@@ -24,7 +24,7 @@
 	{#each data.apper as a (a.clientId)}
 		<article class="kort">
 			<div class="rad-mellom">
-				<h3>{a.navn}</h3>
+				<h3>{a.name}</h3>
 				<form method="POST" action="?/start">
 					<input type="hidden" name="clientId" value={a.clientId} />
 					<button type="submit" class="primar">Start app</button>

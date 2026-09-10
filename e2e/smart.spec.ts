@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { createHash, randomBytes } from 'node:crypto';
-import { loggInn, ventPaHydrering } from './hjelpere';
+import { logIn, waitOnHydration } from './hjelpere';
 
 /**
  * SMART on FHIR fra ende til ende.
@@ -19,9 +19,9 @@ function pkce(): { verifier: string; challenge: string } {
 const REDIRECT = 'http://localhost:4000/callback';
 
 /** Henter client_id for demoappen fra en pasients app-fane. */
-async function hentClientId(page: import('@playwright/test').Page): Promise<string> {
+async function getClientId(page: import('@playwright/test').Page): Promise<string> {
 	await page.goto('/pasienter');
-	await ventPaHydrering(page);
+	await waitOnHydration(page);
 	await page.getByRole('link', { name: /Bakken/ }).first().click();
 	await expect(page).toHaveURL(/\/pasienter\/[0-9a-fA-F-]{8,}/);
 	const id = page.url().split('/pasienter/')[1].split(/[/?]/)[0];
@@ -31,9 +31,9 @@ async function hentClientId(page: import('@playwright/test').Page): Promise<stri
 
 test.describe('SMART on FHIR', () => {
 	test('annonserer riktige egenskaper i .well-known', async ({ request }) => {
-		const svar = await request.get('/.well-known/smart-configuration');
-		expect(svar.ok()).toBe(true);
-		const konfig = await svar.json();
+		const response = await request.get('/.well-known/smart-configuration');
+		expect(response.ok()).toBe(true);
+		const konfig = await response.json();
 
 		expect(konfig.authorization_endpoint).toContain('/oauth/authorize');
 		expect(konfig.token_endpoint).toContain('/oauth/token');
@@ -55,25 +55,25 @@ test.describe('SMART on FHIR', () => {
 	});
 
 	test('krever autentisering på FHIR-endepunktet', async ({ request }) => {
-		const svar = await request.get('/fhir/Patient');
-		expect(svar.status()).toBe(401);
-		expect(svar.headers()['www-authenticate']).toContain('Bearer');
-		const kropp = await svar.json();
-		expect(kropp.resourceType).toBe('OperationOutcome');
+		const response = await request.get('/fhir/Patient');
+		expect(response.status()).toBe(401);
+		expect(response.headers()['www-authenticate']).toContain('Bearer');
+		const body = await response.json();
+		expect(body.resourceType).toBe('OperationOutcome');
 	});
 
 	test('avviser oppdiktet token', async ({ request }) => {
-		const svar = await request.get('/fhir/Patient', { headers: { authorization: 'Bearer noe.helt.oppdiktet' } });
-		expect(svar.status()).toBe(401);
-		expect(svar.headers()['www-authenticate']).toContain('invalid_token');
+		const response = await request.get('/fhir/Patient', { headers: { authorization: 'Bearer noe.helt.oppdiktet' } });
+		expect(response.status()).toBe(401);
+		expect(response.headers()['www-authenticate']).toContain('invalid_token');
 	});
 
 	test('hele autorisasjonsflyten, og appen får bare det den har scope for', async ({ page }) => {
-		await loggInn(page, 'lege');
+		await logIn(page, 'lege');
 
 		// Finn pasienten og den registrerte demoappen.
 		await page.goto('/pasienter');
-		await ventPaHydrering(page);
+		await waitOnHydration(page);
 		await page.getByRole('link', { name: /Bakken/ }).first().click();
 		await expect(page).toHaveURL(/\/pasienter\/[0-9a-fA-F-]{8,}/);
 		const patientId = page.url().split('/pasienter/')[1].split(/[/?]/)[0];
@@ -95,7 +95,7 @@ test.describe('SMART on FHIR', () => {
 		// Appen sender brukeren til autorisasjonsendepunktet.
 		const { verifier, challenge } = pkce();
 		const state = randomBytes(8).toString('hex');
-		const sok = new URLSearchParams({
+		const search = new URLSearchParams({
 			response_type: 'code',
 			client_id: clientId,
 			redirect_uri: REDIRECT,
@@ -106,7 +106,7 @@ test.describe('SMART on FHIR', () => {
 			code_challenge: challenge,
 			code_challenge_method: 'S256'
 		});
-		await page.goto(`/oauth/authorize?${sok}`);
+		await page.goto(`/oauth/authorize?${search}`);
 
 		// Samtykkedialogen forklarer tilgangen på norsk og navngir pasienten.
 		await expect(page.getByRole('heading', { name: /Gi tilgang til «Diabetesoversikt/ })).toBeVisible();
@@ -115,7 +115,7 @@ test.describe('SMART on FHIR', () => {
 		await expect(page.getByText('Dr. Ingrid Fastlege')).toBeVisible();
 
 		// Brukeren godkjenner. Vi følger ikke omdirigeringen, men leser koden.
-		const svar = await page.request.post('/oauth/authorize?/godkjenn', {
+		const response = await page.request.post('/oauth/authorize?/godkjenn', {
 			headers: { accept: 'text/html', 'content-type': 'application/x-www-form-urlencoded' },
 			form: {
 				client_id: clientId,
@@ -128,24 +128,24 @@ test.describe('SMART on FHIR', () => {
 			},
 			maxRedirects: 0
 		});
-		expect(svar.status()).toBe(303);
-		const tilbake = new URL(svar.headers()['location']);
-		expect(tilbake.searchParams.get('state')).toBe(state);
-		const kode = tilbake.searchParams.get('code') as string;
-		expect(kode).toBeTruthy();
+		expect(response.status()).toBe(303);
+		const back = new URL(response.headers()['location']);
+		expect(back.searchParams.get('state')).toBe(state);
+		const code = back.searchParams.get('code') as string;
+		expect(code).toBeTruthy();
 
 		// Appen bytter koden mot tokens.
-		const tokenSvar = await page.request.post('/oauth/token', {
+		const tokenResponse = await page.request.post('/oauth/token', {
 			form: {
 				grant_type: 'authorization_code',
-				code: kode,
+				code: code,
 				redirect_uri: REDIRECT,
 				client_id: clientId,
 				code_verifier: verifier
 			}
 		});
-		expect(tokenSvar.ok()).toBe(true);
-		const tokens = await tokenSvar.json();
+		expect(tokenResponse.ok()).toBe(true);
+		const tokens = await tokenResponse.json();
 		expect(tokens.token_type).toBe('Bearer');
 		expect(tokens.patient).toBe(patientId);
 		expect(tokens.fhirUser).toContain('Practitioner/');
@@ -155,9 +155,9 @@ test.describe('SMART on FHIR', () => {
 		const auth = { authorization: `Bearer ${tokens.access_token}` };
 
 		// Appen leser pasienten den har kontekst for.
-		const pasient = await page.request.get(`/fhir/Patient/${patientId}`, { headers: auth });
-		expect(pasient.ok(), `status ${pasient.status()}: ${await pasient.text()}`).toBe(true);
-		expect((await pasient.json()).resourceType).toBe('Patient');
+		const patient = await page.request.get(`/fhir/Patient/${patientId}`, { headers: auth });
+		expect(patient.ok(), `status ${patient.status()}: ${await patient.text()}`).toBe(true);
+		expect((await patient.json()).resourceType).toBe('Patient');
 
 		// Og målingene den har scope for.
 		const obs = await page.request.post('/fhir/Observation/_search', {
@@ -173,11 +173,11 @@ test.describe('SMART on FHIR', () => {
 
 		// Og ikke en annen pasient enn den i launch-konteksten.
 		await page.goto('/pasienter');
-		await ventPaHydrering(page);
+		await waitOnHydration(page);
 		await page.getByRole('link', { name: /Nordli/ }).first().click();
 		await expect(page).toHaveURL(/\/pasienter\/[0-9a-fA-F-]{8,}/);
-		const annenPasient = page.url().split('/pasienter/')[1].split(/[/?]/)[0];
-		const forbudt = await page.request.get(`/fhir/Patient/${annenPasient}`, { headers: auth });
+		const annenPatient = page.url().split('/pasienter/')[1].split(/[/?]/)[0];
+		const forbudt = await page.request.get(`/fhir/Patient/${annenPatient}`, { headers: auth });
 		expect(forbudt.status()).toBe(403);
 
 		// Kallet fra appen er loggført med appens identitet.
@@ -186,42 +186,42 @@ test.describe('SMART on FHIR', () => {
 	});
 
 	test('avslag i samtykkedialogen gir access_denied tilbake til appen', async ({ page }) => {
-		await loggInn(page, 'lege');
-		const clientId = await hentClientId(page);
+		await logIn(page, 'lege');
+		const clientId = await getClientId(page);
 
 		const state = randomBytes(8).toString('hex');
-		const svar = await page.request.post('/oauth/authorize?/avslaa', {
+		const response = await page.request.post('/oauth/authorize?/avslaa', {
 			headers: { accept: 'text/html', 'content-type': 'application/x-www-form-urlencoded' },
 			form: { client_id: clientId, redirect_uri: REDIRECT, state },
 			maxRedirects: 0
 		});
-		expect(svar.status()).toBe(303);
-		const tilbake = new URL(svar.headers()['location']);
-		expect(tilbake.searchParams.get('error')).toBe('access_denied');
-		expect(tilbake.searchParams.get('state')).toBe(state);
+		expect(response.status()).toBe(303);
+		const back = new URL(response.headers()['location']);
+		expect(back.searchParams.get('error')).toBe('access_denied');
+		expect(back.searchParams.get('state')).toBe(state);
 	});
 
 	test('autorisasjonsforespørsel uten PKCE avvises', async ({ page }) => {
-		await loggInn(page, 'lege');
-		const clientId = await hentClientId(page);
+		await logIn(page, 'lege');
+		const clientId = await getClientId(page);
 
-		const sok = new URLSearchParams({
+		const search = new URLSearchParams({
 			response_type: 'code',
 			client_id: clientId,
 			redirect_uri: REDIRECT,
 			scope: 'patient/Patient.rs',
 			state: 'abc'
 		});
-		const svar = await page.request.get(`/oauth/authorize?${sok}`, { maxRedirects: 0 });
-		expect(svar.status()).toBe(303);
-		expect(decodeURIComponent(svar.headers()['location'])).toContain('PKCE');
+		const response = await page.request.get(`/oauth/authorize?${search}`, { maxRedirects: 0 });
+		expect(response.status()).toBe(303);
+		expect(decodeURIComponent(response.headers()['location'])).toContain('PKCE');
 	});
 
 	test('ukjent redirect_uri omdirigeres ikke tilbake', async ({ page }) => {
-		await loggInn(page, 'lege');
-		const clientId = await hentClientId(page);
+		await logIn(page, 'lege');
+		const clientId = await getClientId(page);
 
-		const sok = new URLSearchParams({
+		const search = new URLSearchParams({
 			response_type: 'code',
 			client_id: clientId,
 			redirect_uri: 'https://angriper.example/cb',
@@ -230,8 +230,8 @@ test.describe('SMART on FHIR', () => {
 			code_challenge: pkce().challenge,
 			code_challenge_method: 'S256'
 		});
-		const svar = await page.request.get(`/oauth/authorize?${sok}`, { maxRedirects: 0 });
+		const response = await page.request.get(`/oauth/authorize?${search}`, { maxRedirects: 0 });
 		// Ingen omdirigering: journalen skal ikke kunne brukes som åpen viderekobling.
-		expect(svar.status()).toBe(400);
+		expect(response.status()).toBe(400);
 	});
 });

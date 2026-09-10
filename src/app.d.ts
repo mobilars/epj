@@ -1,5 +1,5 @@
 import type { AuthContext } from '$srv/authz/context';
-import type { Tenant } from '$srv/tenant/kontekst';
+import type { Tenant } from '$srv/tenant/context';
 
 declare global {
 	namespace App {
@@ -13,7 +13,7 @@ declare global {
 			/** Virksomheten forespørselen gjelder, utledet fra vertsnavnet. */
 			tenant: Tenant;
 			/** True når forespørselen kom til plattformens eget vertsnavn. */
-			erPlattform: boolean;
+			isPlatform: boolean;
 		}
 		interface Error {
 			code?: string;

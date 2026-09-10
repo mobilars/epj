@@ -9,11 +9,11 @@ import pg from 'pg';
 const url = process.env.EPJ_DATABASE_URL;
 if (!url) throw new Error('EPJ_DATABASE_URL må være satt');
 
-const navn = new URL(url).pathname.replace(/^\//, '');
+const name = new URL(url).pathname.replace(/^\//, '');
 const adminUrl = url.replace(/\/[^/?]*(\?|$)/, '/postgres$1');
 
 const admin = new pg.Pool({ connectionString: adminUrl, max: 1 });
-await admin.query(`DROP DATABASE IF EXISTS ${navn} WITH (FORCE)`);
-await admin.query(`CREATE DATABASE ${navn}`);
+await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+await admin.query(`CREATE DATABASE ${name}`);
 await admin.end();
-console.log(`Testdatabasen ${navn} er nullstilt.`);
+console.log(`Testdatabasen ${name} er nullstilt.`);

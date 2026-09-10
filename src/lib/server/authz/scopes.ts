@@ -8,20 +8,20 @@
  * behov og tar hensyn til sperringer. En app kan aldri få mer enn brukeren har.
  */
 
-export type Operasjon = 'c' | 'r' | 'u' | 'd' | 's';
-export type Kontekst = 'patient' | 'user' | 'system';
+export type Operation = 'c' | 'r' | 'u' | 'd' | 's';
+export type Context = 'patient' | 'user' | 'system';
 
-export interface ParsetScope {
-	kontekst: Kontekst;
+export interface ParsedScope {
+	context: Context;
 	/** `*` betyr alle ressurstyper. */
-	ressurs: string;
-	operasjoner: Set<Operasjon>;
+	resource: string;
+	operations: Set<Operation>;
 	/** Valgfri søkebegrensning, f.eks. `category=vital-signs`. */
-	begrensning?: URLSearchParams;
-	rå: string;
+	limitation?: URLSearchParams;
+	raw: string;
 }
 
-const V1_KART: Record<string, Operasjon[]> = {
+const V1_KART: Record<string, Operation[]> = {
 	read: ['r', 's'],
 	write: ['c', 'u', 'd'],
 	'*': ['c', 'r', 'u', 'd', 's']
@@ -29,29 +29,29 @@ const V1_KART: Record<string, Operasjon[]> = {
 
 const SCOPE_MONSTER = /^(patient|user|system)\/(\*|[A-Za-z]+)\.([a-z*]+)(\?.*)?$/;
 
-export function parseScope(rå: string): ParsetScope | null {
-	const m = SCOPE_MONSTER.exec(rå.trim());
+export function parseScope(raw: string): ParsedScope | null {
+	const m = SCOPE_MONSTER.exec(raw.trim());
 	if (!m) return null;
-	const [, kontekst, ressurs, opsDel, spørring] = m;
+	const [, context, resource, opsDel, query] = m;
 
-	let operasjoner: Operasjon[];
+	let operations: Operation[];
 	if (opsDel in V1_KART) {
-		operasjoner = V1_KART[opsDel];
+		operations = V1_KART[opsDel];
 	} else if (/^[cruds]+$/.test(opsDel)) {
-		operasjoner = [...new Set(opsDel.split('') as Operasjon[])];
+		operations = [...new Set(opsDel.split('') as Operation[])];
 		// Rekkefølgen c-r-u-d-s er normativ i SMART v2.
-		const forventet = ['c', 'r', 'u', 'd', 's'].filter((o) => operasjoner.includes(o as Operasjon)).join('');
-		if (opsDel !== forventet) return null;
+		const expected = ['c', 'r', 'u', 'd', 's'].filter((o) => operations.includes(o as Operation)).join('');
+		if (opsDel !== expected) return null;
 	} else {
 		return null;
 	}
 
 	return {
-		kontekst: kontekst as Kontekst,
-		ressurs,
-		operasjoner: new Set(operasjoner),
-		begrensning: spørring ? new URLSearchParams(spørring.slice(1)) : undefined,
-		rå: rå.trim()
+		context: context as Context,
+		resource,
+		operations: new Set(operations),
+		limitation: query ? new URLSearchParams(query.slice(1)) : undefined,
+		raw: raw.trim()
 	};
 }
 
@@ -61,102 +61,102 @@ export const SPESIALSCOPES = new Set([
 	'offline_access', 'online_access'
 ]);
 
-export interface ScopeSett {
-	kliniske: ParsetScope[];
+export interface ScopeSet {
+	clinical: ParsedScope[];
 	spesielle: Set<string>;
-	rå: string[];
+	raw: string[];
 }
 
-export function parseScopes(scopeStreng: string): ScopeSett {
-	const deler = scopeStreng.split(/\s+/).filter(Boolean);
-	const kliniske: ParsetScope[] = [];
+export function parseScopes(scopeString: string): ScopeSet {
+	const parts = scopeString.split(/\s+/).filter(Boolean);
+	const clinical: ParsedScope[] = [];
 	const spesielle = new Set<string>();
-	for (const d of deler) {
+	for (const d of parts) {
 		if (SPESIALSCOPES.has(d)) {
 			spesielle.add(d);
 			continue;
 		}
-		const parset = parseScope(d);
-		if (parset) kliniske.push(parset);
+		const parsed = parseScope(d);
+		if (parsed) clinical.push(parsed);
 	}
-	return { kliniske, spesielle, rå: deler };
+	return { clinical, spesielle, raw: parts };
 }
 
-export interface ScopeSpørsmål {
-	ressurs: string;
-	operasjon: Operasjon;
+export interface ScopeQuestion {
+	resource: string;
+	operation: Operation;
 	/** Settes for kall som gjelder én bestemt pasient. */
-	kontekstPasientId?: string | null;
+	contextPatientId?: string | null;
 	/** Pasienten som er i launch-kontekst for tokenet. */
-	tokenPasientId?: string | null;
+	tokenPatientId?: string | null;
 }
 
-export interface ScopeSvar {
-	tillatt: boolean;
-	grunn?: string;
+export interface ScopeResponse {
+	allowed: boolean;
+	reason?: string;
 	/** Søkebegrensninger som må tvinges inn i spørringen. */
-	begrensninger: URLSearchParams[];
+	limitations: URLSearchParams[];
 	/** True når tilgangen kun er innvilget for launch-pasienten. */
-	kunLaunchPasient: boolean;
+	onlyLaunchPatient: boolean;
 }
 
 /** Avgjør om scope-settet dekker en operasjon. */
-export function sjekkScope(sett: ScopeSett, spm: ScopeSpørsmål): ScopeSvar {
-	const relevante = sett.kliniske.filter(
-		(s) => (s.ressurs === '*' || s.ressurs === spm.ressurs) && s.operasjoner.has(spm.operasjon)
+export function checkScope(set: ScopeSet, question: ScopeQuestion): ScopeResponse {
+	const relevante = set.clinical.filter(
+		(s) => (s.resource === '*' || s.resource === question.resource) && s.operations.has(question.operation)
 	);
 	if (relevante.length === 0) {
 		return {
-			tillatt: false,
-			grunn: `Tokenet mangler scope for ${spm.operasjon} på ${spm.ressurs}`,
-			begrensninger: [],
-			kunLaunchPasient: false
+			allowed: false,
+			reason: `Tokenet mangler scope for ${question.operation} på ${question.resource}`,
+			limitations: [],
+			onlyLaunchPatient: false
 		};
 	}
 
-	const harBredere = relevante.some((s) => s.kontekst === 'user' || s.kontekst === 'system');
-	const pasientScopes = relevante.filter((s) => s.kontekst === 'patient');
+	const hasBredere = relevante.some((s) => s.context === 'user' || s.context === 'system');
+	const patientScopes = relevante.filter((s) => s.context === 'patient');
 
-	if (!harBredere && pasientScopes.length > 0) {
-		if (!spm.tokenPasientId) {
+	if (!hasBredere && patientScopes.length > 0) {
+		if (!question.tokenPatientId) {
 			return {
-				tillatt: false,
-				grunn: 'patient/-scope krever pasient i launch-kontekst',
-				begrensninger: [],
-				kunLaunchPasient: true
+				allowed: false,
+				reason: 'patient/-scope krever pasient i launch-kontekst',
+				limitations: [],
+				onlyLaunchPatient: true
 			};
 		}
-		if (spm.kontekstPasientId && spm.kontekstPasientId !== spm.tokenPasientId) {
+		if (question.contextPatientId && question.contextPatientId !== question.tokenPatientId) {
 			return {
-				tillatt: false,
-				grunn: 'Tokenet gjelder en annen pasient enn forespørselen',
-				begrensninger: [],
-				kunLaunchPasient: true
+				allowed: false,
+				reason: 'Tokenet gjelder en annen pasient enn forespørselen',
+				limitations: [],
+				onlyLaunchPatient: true
 			};
 		}
 	}
 
 	// Er alle treffende scopes begrenset, må begrensningene håndheves. Finnes det
 	// minst ett ubegrenset scope, gjelder ingen begrensning.
-	const alleBegrenset = relevante.every((s) => s.begrensning !== undefined);
-	const begrensninger = alleBegrenset
-		? relevante.map((s) => s.begrensning as URLSearchParams)
+	const allBegrenset = relevante.every((s) => s.limitation !== undefined);
+	const limitations = allBegrenset
+		? relevante.map((s) => s.limitation as URLSearchParams)
 		: [];
 
-	return { tillatt: true, begrensninger, kunLaunchPasient: !harBredere };
+	return { allowed: true, limitations, onlyLaunchPatient: !hasBredere };
 }
 
 /**
  * Snevrer inn et forespurt scope-sett til det brukeren faktisk har lov til.
  * Brukes på autorisasjonsendepunktet: en app kan ikke få tilgang brukeren mangler.
  */
-export function snevreInn(forespurt: string, tillatteForKlient: string[], tillatteForBruker: Set<string>): string {
-	const klientTillatt = new Set(tillatteForKlient);
+export function narrowIn(forespurt: string, allowedForClient: string[], allowedForUser: Set<string>): string {
+	const clientAllowed = new Set(allowedForClient);
 	return forespurt
 		.split(/\s+/)
 		.filter(Boolean)
-		.filter((s) => klientTillatt.has(s) || dekkesAv(s, klientTillatt))
-		.filter((s) => SPESIALSCOPES.has(s) || tillatteForBruker.has(s) || dekkesAv(s, tillatteForBruker))
+		.filter((s) => clientAllowed.has(s) || coveredOf(s, clientAllowed))
+		.filter((s) => SPESIALSCOPES.has(s) || allowedForUser.has(s) || coveredOf(s, allowedForUser))
 		.join(' ');
 }
 
@@ -170,27 +170,27 @@ export function snevreInn(forespurt: string, tillatteForKlient: string[], tillat
  * Motsatt vei gjelder ikke, og `system/` dekker ingenting av dette - det er
  * forbeholdt tjeneste-til-tjeneste-tilgang uten bruker.
  */
-export function dekkesAv(scope: string, tillatte: Set<string>): boolean {
-	const parset = parseScope(scope);
-	if (!parset) return false;
-	for (const kandidat of tillatte) {
-		const k = parseScope(kandidat);
+export function coveredOf(scope: string, allowed: Set<string>): boolean {
+	const parsed = parseScope(scope);
+	if (!parsed) return false;
+	for (const candidate of allowed) {
+		const k = parseScope(candidate);
 		if (!k) continue;
-		if (!kontekstDekker(k.kontekst, parset.kontekst)) continue;
-		if (k.ressurs !== '*' && k.ressurs !== parset.ressurs) continue;
-		if (k.begrensning && !parset.begrensning) continue;
-		if ([...parset.operasjoner].every((o) => k.operasjoner.has(o))) return true;
+		if (!contextDekker(k.context, parsed.context)) continue;
+		if (k.resource !== '*' && k.resource !== parsed.resource) continue;
+		if (k.limitation && !parsed.limitation) continue;
+		if ([...parsed.operations].every((o) => k.operations.has(o))) return true;
 	}
 	return false;
 }
 
-function kontekstDekker(har: Kontekst, ber: Kontekst): boolean {
-	if (har === ber) return true;
-	return har === 'user' && ber === 'patient';
+function contextDekker(has: Context, ber: Context): boolean {
+	if (has === ber) return true;
+	return has === 'user' && ber === 'patient';
 }
 
 /** Menneskelig forklaring til samtykkedialogen. */
-export function beskrivScope(scope: string): string {
+export function describeScope(scope: string): string {
 	if (scope === 'openid' || scope === 'profile') return 'Vite hvem du er';
 	if (scope === 'fhirUser') return 'Se hvilken behandler du er registrert som';
 	if (scope === 'launch') return 'Følge pasient- og kontaktvalget ditt i journalen';
@@ -200,20 +200,20 @@ export function beskrivScope(scope: string): string {
 	if (scope === 'online_access') return 'Beholde tilgang så lenge du er pålogget';
 	const p = parseScope(scope);
 	if (!p) return scope;
-	const omfang =
-		p.kontekst === 'patient' ? 'for den åpne pasienten'
-		: p.kontekst === 'user' ? 'for pasientene du har tilgang til'
+	const extent =
+		p.context === 'patient' ? 'for den åpne pasienten'
+		: p.context === 'user' ? 'for pasientene du har tilgang til'
 		: 'for hele journalen (systemtilgang)';
 	const ops: string[] = [];
-	if (p.operasjoner.has('r') || p.operasjoner.has('s')) ops.push('lese');
-	if (p.operasjoner.has('c')) ops.push('opprette');
-	if (p.operasjoner.has('u')) ops.push('endre');
-	if (p.operasjoner.has('d')) ops.push('slette');
-	const hva = p.ressurs === '*' ? 'alle opplysninger' : RESSURS_NAVN[p.ressurs] ?? p.ressurs;
-	return `${ops.join(', ')} ${hva} ${omfang}`;
+	if (p.operations.has('r') || p.operations.has('s')) ops.push('lese');
+	if (p.operations.has('c')) ops.push('opprette');
+	if (p.operations.has('u')) ops.push('endre');
+	if (p.operations.has('d')) ops.push('slette');
+	const what = p.resource === '*' ? 'alle opplysninger' : RESOURCE_NAME[p.resource] ?? p.resource;
+	return `${ops.join(', ')} ${what} ${extent}`;
 }
 
-const RESSURS_NAVN: Record<string, string> = {
+const RESOURCE_NAME: Record<string, string> = {
 	Patient: 'persondata',
 	Observation: 'målinger og prøvesvar',
 	Condition: 'diagnoser',

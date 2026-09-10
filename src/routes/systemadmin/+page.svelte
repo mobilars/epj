@@ -2,7 +2,7 @@
 	let { data, form } = $props();
 
 	const statustekst: Record<string, string> = {
-		aktiv: 'Aktiv',
+		active: 'Aktiv',
 		suspendert: 'Suspendert',
 		avviklet: 'Avviklet'
 	};
@@ -10,18 +10,18 @@
 
 <div class="rad-mellom">
 	<h2>Virksomheter</h2>
-	<span class="svak">{data.virksomheter.length} registrert</span>
+	<span class="svak">{data.organisations.length} registrert</span>
 </div>
 
-{#if form?.feil}<div class="varsel varsel-feil" role="alert">{form.feil}</div>{/if}
+{#if form?.error}<div class="varsel varsel-feil" role="alert">{form.error}</div>{/if}
 {#if form?.statusSatt}<div class="varsel varsel-ok" role="status">Status endret · {form.statusSatt}</div>{/if}
-{#if form?.opprettet}
+{#if form?.created_at}
 	<div class="varsel varsel-ok" role="status">
-		Virksomheten <strong>{form.opprettet}</strong> er opprettet med egen FHIR-partisjon.
-		{#if form.adminBrukernavn}
+		Virksomheten <strong>{form.created_at}</strong> er opprettet med egen FHIR-partisjon.
+		{#if form.adminUsername}
 			<br />
-			Administratorbruker <strong class="mono">{form.adminBrukernavn}</strong> med midlertidig passord
-			<strong class="mono">{form.midlertidigPassord}</strong>.
+			Administratorbruker <strong class="mono">{form.adminUsername}</strong> med midlertidig passord
+			<strong class="mono">{form.temporaryPassword}</strong>.
 			Formidle det i en annen kanal enn e-post; brukeren må bytte det ved første pålogging.
 		{/if}
 	</div>
@@ -33,9 +33,9 @@
 		da samme kliniske lager. Slå den på i FHIR-serveren og i konfigurasjonen før flere
 		virksomheter tas i bruk.
 	</div>
-{:else if !data.partisjonering.ok}
+{:else if !data.partitioning.ok}
 	<div class="varsel varsel-feil" role="alert">
-		Får ikke kontakt med partisjonsadministrasjonen i HAPI FHIR: {data.partisjonering.feil}
+		Får ikke kontakt med partisjonsadministrasjonen i HAPI FHIR: {data.partitioning.error}
 	</div>
 {/if}
 
@@ -118,34 +118,34 @@
 			</tr>
 		</thead>
 		<tbody>
-			{#each data.virksomheter as v (v.id)}
+			{#each data.organisations as v (v.id)}
 				<tr>
 					<td>
-						<a href="/systemadmin/{v.id}"><strong>{v.navn}</strong></a><br />
+						<a href="/systemadmin/{v.id}"><strong>{v.name}</strong></a><br />
 						<span class="svak mono">{v.id}</span>
-						<span class="svak">· org.nr {v.organisasjonsnummer}</span>
-						{#if v.erPlattform}<span class="merke">plattform</span>{/if}
+						<span class="svak">· org.nr {v.organisation_number}</span>
+						{#if v.isPlatform}<span class="merke">plattform</span>{/if}
 					</td>
 					<td>
-						{#if v.vertsnavn}<span class="mono">{v.vertsnavn}</span>{:else}<span class="svak">ikke satt</span>{/if}
+						{#if v.hostname}<span class="mono">{v.hostname}</span>{:else}<span class="svak">ikke satt</span>{/if}
 						<br /><span class="svak mono">{v.baseUrl}</span>
 					</td>
 					<td>
-						{#if v.erPlattform}
+						{#if v.isPlatform}
 							<span class="svak">ingen</span>
 						{:else}
-							<span class="mono">{v.partisjonId}</span>
-							{#if v.partisjonFinnes === false}
+							<span class="mono">{v.partitionId}</span>
+							{#if v.partitionExists === false}
 								<br /><span class="merke merke-fare">mangler i HAPI</span>
-							{:else if v.partisjonFinnes === null}
+							{:else if v.partitionExists === null}
 								<br /><span class="svak">ikke kontrollert</span>
 							{/if}
 						{/if}
 					</td>
-					<td>{v.antallBrukere}</td>
+					<td>{v.countUsers}</td>
 					<td>
-						{v.antallAuditInnslag}
-						{#if v.sisteAktivitet}<br /><span class="svak">{v.sisteAktivitet}</span>{/if}
+						{v.countAuditEntry}
+						{#if v.lastAktivitet}<br /><span class="svak">{v.lastAktivitet}</span>{/if}
 					</td>
 					<td>
 						<span
@@ -155,7 +155,7 @@
 							class:merke-fare={v.status === 'avviklet'}>{statustekst[v.status]}</span>
 					</td>
 					<td>
-						{#if !v.erPlattform}
+						{#if !v.isPlatform}
 							<form method="POST" action="?/status">
 								<input type="hidden" name="id" value={v.id} />
 								{#if v.status === 'aktiv'}

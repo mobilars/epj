@@ -20,10 +20,10 @@
 	<form method="GET" action="/pasienter/{patientId}/utlevering/last-ned">
 		<fieldset>
 			<legend>Hjemmel</legend>
-			{#each data.grunner as g, i (g.kode)}
+			{#each data.grunner as g, i (g.code)}
 				<label style="font-weight:400">
-					<input type="radio" name="grunn" value={g.kode} checked={i === 0} style="width:auto" />
-					{g.tekst}
+					<input type="radio" name="grunn" value={g.code} checked={i === 0} style="width:auto" />
+					{g.text}
 					<span class="svak mono">purposeOfUse {g.purposeOfUse}</span>
 				</label>
 			{/each}
@@ -70,7 +70,7 @@
 
 <div class="kort tabell-omslag">
 	<h3>Tidligere utleveringer</h3>
-	{#if data.tidligere.length === 0}
+	{#if data.earlier.length === 0}
 		<p class="svak">Ingen utleveringer er registrert på denne pasienten.</p>
 	{:else}
 		<table>
@@ -78,12 +78,12 @@
 				<tr><th>Tidspunkt</th><th>Utlevert av</th><th>Hjemmel</th><th>Referanse</th></tr>
 			</thead>
 			<tbody>
-				{#each data.tidligere as u (u.seq)}
+				{#each data.earlier as u (u.seq)}
 					<tr>
-						<td>{u.tidspunkt}</td>
+						<td>{u.timestamp}</td>
 						<td>{u.hvem}</td>
-						<td>{u.grunn} <span class="svak mono">{u.purposeOfUse}</span></td>
-						<td class="mono">{u.referanse}</td>
+						<td>{u.reason} <span class="svak mono">{u.purposeOfUse}</span></td>
+						<td class="mono">{u.reference}</td>
 					</tr>
 				{/each}
 			</tbody>

@@ -1,14 +1,14 @@
 import { expect, test } from '@playwright/test';
-import { apneForstePasient, loggInn, ventPaHydrering } from './hjelpere';
+import { openFirstPatient, logIn, waitOnHydration } from './hjelpere';
 
 test.describe('journal', () => {
 	test.beforeEach(async ({ page }) => {
-		await loggInn(page, 'lege');
+		await logIn(page, 'lege');
 	});
 
 	test('viser mine pasienter og lar meg søke', async ({ page }) => {
 		await page.goto('/pasienter');
-		await ventPaHydrering(page);
+		await waitOnHydration(page);
 		await expect(page.getByRole('heading', { name: 'Pasienter', exact: true })).toBeVisible();
 		await expect(page.getByRole('link', { name: /Bakken/ })).toBeVisible();
 
@@ -20,14 +20,14 @@ test.describe('journal', () => {
 
 	test('avviser søk på ugyldig fødselsnummer', async ({ page }) => {
 		await page.goto('/pasienter');
-		await ventPaHydrering(page);
+		await waitOnHydration(page);
 		await page.getByLabel(/Søk på navn/).fill('13086510036');
 		await page.getByRole('button', { name: 'Søk' }).click();
 		await expect(page.getByText('Ugyldig fødselsnummer')).toBeVisible();
 	});
 
 	test('viser pasientbanner og klinisk oversikt', async ({ page }) => {
-		await apneForstePasient(page);
+		await openFirstPatient(page);
 		const banner = page.locator('.pasientbanner');
 		await expect(banner).toContainText('Anne Bakken');
 		await expect(banner).toContainText('130865*****');
@@ -39,7 +39,7 @@ test.describe('journal', () => {
 	});
 
 	test('skriver et journalnotat som blir liggende i journalen', async ({ page }) => {
-		const id = await apneForstePasient(page);
+		const id = await openFirstPatient(page);
 		await page.goto(`/pasienter/${id}/notater`);
 
 		await page.getByLabel('Tittel').fill('Kontroll av blodtrykk');
@@ -59,7 +59,7 @@ test.describe('journal', () => {
 	});
 
 	test('feilfører et notat i stedet for å slette det', async ({ page }) => {
-		const id = await apneForstePasient(page);
+		const id = await openFirstPatient(page);
 		await page.goto(`/pasienter/${id}/notater`);
 		await page.getByLabel('Tittel').fill('Notat som skal feilføres');
 		await page.getByLabel('Subjektivt').fill('Ført på feil pasient.');
@@ -75,7 +75,7 @@ test.describe('journal', () => {
 	});
 
 	test('forskriver et legemiddel gjennom SFM', async ({ page }) => {
-		const id = await apneForstePasient(page);
+		const id = await openFirstPatient(page);
 		await page.goto(`/pasienter/${id}/legemidler`);
 
 		await page.getByLabel('Legemiddel', { exact: true }).fill('Metformin');
@@ -89,23 +89,23 @@ test.describe('journal', () => {
 	});
 
 	test('varsler om alvorlig interaksjon', async ({ page }) => {
-		const id = await apneForstePasient(page);
+		const id = await openFirstPatient(page);
 		await page.goto(`/pasienter/${id}/legemidler`);
 
-		for (const [navn, atc] of [['Warfarin', 'B01AA03'], ['Ibux', 'M01AE01']]) {
-				await page.getByLabel('Legemiddel', { exact: true }).fill(navn);
+		for (const [name, atc] of [['Warfarin', 'B01AA03'], ['Ibux', 'M01AE01']]) {
+				await page.getByLabel('Legemiddel', { exact: true }).fill(name);
 			await page.getByLabel('ATC-kode').fill(atc);
 			await page.getByLabel('Dosering').fill('etter behov');
 			await page.getByRole('button', { name: 'Forskriv' }).click();
 		}
 
-		const varsel = page.locator('main').getByRole('status');
-		await expect(varsel).toContainText('ALVORLIG');
-		await expect(varsel).toContainText('blødningsrisiko');
+		const alert = page.locator('main').getByRole('status');
+		await expect(alert).toContainText('ALVORLIG');
+		await expect(alert).toContainText('blødningsrisiko');
 	});
 
 	test('viser innsynsloggen for pasienten', async ({ page }) => {
-		const id = await apneForstePasient(page);
+		const id = await openFirstPatient(page);
 		await page.goto(`/pasienter/${id}/logg`);
 		await expect(page.getByRole('heading', { name: 'Innsynslogg' })).toBeVisible();
 		await expect(page.getByText('Dr. Ingrid Fastlege').first()).toBeVisible();

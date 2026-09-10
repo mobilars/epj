@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { apneForstePasient, loggInn, ventPaHydrering } from './hjelpere';
+import { openFirstPatient, logIn, waitOnHydration } from './hjelpere';
 
 /**
  * Utlevering av journal, sett fra brukeren.
@@ -10,21 +10,21 @@ import { apneForstePasient, loggInn, ventPaHydrering } from './hjelpere';
  */
 test.describe('utlevering av journal', () => {
 	test('legen kan laste ned en lesbar journalutskrift', async ({ page }) => {
-		await loggInn(page, 'lege');
-		const patientId = await apneForstePasient(page);
+		await logIn(page, 'lege');
+		const patientId = await openFirstPatient(page);
 
 		await page.getByRole('link', { name: 'Utlevering' }).click();
-		await ventPaHydrering(page);
+		await waitOnHydration(page);
 		await expect(page.getByRole('heading', { name: 'Utlevering av journal' })).toBeVisible();
 
 		await page.getByLabel('Utleveres til').fill('Pasienten selv');
-		const nedlasting = page.waitForEvent('download');
+		const download = page.waitForEvent('download');
 		await page.getByRole('button', { name: 'Lag og last ned' }).click();
-		const fil = await nedlasting;
+		const file = await download;
 
-		expect(fil.suggestedFilename()).toMatch(/^journal-anne-bakken-\d{4}-\d{2}-\d{2}\.html$/);
+		expect(file.suggestedFilename()).toMatch(/^journal-anne-bakken-\d{4}-\d{2}-\d{2}\.html$/);
 
-		const strom = await fil.createReadStream();
+		const strom = await file.createReadStream();
 		const biter: Buffer[] = [];
 		for await (const b of strom) biter.push(b as Buffer);
 		const html = Buffer.concat(biter).toString('utf8');
@@ -43,64 +43,64 @@ test.describe('utlevering av journal', () => {
 	});
 
 	test('gir FHIR-dokument når det formatet velges', async ({ page }) => {
-		await loggInn(page, 'lege');
-		await apneForstePasient(page);
+		await logIn(page, 'lege');
+		await openFirstPatient(page);
 		await page.getByRole('link', { name: 'Utlevering' }).click();
-		await ventPaHydrering(page);
+		await waitOnHydration(page);
 
 		await page.getByRole('radio', { name: /Overføring til annen behandler/ }).check();
 		await page.getByRole('radio', { name: /FHIR-dokument/ }).check();
 
-		const nedlasting = page.waitForEvent('download');
+		const download = page.waitForEvent('download');
 		await page.getByRole('button', { name: 'Lag og last ned' }).click();
-		const fil = await nedlasting;
-		expect(fil.suggestedFilename()).toMatch(/\.json$/);
+		const file = await download;
+		expect(file.suggestedFilename()).toMatch(/\.json$/);
 
-		const strom = await fil.createReadStream();
+		const strom = await file.createReadStream();
 		const biter: Buffer[] = [];
 		for await (const b of strom) biter.push(b as Buffer);
-		const dokument = JSON.parse(Buffer.concat(biter).toString('utf8'));
+		const document = JSON.parse(Buffer.concat(biter).toString('utf8'));
 
-		expect(dokument.resourceType).toBe('Bundle');
-		expect(dokument.type).toBe('document');
-		expect(dokument.entry[0].resource.resourceType).toBe('Composition');
-		expect(dokument.entry[0].resource.title).toContain('Anne Bakken');
+		expect(document.resourceType).toBe('Bundle');
+		expect(document.type).toBe('document');
+		expect(document.entry[0].resource.resourceType).toBe('Composition');
+		expect(document.entry[0].resource.title).toContain('Anne Bakken');
 	});
 
 	test('viser tidligere utleveringer på pasienten', async ({ page }) => {
-		await loggInn(page, 'lege');
-		const patientId = await apneForstePasient(page);
+		await logIn(page, 'lege');
+		const patientId = await openFirstPatient(page);
 
 		// Første utlevering.
-		const svar = await page.request.get(
+		const response = await page.request.get(
 			`/pasienter/${patientId}/utlevering/last-ned?format=txt&grunn=rettslig&mottaker=Tingretten`
 		);
-		expect(svar.ok()).toBe(true);
-		expect(await svar.text()).toContain('Utlevering på rettslig grunnlag');
+		expect(response.ok()).toBe(true);
+		expect(await response.text()).toContain('Utlevering på rettslig grunnlag');
 
 		await page.goto(`/pasienter/${patientId}/utlevering`);
-		await ventPaHydrering(page);
-		const tabell = page.getByRole('table');
-		await expect(tabell).toContainText('rettslig');
-		await expect(tabell).toContainText('HLEGAL');
+		await waitOnHydration(page);
+		const table = page.getByRole('table');
+		await expect(table).toContainText('rettslig');
+		await expect(table).toContainText('HLEGAL');
 	});
 
 	test('roller uten utleveringsrett kommer ikke til', async ({ page }) => {
-		await loggInn(page, 'sykepleier');
-		const patientId = await apneForstePasient(page);
+		await logIn(page, 'sykepleier');
+		const patientId = await openFirstPatient(page);
 
 		await expect(page.getByRole('link', { name: 'Utlevering' })).toHaveCount(0);
 
-		const svar = await page.request.get(`/pasienter/${patientId}/utlevering/last-ned?format=json`);
-		expect(svar.status()).toBe(403);
+		const response = await page.request.get(`/pasienter/${patientId}/utlevering/last-ned?format=json`);
+		expect(response.status()).toBe(403);
 	});
 
 	test('avviser ugyldig datoavgrensning', async ({ page }) => {
-		await loggInn(page, 'lege');
-		const patientId = await apneForstePasient(page);
-		const svar = await page.request.get(
+		await logIn(page, 'lege');
+		const patientId = await openFirstPatient(page);
+		const response = await page.request.get(
 			`/pasienter/${patientId}/utlevering/last-ned?format=txt&fra=i-fjor`
 		);
-		expect(svar.status()).toBe(400);
+		expect(response.status()).toBe(400);
 	});
 });

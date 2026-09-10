@@ -29,31 +29,31 @@ export class FhirError extends Error {
 		return operationOutcome(this.issues);
 	}
 
-	static ugyldig(melding: string, expression?: string[]): FhirError {
-		return new FhirError(400, [issue('error', 'invalid', melding, expression)]);
+	static invalid(message: string, expression?: string[]): FhirError {
+		return new FhirError(400, [issue('error', 'invalid', message, expression)]);
 	}
-	static ikkeFunnet(melding = 'Ressursen finnes ikke'): FhirError {
-		return new FhirError(404, [issue('error', 'not-found', melding)]);
+	static notFunnet(message = 'Ressursen finnes ikke'): FhirError {
+		return new FhirError(404, [issue('error', 'not-found', message)]);
 	}
-	static ikkeAutentisert(melding = 'Autentisering kreves'): FhirError {
-		return new FhirError(401, [issue('error', 'login', melding)], '4');
+	static notAutentisert(message = 'Autentisering kreves'): FhirError {
+		return new FhirError(401, [issue('error', 'login', message)], '4');
 	}
-	static ikkeTillatt(melding = 'Ingen tilgang'): FhirError {
-		return new FhirError(403, [issue('error', 'forbidden', melding)], '4');
+	static notAllowed(message = 'Ingen tilgang'): FhirError {
+		return new FhirError(403, [issue('error', 'forbidden', message)], '4');
 	}
-	static konflikt(melding: string): FhirError {
-		return new FhirError(409, [issue('error', 'conflict', melding)]);
+	static konflikt(message: string): FhirError {
+		return new FhirError(409, [issue('error', 'conflict', message)]);
 	}
-	static forUtdatert(melding = 'Versjonskonflikt - ressursen er endret av andre'): FhirError {
-		return new FhirError(412, [issue('error', 'conflict', melding)]);
+	static forUtdatert(message = 'Versjonskonflikt - ressursen er endret av andre'): FhirError {
+		return new FhirError(412, [issue('error', 'conflict', message)]);
 	}
-	static ikkeStottet(melding: string): FhirError {
-		return new FhirError(422, [issue('error', 'not-supported', melding)]);
+	static notStottet(message: string): FhirError {
+		return new FhirError(422, [issue('error', 'not-supported', message)]);
 	}
-	static forMange(melding = 'For mange forespørsler'): FhirError {
-		return new FhirError(429, [issue('error', 'throttled', melding)], '4');
+	static forMange(message = 'For mange forespørsler'): FhirError {
+		return new FhirError(429, [issue('error', 'throttled', message)], '4');
 	}
-	static internFeil(melding = 'Intern feil'): FhirError {
-		return new FhirError(500, [issue('fatal', 'exception', melding)], '8');
+	static internalError(message = 'Intern feil'): FhirError {
+		return new FhirError(500, [issue('fatal', 'exception', message)], '8');
 	}
 }

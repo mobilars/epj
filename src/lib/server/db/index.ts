@@ -13,7 +13,7 @@ const { Pool } = pg;
  */
 
 let pool: pg.Pool | null = null;
-const transaksjonsKontekst = new AsyncLocalStorage<pg.PoolClient>();
+const transaksjonsContext = new AsyncLocalStorage<pg.PoolClient>();
 
 // PostgreSQL returnerer BIGINT som streng for å unngå tap av presisjon.
 // Beløp lagres i øre og holder seg trygt innenfor Number.MAX_SAFE_INTEGER.
@@ -39,39 +39,39 @@ export function getPool(): pg.Pool {
 }
 
 /** Brukes av integrasjonstestene til å injisere en egen pool. */
-export function setPool(ny: pg.Pool | null): void {
-	pool = ny;
+export function setPool(newValue: pg.Pool | null): void {
+	pool = newValue;
 }
 
-export async function lukkPool(): Promise<void> {
+export async function closePool(): Promise<void> {
 	if (pool) {
 		await pool.end();
 		pool = null;
 	}
 }
 
-function klient(): pg.Pool | pg.PoolClient {
-	return transaksjonsKontekst.getStore() ?? getPool();
+function client(): pg.Pool | pg.PoolClient {
+	return transaksjonsContext.getStore() ?? getPool();
 }
 
 export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(
 	sql: string,
 	params: unknown[] = []
 ): Promise<T[]> {
-	const res = await klient().query<T>(sql, params as never[]);
+	const res = await client().query<T>(sql, params as never[]);
 	return res.rows;
 }
 
-export async function en<T extends pg.QueryResultRow = pg.QueryResultRow>(
+export async function one<T extends pg.QueryResultRow = pg.QueryResultRow>(
 	sql: string,
 	params: unknown[] = []
 ): Promise<T | null> {
-	const rader = await query<T>(sql, params);
-	return rader[0] ?? null;
+	const rows = await query<T>(sql, params);
+	return rows[0] ?? null;
 }
 
 export async function exec(sql: string, params: unknown[] = []): Promise<number> {
-	const res = await klient().query(sql, params as never[]);
+	const res = await client().query(sql, params as never[]);
 	return res.rowCount ?? 0;
 }
 
@@ -80,16 +80,16 @@ export async function exec(sql: string, params: unknown[] = []): Promise<number>
  * en indre feil kan rulles tilbake uten å avbryte hele den ytre transaksjonen.
  */
 export async function transaction<T>(fn: () => Promise<T>): Promise<T> {
-	const eksisterende = transaksjonsKontekst.getStore();
-	if (eksisterende) {
+	const existing = transaksjonsContext.getStore();
+	if (existing) {
 		const sp = `sp_${Math.random().toString(36).slice(2, 10)}`;
-		await eksisterende.query(`SAVEPOINT ${sp}`);
+		await existing.query(`SAVEPOINT ${sp}`);
 		try {
 			const r = await fn();
-			await eksisterende.query(`RELEASE SAVEPOINT ${sp}`);
+			await existing.query(`RELEASE SAVEPOINT ${sp}`);
 			return r;
 		} catch (err) {
-			await eksisterende.query(`ROLLBACK TO SAVEPOINT ${sp}`);
+			await existing.query(`ROLLBACK TO SAVEPOINT ${sp}`);
 			throw err;
 		}
 	}
@@ -97,7 +97,7 @@ export async function transaction<T>(fn: () => Promise<T>): Promise<T> {
 	const c = await getPool().connect();
 	try {
 		await c.query('BEGIN');
-		const r = await transaksjonsKontekst.run(c, fn);
+		const r = await transaksjonsContext.run(c, fn);
 		await c.query('COMMIT');
 		return r;
 	} catch (err) {
@@ -113,15 +113,15 @@ export async function transaction<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /** Rådgivende lås brukt av bakgrunnsjobbene så bare én instans kjører av gangen. */
-export async function medLaas<T>(nokkel: number, fn: () => Promise<T>): Promise<T | null> {
+export async function withLock<T>(key: number, fn: () => Promise<T>): Promise<T | null> {
 	const c = await getPool().connect();
 	try {
-		const res = await c.query<{ locked: boolean }>('SELECT pg_try_advisory_lock($1) AS locked', [nokkel]);
+		const res = await c.query<{ locked: boolean }>('SELECT pg_try_advisory_lock($1) AS locked', [key]);
 		if (!res.rows[0]?.locked) return null;
 		try {
 			return await fn();
 		} finally {
-			await c.query('SELECT pg_advisory_unlock($1)', [nokkel]);
+			await c.query('SELECT pg_advisory_unlock($1)', [key]);
 		}
 	} finally {
 		c.release();

@@ -4,42 +4,42 @@
 
 	// Skjemaet fungerer uten JavaScript: engangskodefeltet står alltid der, og
 	// brukernavnet fylles ut på serversiden etter et mislykket forsøk.
-	const feilFraUrl = $derived(page.url.searchParams.get('feil'));
+	const errorFromUrl = $derived(page.url.searchParams.get('feil'));
 </script>
 
 <div class="smal">
 	<h1>Logg inn</h1>
-	<p class="svak">{data.organisasjon}</p>
+	<p class="svak">{data.organisation}</p>
 
-	{#if feilFraUrl}
-		<div class="varsel varsel-feil" role="alert">{feilFraUrl}</div>
+	{#if errorFromUrl}
+		<div class="varsel varsel-feil" role="alert">{errorFromUrl}</div>
 	{/if}
-	{#if form?.feil}
-		<div class="varsel varsel-feil" role="alert">{form.feil}</div>
+	{#if form?.error}
+		<div class="varsel varsel-feil" role="alert">{form.error}</div>
 	{/if}
 
-	{#if data.helseId}
+	{#if data.healthId}
 		<div class="kort">
 			<h2>HelseID</h2>
 			<p class="svak">
 				Logg inn med HelseID. Du blir sendt til Norsk helsenett for autentisering på
 				sikkerhetsnivå 4.
 			</p>
-			<a class="knapp knapp-primar" href="/logg-inn/helseid?retur={encodeURIComponent(data.retur)}">
+			<a class="knapp knapp-primar" href="/logg-inn/helseid?retur={encodeURIComponent(data.returnTo)}">
 				Logg inn med HelseID
 			</a>
 		</div>
 	{/if}
 
-	{#if data.testinnlogging}
+	{#if data.testLogin}
 		<div class="kort">
-			<h2>{data.helseId ? 'Lokal pålogging (test)' : 'Pålogging'}</h2>
-			{#if data.helseId}
+			<h2>{data.healthId ? 'Lokal pålogging (test)' : 'Pålogging'}</h2>
+			{#if data.healthId}
 				<p class="svak">Kun for testmiljø. Skal være avslått i produksjon.</p>
 			{/if}
 
 			<form method="POST">
-				<input type="hidden" name="retur" value={data.retur} />
+				<input type="hidden" name="retur" value={data.returnTo} />
 				<div class="felt">
 					<label for="brukernavn">Brukernavn</label>
 					<!-- Feltet fylles bevisst ikke ut på nytt etter et mislykket forsøk:
@@ -65,7 +65,7 @@
 				<button type="submit" class="primar">Logg inn</button>
 			</form>
 
-			{#if data.demobrukere.length}
+			{#if data.demoUsers.length}
 				<hr />
 				<h3>Demobrukere</h3>
 				<p class="svak">Passord for alle: <span class="mono">Testpassord1!</span> · engangskode: <span class="mono">000000</span></p>
@@ -73,11 +73,11 @@
 					<table>
 						<thead><tr><th>Brukernavn</th><th>Navn</th><th>Rolle</th></tr></thead>
 						<tbody>
-							{#each data.demobrukere as d (d.brukernavn)}
+							{#each data.demoUsers as d (d.username)}
 								<tr>
-									<td class="mono">{d.brukernavn}</td>
-									<td>{d.navn}</td>
-									<td>{d.rolle}</td>
+									<td class="mono">{d.username}</td>
+									<td>{d.name}</td>
+									<td>{d.role}</td>
 								</tr>
 							{/each}
 						</tbody>
@@ -85,7 +85,7 @@
 				</div>
 			{/if}
 		</div>
-	{:else if !data.helseId}
+	{:else if !data.healthId}
 		<div class="varsel varsel-feil">
 			Ingen påloggingsmetode er konfigurert. Kontakt systemansvarlig.
 		</div>

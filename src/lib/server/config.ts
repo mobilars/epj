@@ -83,8 +83,8 @@ export const config = {
 			return (env.EPJ_HAPI_BASE_URL ?? 'http://localhost:8080/fhir').replace(/\/$/, '');
 		},
 		/** Delt hemmelighet mot HAPI (Basic auth i referanseoppsettet). */
-		brukernavn: env.EPJ_HAPI_USER ?? '',
-		passord: env.EPJ_HAPI_PASSWORD ?? '',
+		username: env.EPJ_HAPI_USER ?? '',
+		password: env.EPJ_HAPI_PASSWORD ?? '',
 		timeoutMs: int('EPJ_HAPI_TIMEOUT_MS', 20_000),
 		/**
 		 * Partisjonering slått på. Da inngår virksomhetens partisjonsnavn i
@@ -93,7 +93,7 @@ export const config = {
 		 */
 		multitenant: bool('EPJ_HAPI_MULTITENANT', true),
 		/** Slår på $validate mot HAPI før skriving. */
-		validerVedSkriving: bool('EPJ_HAPI_VALIDATE', false)
+		validateAtSkriving: bool('EPJ_HAPI_VALIDATE', false)
 	},
 
 	/** Nøkkel for kryptering av data at rest (TOTP-hemmeligheter, private signeringsnøkler). */
@@ -138,8 +138,8 @@ export const config = {
 		rateLimit: {
 			generellPerMinutt: int('EPJ_RATE_GENERELL', 600),
 			autentiseringPerMinutt: int('EPJ_RATE_AUTH', 20),
-			paloggingPerBruker: int('EPJ_RATE_LOGIN_BRUKER', 10),
-			paloggingVinduSekunder: int('EPJ_RATE_LOGIN_VINDU', 300)
+			loginPerUser: int('EPJ_RATE_LOGIN_BRUKER', 10),
+			loginWindowSekunder: int('EPJ_RATE_LOGIN_VINDU', 300)
 		}
 	},
 
@@ -148,10 +148,10 @@ export const config = {
 	 * utvikling, testmiljø og som reserveløsning hvis HelseID er utilgjengelig.
 	 * Skal være avslått i produksjon når HelseID er i bruk.
 	 */
-	testinnlogging: {
+	testLogin: {
 		aktivert: bool('EPJ_TESTINNLOGGING', process.env.NODE_ENV !== 'production'),
 		/** Viser demobrukere med ferdig utfylt passord på påloggingssiden. */
-		visDemobrukere: bool('EPJ_VIS_DEMOBRUKERE', process.env.NODE_ENV !== 'production')
+		showDemoUsers: bool('EPJ_VIS_DEMOBRUKERE', process.env.NODE_ENV !== 'production')
 	},
 
 	audit: {
@@ -168,47 +168,47 @@ export const config = {
 	 */
 	tenant: {
 		/** Virksomheten forespørsler faller tilbake på når vertsnavnet er ukjent. */
-		standard: env.EPJ_STANDARD_TENANT ?? 'standard',
+		defaultValue: env.EPJ_DEFAULT_TENANT ?? 'standard',
 		/** Vertsnavnet plattformadministrasjonen nås på. */
-		plattformVertsnavn: env.EPJ_PLATTFORM_VERTSNAVN ?? '',
+		platformHostname: env.EPJ_PLATFORM_HOSTNAME ?? '',
 		/** Godta ukjent vertsnavn og bruk standardvirksomheten. Av i produksjon. */
-		tillatUkjentVertsnavn: bool('EPJ_TILLAT_UKJENT_VERTSNAVN', process.env.NODE_ENV !== 'production')
+		allowUnknownHostname: bool('EPJ_TILLAT_UKJENT_VERTSNAVN', process.env.NODE_ENV !== 'production')
 	},
 
-	organisasjon: {
-		navn: env.EPJ_ORG_NAVN ?? 'Fastlegekontoret (utviklingsmiljø)',
-		organisasjonsnummer: env.EPJ_ORG_ORGNR ?? '999999999',
+	organisation: {
+		name: env.EPJ_ORG_NAME ?? 'Fastlegekontoret (utviklingsmiljø)',
+		organisation_number: env.EPJ_ORG_ORGNR ?? '999999999',
 		herId: env.EPJ_ORG_HER_ID ?? '0000000',
-		kommunenummer: env.EPJ_ORG_KOMMUNENR ?? '0301'
+		municipality_code: env.EPJ_ORG_KOMMUNENR ?? '0301'
 	},
 
-	integrasjoner: {
+	integrations: {
 		/** `mock` kjører alt lokalt uten nettverk. `live` krever endepunkt + klientsertifikat. */
-		modus: (env.EPJ_INTEGRASJON_MODUS ?? 'mock') as 'mock' | 'live',
+		modus: (env.EPJ_INTEGRATION_MODUS ?? 'mock') as 'mock' | 'live',
 		sfm: {
 			baseUrl: env.EPJ_SFM_BASE_URL ?? '',
 			clientId: env.EPJ_SFM_CLIENT_ID ?? '',
 			/** SFM autentiseres med HelseID (client_credentials + private_key_jwt). */
-			helseIdTokenEndpoint: env.EPJ_HELSEID_TOKEN_ENDPOINT ?? '',
+			healthIdTokenEndpoint: env.EPJ_HELSEID_TOKEN_ENDPOINT ?? '',
 			scope: env.EPJ_SFM_SCOPE ?? 'nhn:sfm/api'
 		},
 		nhn: {
 			meldingstjenerUrl: env.EPJ_NHN_MELDINGSTJENER_URL ?? '',
 			herId: env.EPJ_ORG_HER_ID ?? '0000000',
-			adresseregisterUrl: env.EPJ_NHN_ADRESSEREGISTER_URL ?? ''
+			addressRegistryUrl: env.EPJ_NHN_ADDRESSREGISTRY_URL ?? ''
 		},
 		helfo: {
 			/** Innsending av regningskort til KUHR (oppgjør). */
-			oppgjorUrl: env.EPJ_HELFO_OPPGJOR_URL ?? '',
+			settlementUrl: env.EPJ_HELFO_SETTLEMENT_URL ?? '',
 			/** Oppslag mot frikort-/egenandelstjenesten. */
-			egenandelUrl: env.EPJ_HELFO_EGENANDEL_URL ?? '',
+			copaymentUrl: env.EPJ_HELFO_COPAYMENT_URL ?? '',
 			avtaleId: env.EPJ_HELFO_AVTALE_ID ?? ''
 		},
 		/**
 		 * HelseID er den primære påloggingsmekanismen for helsepersonell.
 		 * Klienten autentiserer seg med private_key_jwt; ingen delt hemmelighet.
 		 */
-		helseId: {
+		healthId: {
 			enabled: bool('EPJ_HELSEID_ENABLED', false),
 			issuer: (env.EPJ_HELSEID_ISSUER ?? 'https://helseid-sts.test.nhn.no').replace(/\/$/, ''),
 			clientId: env.EPJ_HELSEID_CLIENT_ID ?? '',

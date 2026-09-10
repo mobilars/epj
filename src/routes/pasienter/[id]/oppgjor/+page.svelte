@@ -2,36 +2,36 @@
 	let { data, form } = $props();
 	let valgte = $state<string[]>([]);
 
-	const grupper = $derived([...new Set(data.takster.map((t) => t.gruppe))]);
-	const velg = (kode: string, på: boolean) => {
-		valgte = på ? [...valgte, kode] : valgte.filter((k) => k !== kode);
+	const grupper = $derived([...new Set(data.tariffs.map((t) => t.group))]);
+	const select = (code: string, on: boolean) => {
+		valgte = on ? [...valgte, code] : valgte.filter((k) => k !== code);
 	};
 </script>
 
 <h2>Oppgjør</h2>
 
-{#if data.egenandel}
-	<div class="varsel" class:varsel-ok={data.egenandel.harFrikort} class:varsel-info={!data.egenandel.harFrikort}>
-		{#if data.egenandel.harFrikort}
-			Pasienten har <strong>frikort</strong>{#if data.egenandel.gyldigTil} til {data.egenandel.gyldigTil}{/if}.
+{#if data.copayment}
+	<div class="varsel" class:varsel-ok={data.copayment.hasExemptionCard} class:varsel-info={!data.copayment.hasExemptionCard}>
+		{#if data.copayment.hasExemptionCard}
+			Pasienten har <strong>frikort</strong>{#if data.copayment.validTo} til {data.copayment.validTo}{/if}.
 			Egenandel skal ikke kreves inn.
 		{:else}
-			Opptjent egenandel i år: <strong>{data.egenandel.opptjent}</strong> ·
-			gjenstår til frikort: <strong>{data.egenandel.gjenstaende}</strong>
+			Opptjent egenandel i år: <strong>{data.copayment.earned}</strong> ·
+			gjenstår til frikort: <strong>{data.copayment.remaining}</strong>
 		{/if}
-		<span class="svak">(kilde: {data.egenandel.kilde})</span>
+		<span class="svak">(kilde: {data.copayment.source})</span>
 	</div>
 {/if}
 
-{#if form?.feil}<div class="varsel varsel-feil" role="alert">{form.feil}</div>{/if}
+{#if form?.error}<div class="varsel varsel-feil" role="alert">{form.error}</div>{/if}
 {#if form?.ok}
 	<div class="varsel varsel-ok" role="status">
 		Regningskortet er registrert og klart for oppgjør.
-		{#if form.advarsler?.length}<ul>{#each form.advarsler as a}<li>{a}</li>{/each}</ul>{/if}
+		{#if form.warnings?.length}<ul>{#each form.warnings as a}<li>{a}</li>{/each}</ul>{/if}
 	</div>
 {/if}
 
-{#if data.kanRegistrere}
+{#if data.canRegistrere}
 	<form method="POST" action="?/nytt" class="kort">
 		<h3>Nytt regningskort</h3>
 		<div class="rad">
@@ -51,18 +51,18 @@
 		</div>
 		<label><input type="checkbox" name="spesialist" value="på" style="width:auto" /> Spesialist i allmennmedisin</label>
 
-		{#each grupper as gruppe (gruppe)}
+		{#each grupper as group (group)}
 			<fieldset>
-				<legend>{gruppe}</legend>
-				{#each data.takster.filter((t) => t.gruppe === gruppe) as t (t.kode)}
+				<legend>{group}</legend>
+				{#each data.tariffs.filter((t) => t.group === group) as t (t.code)}
 					<div class="rad" style="gap:.5rem">
 						<label style="flex:1 1 22rem; font-weight:400">
-							<input type="checkbox" name="takst" value={t.kode} style="width:auto" onchange={(e) => velg(t.kode, e.currentTarget.checked)} />
-							<span class="mono">{t.kode}</span> {t.tekst}
-							<span class="svak">({t.refusjon} refusjon / {t.egenandel} egenandel)</span>
+							<input type="checkbox" name="takst" value={t.code} style="width:auto" onchange={(e) => select(t.code, e.currentTarget.checked)} />
+							<span class="mono">{t.code}</span> {t.text}
+							<span class="svak">({t.reimbursement} refusjon / {t.copayment} egenandel)</span>
 						</label>
-						{#if t.repeterbar && valgte.includes(t.kode)}
-							<input name="antall_{t.kode}" type="number" min="1" max="6" value="1" style="width:5rem" aria-label="Antall {t.kode}" />
+						{#if t.repeterbar && valgte.includes(t.code)}
+							<input name="antall_{t.code}" type="number" min="1" max="6" value="1" style="width:5rem" aria-label="Antall {t.code}" />
 						{/if}
 					</div>
 				{/each}
@@ -70,7 +70,7 @@
 		{/each}
 
 		<p class="svak">
-			Takstbeløpene er et arbeidsgrunnlag med gyldighet fra {data.gyldigFra} og må kontrolleres
+			Takstbeløpene er et arbeidsgrunnlag med gyldighet fra {data.validFrom} og må kontrolleres
 			mot gjeldende normaltariff før produksjonsbruk.
 		</p>
 		<button type="submit" class="primar">Registrer regningskort</button>
@@ -79,22 +79,22 @@
 
 <div class="kort tabell-omslag">
 	<h3>Registrerte regningskort</h3>
-	{#if data.kort.length === 0}
+	{#if data.card.length === 0}
 		<p class="svak">Ingen regningskort for denne pasienten.</p>
 	{:else}
 		<table>
 			<thead><tr><th>Dato</th><th>Takster</th><th>Diagnose</th><th class="hoyre">Refusjon</th><th class="hoyre">Egenandel</th><th>Status</th></tr></thead>
 			<tbody>
-				{#each data.kort as k (k.id)}
+				{#each data.card as k (k.id)}
 					<tr>
-						<td>{k.dato}</td>
-						<td class="mono">{k.linjer.join(', ')}</td>
-						<td class="mono">{k.diagnose}</td>
-						<td class="hoyre tall">{k.refusjon}</td>
-						<td class="hoyre tall">{k.egenandel}{#if k.fritak}<br /><span class="svak">{k.fritak}</span>{/if}</td>
+						<td>{k.date}</td>
+						<td class="mono">{k.lines.join(', ')}</td>
+						<td class="mono">{k.diagnosis}</td>
+						<td class="hoyre tall">{k.reimbursement}</td>
+						<td class="hoyre tall">{k.copayment}{#if k.exemption}<br /><span class="svak">{k.exemption}</span>{/if}</td>
 						<td>
 							<span class="merke" class:merke-ok={k.status === 'godkjent'} class:merke-fare={k.status === 'avvist'}>{k.status}</span>
-							{#if k.avvisning}<br /><span class="svak">{k.avvisning}</span>{/if}
+							{#if k.rejection}<br /><span class="svak">{k.rejection}</span>{/if}
 						</td>
 					</tr>
 				{/each}

@@ -11,19 +11,19 @@ const port = Number(process.env.TEST_FHIR_PORT ?? 8080);
 
 const server = await startTestFhirServer();
 // startTestFhirServer velger tilfeldig port; vi proxyer den til ønsket port.
-const mål = new URL(server.url);
+const target = new URL(server.url);
 
 const proxy = createServer((req, res) => {
 	const biter: Buffer[] = [];
 	req.on('data', (b) => biter.push(b));
 	req.on('end', async () => {
-		const svar = await fetch(`http://127.0.0.1:${mål.port}${req.url}`, {
+		const response = await fetch(`http://127.0.0.1:${target.port}${req.url}`, {
 			method: req.method,
 			headers: req.headers as Record<string, string>,
 			body: ['GET', 'HEAD'].includes(req.method ?? 'GET') ? undefined : Buffer.concat(biter)
 		});
-		res.writeHead(svar.status, Object.fromEntries(svar.headers));
-		res.end(Buffer.from(await svar.arrayBuffer()));
+		res.writeHead(response.status, Object.fromEntries(response.headers));
+		res.end(Buffer.from(await response.arrayBuffer()));
 	});
 });
 
@@ -34,7 +34,7 @@ proxy.listen(port, '127.0.0.1', () => {
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 	process.on(signal, async () => {
 		proxy.close();
-		await server.lukk();
+		await server.close();
 		process.exit(0);
 	});
 }

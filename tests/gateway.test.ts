@@ -1,16 +1,16 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { exec, query } from '../src/lib/server/db/index';
-import { harTestdatabase, opprettTestdatabase, tomTabeller, type Testdatabase, settInn } from './fixtures/db';
+import { hasTestDatabase, createTestDatabase, emptyTables, type TestDatabase, setIn } from './fixtures/db';
 import { fhirForTest, type TestFhirServer } from './fixtures/fhir-testserver';
-import { appKontekst, kontekst } from './fixtures/kontekst';
-import { utfor } from '../src/lib/server/fhir/gateway';
+import { appContext, context } from './fixtures/context';
+import { execute } from '../src/lib/server/fhir/gateway';
 import { FhirError } from '../src/lib/server/fhir/outcome';
-import { fhirKlient } from '../src/lib/server/fhir/client';
-import { nyId } from '../src/lib/server/util/ids';
-import { SYSTEM } from '../src/lib/server/fhir/kodeverk';
+import { fhirClient } from '../src/lib/server/fhir/client';
+import { newId } from '../src/lib/server/util/ids';
+import { SYSTEM } from '../src/lib/server/fhir/codesystems';
 import type { Bundle } from '../src/lib/server/fhir/types';
 
-const beskriv = harTestdatabase() ? describe : describe.skip;
+const describeIf = hasTestDatabase() ? describe : describe.skip;
 
 /**
  * Integrasjonstest av vokteren foran FHIR-serveren.
@@ -19,44 +19,44 @@ const beskriv = harTestdatabase() ? describe : describe.skip;
  * hele kjeden testes: tilgangsbeslutning, videresending, etterfiltrering av
  * sperrede pasienter og skriving til sikkerhetsloggen.
  */
-beskriv('FHIR-vokteren', () => {
-	let db: Testdatabase;
+describeIf('FHIR-vokteren', () => {
+	let db: TestDatabase;
 	let fhir: TestFhirServer;
 	let pasient1 = '';
 	let pasient2 = '';
 
 	beforeAll(async () => {
-		db = await opprettTestdatabase('gateway');
+		db = await createTestDatabase('gateway');
 		fhir = await fhirForTest();
 		process.env.EPJ_HAPI_BASE_URL = fhir.url;
 	});
 
 	afterAll(async () => {
-		await fhir.lukk();
+		await fhir.close();
 		await db.riv();
 	});
 
 	beforeEach(async () => {
-		await tomTabeller();
+		await emptyTables();
 		fhir.nullstill();
-		await settInn('INSERT INTO user_account (id, brukernavn, navn) VALUES ($1,$2,$3)', ['bruker-1', 'lege', 'Dr. Ingrid Fastlege']);
-		await settInn('INSERT INTO user_account (id, brukernavn, navn) VALUES ($1,$2,$3)', ['bruker-2', 'sykepleier', 'Kari Sykepleier']);
+		await setIn('INSERT INTO user_account (id, username, name) VALUES ($1,$2,$3)', ['bruker-1', 'lege', 'Dr. Ingrid Fastlege']);
+		await setIn('INSERT INTO user_account (id, username, name) VALUES ($1,$2,$3)', ['bruker-2', 'sykepleier', 'Kari Sykepleier']);
 
-		const p1 = await fhirKlient.opprett({
+		const p1 = await fhirClient.create({
 			resourceType: 'Patient',
 			identifier: [{ system: SYSTEM.FNR, value: '13086510035' }],
 			name: [{ family: 'Bakken', given: ['Anne'] }]
 		});
-		const p2 = await fhirKlient.opprett({
+		const p2 = await fhirClient.create({
 			resourceType: 'Patient',
 			identifier: [{ system: SYSTEM.FNR, value: '24035810281' }],
 			name: [{ family: 'Vik', given: ['Ola'] }]
 		});
-		pasient1 = p1.ressurs.id as string;
-		pasient2 = p2.ressurs.id as string;
+		pasient1 = p1.resource.id as string;
+		pasient2 = p2.resource.id as string;
 
 		for (const p of [pasient1, pasient2]) {
-			await fhirKlient.opprett({
+			await fhirClient.create({
 				resourceType: 'Observation',
 				status: 'final',
 				category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'vital-signs' }] }],
@@ -64,7 +64,7 @@ beskriv('FHIR-vokteren', () => {
 				subject: { reference: `Patient/${p}` },
 				valueQuantity: { value: 140, unit: 'mm[Hg]' }
 			});
-			await fhirKlient.opprett({
+			await fhirClient.create({
 				resourceType: 'Condition',
 				clinicalStatus: { coding: [{ code: 'active' }] },
 				code: { text: 'Hypertensjon' },
@@ -73,131 +73,131 @@ beskriv('FHIR-vokteren', () => {
 		}
 	});
 
-	const girRelasjon = (userId: string, patientId: string) =>
-		settInn('INSERT INTO care_relationship (id, user_id, patient_id, grunnlag) VALUES ($1,$2,$3,$4)', [nyId(), userId, patientId, 'fastlege']);
+	const givesRelationship = (userId: string, patientId: string) =>
+		setIn('INSERT INTO care_relationship (id, user_id, patient_id, basis) VALUES ($1,$2,$3,$4)', [newId(), userId, patientId, 'fastlege']);
 
-	const antallLogg = async (): Promise<number> =>
+	const countLog = async (): Promise<number> =>
 		Number((await query<{ n: string }>('SELECT count(*)::int AS n FROM audit_event'))[0].n);
 
 	describe('lesing', () => {
 		it('leser en ressurs brukeren har tilgang til, og logger det', async () => {
-			await girRelasjon('bruker-1', pasient1);
-			const svar = await utfor({ ctx: kontekst(), metode: 'GET', sti: `Patient/${pasient1}`, sok: new URLSearchParams() });
-			expect(svar.status).toBe(200);
-			expect(svar.ressurs.resourceType).toBe('Patient');
-			expect(svar.headers.etag).toMatch(/^W\//);
+			await givesRelationship('bruker-1', pasient1);
+			const response = await execute({ ctx: context(), method: 'GET', path: `Patient/${pasient1}`, search: new URLSearchParams() });
+			expect(response.status).toBe(200);
+			expect(response.resource.resourceType).toBe('Patient');
+			expect(response.headers.etag).toMatch(/^W\//);
 
-			const logg = await query<{ subtype: string; outcome: string; patient_id: string }>('SELECT subtype, outcome, patient_id FROM audit_event');
-			expect(logg).toHaveLength(1);
-			expect(logg[0]).toMatchObject({ subtype: 'read', outcome: '0', patient_id: pasient1 });
+			const log = await query<{ subtype: string; outcome: string; patient_id: string }>('SELECT subtype, outcome, patient_id FROM audit_event');
+			expect(log).toHaveLength(1);
+			expect(log[0]).toMatchObject({ subtype: 'read', outcome: '0', patient_id: pasient1 });
 		});
 
 		it('nekter lesing uten behandlingsrelasjon, og logger avvisningen', async () => {
 			await expect(
-				utfor({ ctx: kontekst(), metode: 'GET', sti: `Patient/${pasient1}`, sok: new URLSearchParams() })
+				execute({ ctx: context(), method: 'GET', path: `Patient/${pasient1}`, search: new URLSearchParams() })
 			).rejects.toThrow(FhirError);
 
-			const logg = await query<{ outcome: string; outcome_desc: string }>('SELECT outcome, outcome_desc FROM audit_event');
-			expect(logg).toHaveLength(1);
-			expect(logg[0].outcome).toBe('4');
-			expect(logg[0].outcome_desc).toMatch(/behandlingsrelasjon/);
+			const log = await query<{ outcome: string; outcome_desc: string }>('SELECT outcome, outcome_desc FROM audit_event');
+			expect(log).toHaveLength(1);
+			expect(log[0].outcome).toBe('4');
+			expect(log[0].outcome_desc).toMatch(/behandlingsrelasjon/);
 		});
 
 		it('nekter en app som mangler scope for ressurstypen', async () => {
-			await girRelasjon('bruker-1', pasient1);
-			const app = appKontekst('patient/Observation.rs', pasient1);
+			await givesRelationship('bruker-1', pasient1);
+			const app = appContext('patient/Observation.rs', pasient1);
 			await expect(
-				utfor({ ctx: app, metode: 'GET', sti: `Condition/finnes-ikke`, sok: new URLSearchParams() })
+				execute({ ctx: app, method: 'GET', path: `Condition/finnes-ikke`, search: new URLSearchParams() })
 			).rejects.toThrow();
 		});
 	});
 
 	describe('søk', () => {
 		it('avgrenser til pasienter brukeren har relasjon til', async () => {
-			await girRelasjon('bruker-1', pasient1);
-			const svar = await utfor({ ctx: kontekst(), metode: 'POST', sti: 'Observation/_search', sok: new URLSearchParams(), kropp: new URLSearchParams() });
-			const bundle = svar.ressurs as Bundle;
+			await givesRelationship('bruker-1', pasient1);
+			const response = await execute({ ctx: context(), method: 'POST', path: 'Observation/_search', search: new URLSearchParams(), body: new URLSearchParams() });
+			const bundle = response.resource as Bundle;
 			expect(bundle.entry).toHaveLength(1);
 			const subject = (bundle.entry?.[0].resource?.subject as { reference: string }).reference;
 			expect(subject).toBe(`Patient/${pasient1}`);
 		});
 
 		it('gir tomt resultat når brukeren ikke har noen pasienter', async () => {
-			const svar = await utfor({ ctx: kontekst(), metode: 'POST', sti: 'Observation/_search', sok: new URLSearchParams(), kropp: new URLSearchParams() });
-			expect((svar.ressurs as Bundle).entry).toHaveLength(0);
+			const response = await execute({ ctx: context(), method: 'POST', path: 'Observation/_search', search: new URLSearchParams(), body: new URLSearchParams() });
+			expect((response.resource as Bundle).entry).toHaveLength(0);
 			// Ingen kall skal ha gått videre til FHIR-serveren.
-			if (!fhir.erEkte) {
-				expect(fhir.kall.filter((k) => k.sti.startsWith('Observation/_search'))).toHaveLength(0);
+			if (!fhir.isEkte) {
+				expect(fhir.call.filter((k) => k.path.startsWith('Observation/_search'))).toHaveLength(0);
 			}
 		});
 
 		it('filtrerer bort sperrede pasienter etter at serveren har svart', async () => {
-			await girRelasjon('bruker-1', pasient1);
-			await girRelasjon('bruker-1', pasient2);
-			await settInn("INSERT INTO journal_sperring (id, patient_id, omfang, registrert_av) VALUES ($1,$2,'alle','bruker-1')", [nyId(), pasient2]);
+			await givesRelationship('bruker-1', pasient1);
+			await givesRelationship('bruker-1', pasient2);
+			await setIn("INSERT INTO record_restriction (id, patient_id, scope_extent, registered_by) VALUES ($1,$2,'alle','bruker-1')", [newId(), pasient2]);
 
-			const svar = await utfor({ ctx: kontekst(), metode: 'POST', sti: 'Observation/_search', sok: new URLSearchParams(), kropp: new URLSearchParams() });
-			const bundle = svar.ressurs as Bundle;
+			const response = await execute({ ctx: context(), method: 'POST', path: 'Observation/_search', search: new URLSearchParams(), body: new URLSearchParams() });
+			const bundle = response.resource as Bundle;
 			expect(bundle.entry).toHaveLength(1);
 			expect((bundle.entry?.[0].resource?.subject as { reference: string }).reference).toBe(`Patient/${pasient1}`);
 
-			const logg = await query<{ content: { entity: { detail: { type: { text: string }; valueString: string }[] }[] } }>(
+			const log = await query<{ content: { entity: { detail: { type: { text: string }; valueString: string }[] }[] } }>(
 				"SELECT content FROM audit_event WHERE subtype = 'search-type'"
 			);
-			const detaljer = logg[0].content.entity[0].detail;
-			expect(detaljer.find((d) => d.type.text === 'filtrertBortSperret')?.valueString).toBe('1');
+			const details = log[0].content.entity[0].detail;
+			expect(details.find((d) => d.type.text === 'filtrertBortSperret')?.valueString).toBe('1');
 		});
 
 		it('tvinger inn scope-begrensninger i spørringen', async () => {
-			await girRelasjon('bruker-1', pasient1);
-			const app = appKontekst('patient/Observation.rs?category=vital-signs', pasient1);
-			await utfor({ ctx: app, metode: 'POST', sti: 'Observation/_search', sok: new URLSearchParams(), kropp: new URLSearchParams() });
+			await givesRelationship('bruker-1', pasient1);
+			const app = appContext('patient/Observation.rs?category=vital-signs', pasient1);
+			await execute({ ctx: app, method: 'POST', path: 'Observation/_search', search: new URLSearchParams(), body: new URLSearchParams() });
 			// Begrensningen skal ha nådd fram til serveren.
-			if (!fhir.erEkte) {
-				expect(fhir.kall.some((k) => k.sti === 'Observation/_search')).toBe(true);
+			if (!fhir.isEkte) {
+				expect(fhir.call.some((k) => k.path === 'Observation/_search')).toBe(true);
 			}
 		});
 
 		it('maskerer identifikatorer i loggen', async () => {
-			await girRelasjon('bruker-1', pasient1);
-			await utfor({
-				ctx: kontekst(), metode: 'POST', sti: 'Patient/_search',
-				sok: new URLSearchParams(), kropp: new URLSearchParams({ identifier: `${SYSTEM.FNR}|13086510035` })
+			await givesRelationship('bruker-1', pasient1);
+			await execute({
+				ctx: context(), method: 'POST', path: 'Patient/_search',
+				search: new URLSearchParams(), body: new URLSearchParams({ identifier: `${SYSTEM.FNR}|13086510035` })
 			});
-			const logg = await query<{ content: { entity: { detail: { type: { text: string }; valueString: string }[] }[] } }>(
+			const log = await query<{ content: { entity: { detail: { type: { text: string }; valueString: string }[] }[] } }>(
 				"SELECT content FROM audit_event WHERE subtype = 'search-type'"
 			);
-			const sporring = logg[0].content.entity[0].detail.find((d) => d.type.text === 'spørring')?.valueString ?? '';
-			expect(sporring).not.toContain('13086510035');
-			expect(sporring).toContain('maskert');
+			const loggedQuery = log[0].content.entity[0].detail.find((d) => d.type.text === 'spørring')?.valueString ?? '';
+			expect(loggedQuery).not.toContain('13086510035');
+			expect(loggedQuery).toContain('maskert');
 		});
 	});
 
 	describe('skriving', () => {
 		it('oppretter en ressurs og merker forfatteren', async () => {
-			await girRelasjon('bruker-1', pasient1);
-			const svar = await utfor({
-				ctx: kontekst(), metode: 'POST', sti: 'Condition', sok: new URLSearchParams(),
-				kropp: { resourceType: 'Condition', clinicalStatus: { coding: [{ code: 'active' }] }, code: { text: 'Astma' }, subject: { reference: `Patient/${pasient1}` } }
+			await givesRelationship('bruker-1', pasient1);
+			const response = await execute({
+				ctx: context(), method: 'POST', path: 'Condition', search: new URLSearchParams(),
+				body: { resourceType: 'Condition', clinicalStatus: { coding: [{ code: 'active' }] }, code: { text: 'Astma' }, subject: { reference: `Patient/${pasient1}` } }
 			});
-			expect(svar.status).toBe(201);
-			expect(svar.headers.location).toContain('/Condition/');
-			const tagger = (svar.ressurs.meta as { tag?: { system: string; code: string }[] }).tag ?? [];
+			expect(response.status).toBe(201);
+			expect(response.headers.location).toContain('/Condition/');
+			const tagger = (response.resource.meta as { tag?: { system: string; code: string }[] }).tag ?? [];
 			expect(tagger.some((t) => t.system === 'urn:epj:forfatter' && t.code === 'Practitioner/42')).toBe(true);
 		});
 
 		it('avviser ressurs som ikke validerer, uten å kontakte serveren', async () => {
-			await girRelasjon('bruker-1', pasient1);
-			const forFor = fhir.kall.length;
+			await givesRelationship('bruker-1', pasient1);
+			const forFor = fhir.call.length;
 			await expect(
-				utfor({ ctx: kontekst(), metode: 'POST', sti: 'Observation', sok: new URLSearchParams(), kropp: { resourceType: 'Observation' } })
+				execute({ ctx: context(), method: 'POST', path: 'Observation', search: new URLSearchParams(), body: { resourceType: 'Observation' } })
 			).rejects.toMatchObject({ status: 422 });
-			if (!fhir.erEkte) expect(fhir.kall.length).toBe(forFor);
+			if (!fhir.isEkte) expect(fhir.call.length).toBe(forFor);
 		});
 
 		it('hindrer at en ressurs flyttes over på en pasient brukeren har tilgang til', async () => {
-			await girRelasjon('bruker-1', pasient1);
-			const fremmed = await fhirKlient.opprett({
+			await givesRelationship('bruker-1', pasient1);
+			const fremmed = await fhirClient.create({
 				resourceType: 'Condition',
 				clinicalStatus: { coding: [{ code: 'active' }] },
 				code: { text: 'Skjult' },
@@ -205,25 +205,25 @@ beskriv('FHIR-vokteren', () => {
 			});
 			// Ny versjon peker på «min» pasient, men den eksisterende gjør ikke det.
 			await expect(
-				utfor({
-					ctx: kontekst(), metode: 'PUT', sti: `Condition/${fremmed.ressurs.id}`, sok: new URLSearchParams(),
-					kropp: { resourceType: 'Condition', clinicalStatus: { coding: [{ code: 'active' }] }, code: { text: 'Flyttet' }, subject: { reference: `Patient/${pasient1}` } }
+				execute({
+					ctx: context(), method: 'PUT', path: `Condition/${fremmed.resource.id}`, search: new URLSearchParams(),
+					body: { resourceType: 'Condition', clinicalStatus: { coding: [{ code: 'active' }] }, code: { text: 'Flyttet' }, subject: { reference: `Patient/${pasient1}` } }
 				})
 			).rejects.toMatchObject({ status: 403 });
 		});
 
 		it('nekter sletting for rolle uten skriverettighet', async () => {
-			await girRelasjon('bruker-2', pasient1);
-			const sekretaer = kontekst({ userId: 'bruker-2', roller: ['helsesekretaer'] });
+			await givesRelationship('bruker-2', pasient1);
+			const sekretaer = context({ userId: 'bruker-2', roles: ['helsesekretaer'] });
 			await expect(
-				utfor({ ctx: sekretaer, metode: 'DELETE', sti: `Condition/finnes-ikke`, sok: new URLSearchParams() })
+				execute({ ctx: sekretaer, method: 'DELETE', path: `Condition/finnes-ikke`, search: new URLSearchParams() })
 			).rejects.toThrow();
 		});
 	});
 
 	describe('transaksjoner', () => {
 		it('vurderer hver oppføring for seg', async () => {
-			await girRelasjon('bruker-1', pasient1);
+			await givesRelationship('bruker-1', pasient1);
 			const bundle = {
 				resourceType: 'Bundle',
 				type: 'transaction',
@@ -233,20 +233,20 @@ beskriv('FHIR-vokteren', () => {
 				]
 			};
 			await expect(
-				utfor({ ctx: kontekst(), metode: 'POST', sti: '', sok: new URLSearchParams(), kropp: bundle })
+				execute({ ctx: context(), method: 'POST', path: '', search: new URLSearchParams(), body: bundle })
 			).rejects.toMatchObject({ status: 403 });
 
 			// Hele transaksjonen skal være stoppet før den nådde serveren.
-			if (!fhir.erEkte) {
-				expect(fhir.kall.some((k) => k.metode === 'POST' && k.sti === '')).toBe(false);
+			if (!fhir.isEkte) {
+				expect(fhir.call.some((k) => k.method === 'POST' && k.path === '')).toBe(false);
 			}
 		});
 
 		it('kjører en transaksjon der alt er tillatt', async () => {
-			await girRelasjon('bruker-1', pasient1);
-			const svar = await utfor({
-				ctx: kontekst(), metode: 'POST', sti: '', sok: new URLSearchParams(),
-				kropp: {
+			await givesRelationship('bruker-1', pasient1);
+			const response = await execute({
+				ctx: context(), method: 'POST', path: '', search: new URLSearchParams(),
+				body: {
 					resourceType: 'Bundle',
 					type: 'transaction',
 					entry: [
@@ -255,42 +255,42 @@ beskriv('FHIR-vokteren', () => {
 					]
 				}
 			});
-			expect((svar.ressurs as Bundle).type).toBe('transaction-response');
-			expect((svar.ressurs as Bundle).entry).toHaveLength(2);
+			expect((response.resource as Bundle).type).toBe('transaction-response');
+			expect((response.resource as Bundle).entry).toHaveLength(2);
 		});
 	});
 
 	describe('$everything', () => {
 		it('gir hele journalen til den som har tilgang', async () => {
-			await girRelasjon('bruker-1', pasient1);
-			const svar = await utfor({ ctx: kontekst(), metode: 'GET', sti: `Patient/${pasient1}/$everything`, sok: new URLSearchParams() });
-			const typer = ((svar.ressurs as Bundle).entry ?? []).map((e) => e.resource?.resourceType);
-			expect(typer).toContain('Patient');
-			expect(typer).toContain('Observation');
-			expect(typer).toContain('Condition');
+			await givesRelationship('bruker-1', pasient1);
+			const response = await execute({ ctx: context(), method: 'GET', path: `Patient/${pasient1}/$everything`, search: new URLSearchParams() });
+			const types = ((response.resource as Bundle).entry ?? []).map((e) => e.resource?.resourceType);
+			expect(types).toContain('Patient');
+			expect(types).toContain('Observation');
+			expect(types).toContain('Condition');
 		});
 
 		it('fjerner ressurstyper appen ikke har lesescope for', async () => {
-			await girRelasjon('bruker-1', pasient1);
-			const app = appKontekst('patient/Patient.rs patient/Observation.rs', pasient1);
-			const svar = await utfor({ ctx: app, metode: 'GET', sti: `Patient/${pasient1}/$everything`, sok: new URLSearchParams() });
-			const typer = ((svar.ressurs as Bundle).entry ?? []).map((e) => e.resource?.resourceType);
-			expect(typer).toContain('Observation');
-			expect(typer).not.toContain('Condition');
+			await givesRelationship('bruker-1', pasient1);
+			const app = appContext('patient/Patient.rs patient/Observation.rs', pasient1);
+			const response = await execute({ ctx: app, method: 'GET', path: `Patient/${pasient1}/$everything`, search: new URLSearchParams() });
+			const types = ((response.resource as Bundle).entry ?? []).map((e) => e.resource?.resourceType);
+			expect(types).toContain('Observation');
+			expect(types).not.toContain('Condition');
 		});
 
 		it('nekter og logger når brukeren mangler tilgang', async () => {
 			await expect(
-				utfor({ ctx: kontekst(), metode: 'GET', sti: `Patient/${pasient1}/$everything`, sok: new URLSearchParams() })
+				execute({ ctx: context(), method: 'GET', path: `Patient/${pasient1}/$everything`, search: new URLSearchParams() })
 			).rejects.toMatchObject({ status: 403 });
-			expect(await antallLogg()).toBe(1);
+			expect(await countLog()).toBe(1);
 		});
 	});
 
 	describe('CapabilityStatement', () => {
 		it('legger SMART-utvidelsen på serverens erklæring', async () => {
-			const svar = await utfor({ ctx: kontekst(), metode: 'GET', sti: 'metadata', sok: new URLSearchParams() });
-			const rest = (svar.ressurs.rest as { security: { extension: { extension: { url: string; valueUri: string }[] }[] } }[])[0];
+			const response = await execute({ ctx: context(), method: 'GET', path: 'metadata', search: new URLSearchParams() });
+			const rest = (response.resource.rest as { security: { extension: { extension: { url: string; valueUri: string }[] }[] } }[])[0];
 			const uris = rest.security.extension[0].extension;
 			expect(uris.find((u) => u.url === 'authorize')?.valueUri).toContain('/oauth/authorize');
 			expect(uris.find((u) => u.url === 'token')?.valueUri).toContain('/oauth/token');
@@ -300,13 +300,13 @@ beskriv('FHIR-vokteren', () => {
 	describe('ukjente stier', () => {
 		it('avviser ustøttet ressurstype', async () => {
 			await expect(
-				utfor({ ctx: kontekst(), metode: 'GET', sti: 'Ingredient/1', sok: new URLSearchParams() })
+				execute({ ctx: context(), method: 'GET', path: 'Ingredient/1', search: new URLSearchParams() })
 			).rejects.toMatchObject({ status: 422 });
 		});
 
 		it('avviser systemoperasjoner', async () => {
 			await expect(
-				utfor({ ctx: kontekst(), metode: 'GET', sti: '$reindex', sok: new URLSearchParams() })
+				execute({ ctx: context(), method: 'GET', path: '$reindex', search: new URLSearchParams() })
 			).rejects.toThrow();
 		});
 	});

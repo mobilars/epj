@@ -5,13 +5,13 @@ import type { LayoutServerLoad } from './$types';
 export const load: LayoutServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx) redirect(303, `/logg-inn?retur=${encodeURIComponent(event.url.pathname)}`);
-	const har = (r: string) => ctx.rettigheter.has(r as never);
-	if (!har('admin:brukere') && !har('admin:apper') && !har('admin:logg')) {
+	const has = (r: string) => ctx.permissions.has(r as never);
+	if (!has('admin:brukere') && !has('admin:apper') && !has('admin:logg')) {
 		error(403, 'Rollen din har ikke administrasjonstilgang.');
 	}
 	return {
-		kanBrukere: har('admin:brukere'),
-		kanApper: har('admin:apper'),
-		kanLogg: har('admin:logg') || har('logg:innsyn')
+		canUsers: has('admin:brukere'),
+		canApper: has('admin:apper'),
+		canLog: has('admin:logg') || has('logg:innsyn')
 	};
 };

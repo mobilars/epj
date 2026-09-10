@@ -8,11 +8,11 @@
 
 </div>
 
-{#if form?.feil}
-	<div class="varsel varsel-feil" role="alert">{form.feil}</div>
+{#if form?.error}
+	<div class="varsel varsel-feil" role="alert">{form.error}</div>
 {/if}
 
-{#if data.kanSkrive}
+{#if data.canSkrive}
 	<section class="kort">
 		<h3>Nytt notat</h3>
 		<form method="POST" action="?/nytt">
@@ -50,22 +50,22 @@
 	</section>
 {/if}
 
-{#if data.notater.length === 0}
+{#if data.notes.length === 0}
 	<p class="svak">Ingen journalnotater registrert.</p>
 {:else}
-	{#each data.notater as n (n.id)}
+	{#each data.notes as n (n.id)}
 		<article class="kort">
 			<div class="rad-mellom">
-				<h3>{n.tittel}</h3>
+				<h3>{n.title}</h3>
 				<span>
 					{#if n.status === 'entered-in-error'}<span class="merke merke-fare">Feilført</span>{/if}
-					<span class="merke">versjon {n.versjon}</span>
+					<span class="merke">versjon {n.version}</span>
 				</span>
 			</div>
-			<p class="svak">{n.dato} · {n.forfatter}</p>
-			{#each n.seksjoner as s (s.tittel)}
-				<h4>{s.tittel}</h4>
-				<p>{s.tekst}</p>
+			<p class="svak">{n.date} · {n.forfatter}</p>
+			{#each n.seksjoner as s (s.title)}
+				<h4>{s.title}</h4>
+				<p>{s.text}</p>
 			{/each}
 			{#if n.status !== 'entered-in-error'}
 				<details>

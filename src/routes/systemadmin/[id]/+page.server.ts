@@ -1,96 +1,96 @@
 import { error, fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { hentTenant, oppdaterTenant } from '$srv/tenant/tenant';
-import { listPartisjoner } from '$srv/tenant/partisjon';
-import { aktorFraKontekst } from '$srv/audit';
+import { getTenant, updateTenant } from '$srv/tenant/tenant';
+import { listPartitions } from '$srv/tenant/partition';
+import { actorFromContext } from '$srv/audit';
 import { query } from '$srv/db';
-import { PLATTFORM_TENANT, fhirBaseFor, utstederFor } from '$srv/tenant/kontekst';
+import { PLATFORM_TENANT, fhirBaseFor, issuerFor } from '$srv/tenant/context';
 
 /** Detaljer om én virksomhet, med de tallene som trengs for å drifte den. */
 export const load: PageServerLoad = async (event) => {
-	const tenant = await hentTenant(event.params.id);
+	const tenant = await getTenant(event.params.id);
 	if (!tenant) error(404, 'Ukjent virksomhet.');
 
-	const [brukere, partisjoner] = await Promise.all([
-		query<{ rolle: string; n: number }>(
-			`SELECT r.rolle, count(DISTINCT u.id)::int AS n
+	const [users, partitions] = await Promise.all([
+		query<{ role: string; n: number }>(
+			`SELECT r.role, count(DISTINCT u.id)::int AS n
 			 FROM user_account u
-			 JOIN role_assignment r ON r.user_id = u.id AND r.gyldig_til IS NULL
+			 JOIN role_assignment r ON r.user_id = u.id AND r.valid_until IS NULL
 			 WHERE u.tenant_id = $1 AND u.status = 'aktiv'
-			 GROUP BY r.rolle ORDER BY r.rolle`,
+			 GROUP BY r.role ORDER BY r.role`,
 			[tenant.id]
 		),
-		listPartisjoner()
+		listPartitions()
 	]);
 
-	const tall = await query<{ hva: string; n: number }>(
-		`SELECT 'Brukere' AS hva, count(*)::int AS n FROM user_account WHERE tenant_id = $1
+	const number = await query<{ label: string; n: number }>(
+		`SELECT 'Brukere' AS label, count(*)::int AS n FROM user_account WHERE tenant_id = $1
 		 UNION ALL SELECT 'SMART-apper', count(*)::int FROM oauth_client WHERE tenant_id = $1
 		 UNION ALL SELECT 'Aktive tokens', count(*)::int FROM oauth_token
-			WHERE tenant_id = $1 AND kind = 'access' AND tilbakekalt = false AND utloper > now()
+			WHERE tenant_id = $1 AND kind = 'access' AND revoked = false AND expires_at > now()
 		 UNION ALL SELECT 'Loggeinnslag', count(*)::int FROM audit_event WHERE tenant_id = $1`,
 		[tenant.id]
 	);
 
 	return {
-		virksomhet: {
+		organisation: {
 			id: tenant.id,
-			navn: tenant.navn,
-			organisasjonsnummer: tenant.organisasjonsnummer,
+			name: tenant.name,
+			organisation_number: tenant.organisation_number,
 			herId: tenant.her_id,
-			kommunenummer: tenant.kommunenummer,
-			vertsnavn: tenant.vertsnavn,
+			municipality_code: tenant.municipality_code,
+			hostname: tenant.hostname,
 			baseUrl: tenant.base_url,
-			partisjonId: tenant.partisjon_id,
+			partitionId: tenant.partition_id,
 			status: tenant.status,
-			merknad: tenant.merknad,
-			opprettet: new Date(tenant.opprettet).toLocaleString('nb-NO')
+			note: tenant.note,
+			created_at: new Date(tenant.created_at).toLocaleString('nb-NO')
 		},
-		erPlattform: tenant.id === PLATTFORM_TENANT,
+		isPlatform: tenant.id === PLATFORM_TENANT,
 		fhirBaseUrl: fhirBaseFor(tenant),
-		issuer: utstederFor(tenant),
-		wellKnown: `${utstederFor(tenant)}/.well-known/smart-configuration`,
-		partisjonFinnes:
-			tenant.partisjon_id === null
+		issuer: issuerFor(tenant),
+		wellKnown: `${issuerFor(tenant)}/.well-known/smart-configuration`,
+		partitionExists:
+			tenant.partition_id === null
 				? null
-				: partisjoner.ok
-					? partisjoner.partisjoner.some((p) => p.navn === tenant.id)
+				: partitions.ok
+					? partitions.partitions.some((p) => p.name === tenant.id)
 					: null,
-		partisjonsfeil: partisjoner.ok ? null : partisjoner.feil,
-		roller: brukere,
-		tall
+		partisjonsfeil: partitions.ok ? null : partitions.error,
+		roles: users,
+		number
 	};
 };
 
 export const actions: Actions = {
-	lagre: async (event) => {
+	store: async (event) => {
 		const ctx = event.locals.auth;
-		if (!ctx?.rettigheter.has('plattform:administrer')) return fail(403, { feil: 'Ingen tilgang.' });
+		if (!ctx?.permissions.has('plattform:administrer')) return fail(403, { error: 'Ingen tilgang.' });
 		const form = await event.request.formData();
-		const tekst = (n: string) => String(form.get(n) ?? '').trim();
+		const text = (n: string) => String(form.get(n) ?? '').trim();
 
-		const baseUrl = tekst('baseUrl');
+		const baseUrl = text('baseUrl');
 		if (baseUrl) {
 			try {
 				new URL(baseUrl);
 			} catch {
-				return fail(400, { feil: 'Ugyldig adresse (base_url).' });
+				return fail(400, { error: 'Ugyldig adresse (base_url).' });
 			}
 		}
 
-		const resultat = await oppdaterTenant(
+		const result = await updateTenant(
 			event.params.id,
 			{
-				navn: tekst('navn') || undefined,
-				vertsnavn: tekst('vertsnavn').toLowerCase() || null,
+				name: text('navn') || undefined,
+				hostname: text('vertsnavn').toLowerCase() || null,
 				baseUrl: baseUrl || undefined,
-				herId: tekst('herId') || null,
-				kommunenummer: tekst('kommunenummer') || null,
-				merknad: tekst('merknad') || null
+				herId: text('herId') || null,
+				municipality_code: text('kommunenummer') || null,
+				note: text('merknad') || null
 			},
-			aktorFraKontekst(ctx)
+			actorFromContext(ctx)
 		);
-		if (!resultat.ok) return fail(400, { feil: resultat.feil });
-		return { lagret: true };
+		if (!result.ok) return fail(400, { error: result.error });
+		return { stored: true };
 	}
 };

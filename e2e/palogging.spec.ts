@@ -1,10 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { loggInn, loggUt, totp, ventPaHydrering } from './hjelpere';
+import { logIn, logOut, totp, waitOnHydration } from './hjelpere';
 
 test.describe('pålogging', () => {
 	test('krever engangskode i tillegg til passord', async ({ page }) => {
 		await page.goto('/logg-inn');
-		await ventPaHydrering(page);
+		await waitOnHydration(page);
 		await page.getByLabel('Brukernavn').fill('lege');
 		await page.getByLabel('Passord').fill('Testpassord1!');
 		await page.getByRole('button', { name: 'Logg inn' }).click();
@@ -17,25 +17,25 @@ test.describe('pålogging', () => {
 
 	test('gir samme melding ved feil passord og ukjent bruker', async ({ page }) => {
 		await page.goto('/logg-inn');
-		await ventPaHydrering(page);
+		await waitOnHydration(page);
 		await page.getByLabel('Brukernavn').fill('lege');
 		await page.getByLabel('Passord').fill('helt feil');
 		await page.getByRole('button', { name: 'Logg inn' }).click();
-		const feilVedFeilPassord = await page.getByRole('alert').textContent();
+		const errorAtErrorPassword = await page.getByRole('alert').textContent();
 
 		await page.goto('/logg-inn');
-		await ventPaHydrering(page);
+		await waitOnHydration(page);
 		await page.getByLabel('Brukernavn').fill('finnesikke');
 		await page.getByLabel('Passord').fill('helt feil');
 		await page.getByRole('button', { name: 'Logg inn' }).click();
-		const feilVedUkjentBruker = await page.getByRole('alert').textContent();
+		const errorAtUnknownUser = await page.getByRole('alert').textContent();
 
-		expect(feilVedFeilPassord).toBe(feilVedUkjentBruker);
+		expect(errorAtErrorPassword).toBe(errorAtUnknownUser);
 	});
 
 	test('avviser feil engangskode', async ({ page }) => {
 		await page.goto('/logg-inn');
-		await ventPaHydrering(page);
+		await waitOnHydration(page);
 		await page.getByLabel('Brukernavn').fill('lege');
 		await page.getByLabel('Passord').fill('Testpassord1!');
 		await page.getByLabel('Engangskode').fill('000000');
@@ -44,10 +44,10 @@ test.describe('pålogging', () => {
 	});
 
 	test('logger inn og ut', async ({ page }) => {
-		await loggInn(page, 'lege');
+		await logIn(page, 'lege');
 		await expect(page.getByRole('heading', { name: 'Arbeidsflate' })).toBeVisible();
 		await expect(page.getByText('Dr. Ingrid Fastlege')).toBeVisible();
-		await loggUt(page);
+		await logOut(page);
 		await page.goto('/pasienter');
 		await expect(page).toHaveURL(/\/logg-inn/);
 	});
@@ -55,7 +55,7 @@ test.describe('pålogging', () => {
 	test('sender uinnlogget bruker til pålogging og tilbake etterpå', async ({ page }) => {
 		await page.goto('/oppgjor');
 		await expect(page).toHaveURL(/\/logg-inn\?retur=%2Foppgjor/);
-		await ventPaHydrering(page);
+		await waitOnHydration(page);
 
 		await page.getByLabel('Brukernavn').fill('lege');
 		await page.getByLabel('Passord').fill('Testpassord1!');

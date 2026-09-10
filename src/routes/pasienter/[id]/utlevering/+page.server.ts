@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { UTLEVERINGSGRUNNER } from '$srv/journal/utlevering';
-import { hentLogg } from '$srv/audit';
+import { UTLEVERINGSGRUNNER } from '$srv/journal/disclosure';
+import { getLog } from '$srv/audit';
 
 /**
  * Utlevering av journal.
@@ -12,19 +12,19 @@ import { hentLogg } from '$srv/audit';
  */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
-	if (!ctx?.rettigheter.has('journal:utlever')) error(403, 'Rollen din kan ikke utlevere journal.');
+	if (!ctx?.permissions.has('journal:utlever')) error(403, 'Rollen din kan ikke utlevere journal.');
 
-	const logg = await hentLogg({ patientId: event.params.id, type: 'utlevering', limit: 25 });
+	const log = await getLog({ patientId: event.params.id, type: 'utlevering', limit: 25 });
 
 	return {
 		grunner: UTLEVERINGSGRUNNER,
-		tidligere: logg.rader.map((r) => ({
+		earlier: log.rows.map((r) => ({
 			seq: r.seq,
-			tidspunkt: new Date(r.recorded).toLocaleString('nb-NO'),
-			hvem: r.actor_navn ?? 'ukjent',
-			grunn: (r.subtype ?? '').replace(/^journal:/, ''),
+			timestamp: new Date(r.recorded).toLocaleString('nb-NO'),
+			hvem: r.actor_name ?? 'ukjent',
+			reason: (r.subtype ?? '').replace(/^journal:/, ''),
 			purposeOfUse: r.purpose_of_use ?? '',
-			referanse: (r.entity_ref ?? '').replace(/^Bundle\//, '')
+			reference: (r.entity_ref ?? '').replace(/^Bundle\//, '')
 		}))
 	};
 };

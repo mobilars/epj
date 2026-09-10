@@ -6,139 +6,139 @@
  * gyldige mod11-numre fra Skatteetatens syntetiske testdatasett (Tenor) og
  * tilhører ingen virkelig person.
  */
-import { exec, lukkPool, query } from '../src/lib/server/db/index';
-import { migrer } from '../src/lib/server/db/migrate';
-import { medTenant, PLATTFORM_TENANT, type Tenant } from '../src/lib/server/tenant/kontekst';
-import { hentTenant, sikreStandardvirksomhet } from '../src/lib/server/tenant/tenant';
-import { opprettBruker, settRoller } from '../src/lib/server/auth/brukere';
-import { registrerKlient } from '../src/lib/server/auth/klienter';
-import { fhirKlient } from '../src/lib/server/fhir/client';
-import { SYSTEM, gyldigNorskPersonnummer, kjonnFraPersonnummer, gyldigDatoDel } from '../src/lib/server/fhir/kodeverk';
-import { krypter } from '../src/lib/server/util/crypto';
-import { nyTotpHemmelighet } from '../src/lib/server/auth/totp';
-import { nyId } from '../src/lib/server/util/ids';
+import { exec, closePool, query } from '../src/lib/server/db/index';
+import { migrate } from '../src/lib/server/db/migrate';
+import { withTenant, PLATFORM_TENANT, type Tenant } from '../src/lib/server/tenant/context';
+import { getTenant, ensureDefaultOrganisation } from '../src/lib/server/tenant/tenant';
+import { createUser, setRoles } from '../src/lib/server/auth/users';
+import { registerClient } from '../src/lib/server/auth/clients';
+import { fhirClient } from '../src/lib/server/fhir/client';
+import { SYSTEM, validNorwegianNationalId, genderFromNationalId, validDateDel } from '../src/lib/server/fhir/codesystems';
+import { encrypt } from '../src/lib/server/util/crypto';
+import { newTotpSecret } from '../src/lib/server/auth/totp';
+import { newId } from '../src/lib/server/util/ids';
 import type { FhirResource } from '../src/lib/server/fhir/types';
 
-const PASSORD = 'Testpassord1!';
+const PASSWORD = 'Testpassord1!';
 
 /** Fast TOTP-hemmelighet i demo, slik at koden alltid kan regnes ut. */
 const DEMO_TOTP = 'JBSWY3DPEHPK3PXP';
 
-interface DemoPasient {
+interface DemoPatient {
 	fnr: string;
-	fornavn: string;
-	etternavn: string;
-	telefon: string;
-	adresse: { linje: string; postnr: string; sted: string };
-	diagnoser: { kode: string; tekst: string }[];
-	malinger: { kode: string; navn: string; verdi: number; enhet: string }[];
+	givenName: string;
+	familyName: string;
+	phone: string;
+	address: { line: string; postnr: string; sted: string };
+	diagnoses: { code: string; text: string }[];
+	malinger: { code: string; name: string; value: number; unit: string }[];
 	allergier?: string[];
 }
 
-const PASIENTER: DemoPasient[] = [
+const PATIENTS: DemoPatient[] = [
 	{
-		fnr: '13086510035', fornavn: 'Anne', etternavn: 'Bakken', telefon: '99887766',
-		adresse: { linje: 'Storgata 12', postnr: '0155', sted: 'Oslo' },
-		diagnoser: [{ kode: 'K86', tekst: 'Hypertensjon ukomplisert' }, { kode: 'T90', tekst: 'Diabetes type 2' }],
+		fnr: '13086510035', givenName: 'Anne', familyName: 'Bakken', phone: '99887766',
+		address: { line: 'Storgata 12', postnr: '0155', sted: 'Oslo' },
+		diagnoses: [{ code: 'K86', text: 'Hypertensjon ukomplisert' }, { code: 'T90', text: 'Diabetes type 2' }],
 		malinger: [
-			{ kode: '8480-6', navn: 'Systolisk blodtrykk', verdi: 148, enhet: 'mm[Hg]' },
-			{ kode: '8462-4', navn: 'Diastolisk blodtrykk', verdi: 92, enhet: 'mm[Hg]' },
-			{ kode: '4548-4', navn: 'HbA1c', verdi: 58, enhet: 'mmol/mol' }
+			{ code: '8480-6', name: 'Systolisk blodtrykk', value: 148, unit: 'mm[Hg]' },
+			{ code: '8462-4', name: 'Diastolisk blodtrykk', value: 92, unit: 'mm[Hg]' },
+			{ code: '4548-4', name: 'HbA1c', value: 58, unit: 'mmol/mol' }
 		],
 		allergier: ['Penicillin']
 	},
 	{
-		fnr: '05077810023', fornavn: 'Jonas', etternavn: 'Nordli', telefon: '91234567',
-		adresse: { linje: 'Kirkeveien 4', postnr: '0368', sted: 'Oslo' },
-		diagnoser: [{ kode: 'R96', tekst: 'Astma' }],
-		malinger: [{ kode: '19926-5', navn: 'FEV1 % av forventet', verdi: 78, enhet: '%' }]
+		fnr: '05077810023', givenName: 'Jonas', familyName: 'Nordli', phone: '91234567',
+		address: { line: 'Kirkeveien 4', postnr: '0368', sted: 'Oslo' },
+		diagnoses: [{ code: 'R96', text: 'Astma' }],
+		malinger: [{ code: '19926-5', name: 'FEV1 % av forventet', value: 78, unit: '%' }]
 	},
 	{
-		fnr: '21129410180', fornavn: 'Sofie', etternavn: 'Lie', telefon: '48891122',
-		adresse: { linje: 'Bogstadveien 44', postnr: '0366', sted: 'Oslo' },
-		diagnoser: [{ kode: 'P76', tekst: 'Depressiv lidelse' }],
-		malinger: [{ kode: '55758-7', navn: 'PHQ-9 sumskår', verdi: 14, enhet: '{score}' }]
+		fnr: '21129410180', givenName: 'Sofie', familyName: 'Lie', phone: '48891122',
+		address: { line: 'Bogstadveien 44', postnr: '0366', sted: 'Oslo' },
+		diagnoses: [{ code: 'P76', text: 'Depressiv lidelse' }],
+		malinger: [{ code: '55758-7', name: 'PHQ-9 sumskår', value: 14, unit: '{score}' }]
 	},
 	{
-		fnr: '24035810281', fornavn: 'Ola', etternavn: 'Vik', telefon: '90011223',
-		adresse: { linje: 'Trondheimsveien 100', postnr: '0565', sted: 'Oslo' },
-		diagnoser: [{ kode: 'L84', tekst: 'Ryggsyndrom uten smertestråling' }],
-		malinger: [{ kode: '29463-7', navn: 'Vekt', verdi: 88, enhet: 'kg' }]
+		fnr: '24035810281', givenName: 'Ola', familyName: 'Vik', phone: '90011223',
+		address: { line: 'Trondheimsveien 100', postnr: '0565', sted: 'Oslo' },
+		diagnoses: [{ code: 'L84', text: 'Ryggsyndrom uten smertestråling' }],
+		malinger: [{ code: '29463-7', name: 'Vekt', value: 88, unit: 'kg' }]
 	},
 	{
 		// Barn under 16 - brukes til å vise fritak for egenandel i oppgjøret.
-		fnr: '11061550188', fornavn: 'Emma', etternavn: 'Vik', telefon: '90011223',
-		adresse: { linje: 'Trondheimsveien 100', postnr: '0565', sted: 'Oslo' },
-		diagnoser: [{ kode: 'R74', tekst: 'Akutt øvre luftveisinfeksjon' }],
-		malinger: [{ kode: '8310-5', navn: 'Kroppstemperatur', verdi: 38.4, enhet: 'Cel' }]
+		fnr: '11061550188', givenName: 'Emma', familyName: 'Vik', phone: '90011223',
+		address: { line: 'Trondheimsveien 100', postnr: '0565', sted: 'Oslo' },
+		diagnoses: [{ code: 'R74', text: 'Akutt øvre luftveisinfeksjon' }],
+		malinger: [{ code: '8310-5', name: 'Kroppstemperatur', value: 38.4, unit: 'Cel' }]
 	}
 ];
 
-async function pasientRessurs(p: DemoPasient): Promise<FhirResource> {
+async function patientResource(p: DemoPatient): Promise<FhirResource> {
 	return {
 		resourceType: 'Patient',
 		identifier: [{ system: SYSTEM.FNR, value: p.fnr, use: 'official' }],
 		active: true,
-		name: [{ use: 'official', family: p.etternavn, given: [p.fornavn] }],
-		gender: kjonnFraPersonnummer(p.fnr),
-		birthDate: gyldigDatoDel(p.fnr) ?? undefined,
-		telecom: [{ system: 'phone', value: p.telefon, use: 'mobile' }],
-		address: [{ use: 'home', line: [p.adresse.linje], postalCode: p.adresse.postnr, city: p.adresse.sted, country: 'NO' }]
+		name: [{ use: 'official', family: p.familyName, given: [p.givenName] }],
+		gender: genderFromNationalId(p.fnr),
+		birthDate: validDateDel(p.fnr) ?? undefined,
+		telecom: [{ system: 'phone', value: p.phone, use: 'mobile' }],
+		address: [{ use: 'home', line: [p.address.line], postalCode: p.address.postnr, city: p.address.sted, country: 'NO' }]
 	};
 }
 
 async function main(): Promise<void> {
-	await migrer();
-	await sikreStandardvirksomhet();
+	await migrate();
+	await ensureDefaultOrganisation();
 
 	// Demodata legges i standardvirksomheten. Alt under kjøres i dens kontekst,
 	// slik at spørringene avgrenses på samme måte som i applikasjonen.
 	const tenantId = process.env.EPJ_SEED_TENANT ?? 'standard';
-	const tenant = await hentTenant(tenantId);
+	const tenant = await getTenant(tenantId);
 	if (!tenant) throw new Error(`Virksomheten «${tenantId}» finnes ikke. Kjør migrasjonene først.`);
-	await medTenant(tenant, () => seed(tenant));
+	await withTenant(tenant, () => seed(tenant));
 
 	// Plattformadministratoren hører hjemme i systemvirksomheten, ikke hos noen
 	// av legekontorene. Rollen `systemeier` har ingen kliniske scopes.
-	const plattform = await hentTenant(PLATTFORM_TENANT);
-	if (plattform) await medTenant(plattform, () => seedPlattform(plattform));
+	const platform = await getTenant(PLATFORM_TENANT);
+	if (platform) await withTenant(platform, () => seedPlatform(platform));
 }
 
-async function seedPlattform(plattform: Tenant): Promise<void> {
-	const finnes = await query<{ n: number }>('SELECT count(*)::int AS n FROM user_account WHERE tenant_id = $1', [
-		plattform.id
+async function seedPlatform(platform: Tenant): Promise<void> {
+	const exists = await query<{ n: number }>('SELECT count(*)::int AS n FROM user_account WHERE tenant_id = $1', [
+		platform.id
 	]);
-	if ((finnes[0]?.n ?? 0) > 0) return;
+	if ((exists[0]?.n ?? 0) > 0) return;
 
-	const bruker = await opprettBruker({
-		brukernavn: 'systemeier',
-		navn: 'Plattformadministrator',
-		passord: PASSORD,
-		roller: ['systemeier']
+	const user = await createUser({
+		username: 'systemeier',
+		name: 'Plattformadministrator',
+		password: PASSWORD,
+		roles: ['systemeier']
 	});
 	await exec(
-		'UPDATE user_account SET totp_secret_enc = $2, mfa_aktivert = true, ma_bytte_passord = false WHERE id = $1',
-		[bruker.id, krypter(DEMO_TOTP)]
+		'UPDATE user_account SET totp_secret_enc = $2, mfa_aktivert = true, must_change_password = false WHERE id = $1',
+		[user.id, encrypt(DEMO_TOTP)]
 	);
-	console.log(`Opprettet plattformbruker «systemeier» (passord: ${PASSORD}).`);
+	console.log(`Opprettet plattformbruker «systemeier» (passord: ${PASSWORD}).`);
 }
 
 async function seed(tenant: Tenant): Promise<void> {
-	const finnes = await query<{ n: number }>('SELECT count(*)::int AS n FROM user_account WHERE tenant_id = $1', [tenant.id]);
-	if ((finnes[0]?.n ?? 0) > 0) {
+	const exists = await query<{ n: number }>('SELECT count(*)::int AS n FROM user_account WHERE tenant_id = $1', [tenant.id]);
+	if ((exists[0]?.n ?? 0) > 0) {
 		console.log('Databasen har allerede brukere. Avbryter for ikke å overskrive data.');
 		return;
 	}
 
 	// --- Behandlere som FHIR Practitioner --------------------------------
-	const legeRes = await fhirKlient.opprett({
+	const doctorRes = await fhirClient.create({
 		resourceType: 'Practitioner',
 		identifier: [{ system: SYSTEM.HPR, value: '9144889' }],
 		active: true,
 		name: [{ family: 'Fastlege', given: ['Ingrid'], prefix: ['Dr.'] }],
 		qualification: [{ code: { text: 'Spesialist i allmennmedisin' } }]
 	});
-	const sykepleierRes = await fhirKlient.opprett({
+	const nurseRes = await fhirClient.create({
 		resourceType: 'Practitioner',
 		identifier: [{ system: SYSTEM.HPR, value: '5551234' }],
 		active: true,
@@ -146,82 +146,82 @@ async function seed(tenant: Tenant): Promise<void> {
 	});
 
 	// --- Brukere ----------------------------------------------------------
-	const brukere = [
-		{ brukernavn: 'lege', navn: 'Dr. Ingrid Fastlege', roller: ['lege'] as const, practitionerId: legeRes.ressurs.id as string, hpr: '9144889' },
-		{ brukernavn: 'sykepleier', navn: 'Kari Sykepleier', roller: ['sykepleier'] as const, practitionerId: sykepleierRes.ressurs.id as string, hpr: '5551234' },
-		{ brukernavn: 'sekretaer', navn: 'Ola Helsesekretær', roller: ['helsesekretaer'] as const, practitionerId: undefined, hpr: undefined },
-		{ brukernavn: 'admin', navn: 'Systemansvarlig', roller: ['systemansvarlig'] as const, practitionerId: undefined, hpr: undefined },
-		{ brukernavn: 'ombud', navn: 'Personvernombud', roller: ['personvernombud'] as const, practitionerId: undefined, hpr: undefined }
+	const users = [
+		{ username: 'lege', name: 'Dr. Ingrid Fastlege', roles: ['lege'] as const, practitionerId: doctorRes.resource.id as string, hpr: '9144889' },
+		{ username: 'sykepleier', name: 'Kari Sykepleier', roles: ['sykepleier'] as const, practitionerId: nurseRes.resource.id as string, hpr: '5551234' },
+		{ username: 'sekretaer', name: 'Ola Helsesekretær', roles: ['helsesekretaer'] as const, practitionerId: undefined, hpr: undefined },
+		{ username: 'admin', name: 'Systemansvarlig', roles: ['systemansvarlig'] as const, practitionerId: undefined, hpr: undefined },
+		{ username: 'ombud', name: 'Personvernombud', roles: ['personvernombud'] as const, practitionerId: undefined, hpr: undefined }
 	];
 
-	const idPerBrukernavn = new Map<string, string>();
-	for (const b of brukere) {
-		const bruker = await opprettBruker({
-			brukernavn: b.brukernavn,
-			navn: b.navn,
-			passord: PASSORD,
+	const idPerUsername = new Map<string, string>();
+	for (const b of users) {
+		const user = await createUser({
+			username: b.username,
+			name: b.name,
+			password: PASSWORD,
 			practitionerId: b.practitionerId,
-			hprNummer: b.hpr,
-			roller: [...b.roller]
+			hprNumber: b.hpr,
+			roles: [...b.roles]
 		});
-		idPerBrukernavn.set(b.brukernavn, bruker.id);
+		idPerUsername.set(b.username, user.id);
 		// Demo: fast TOTP-hemmelighet, og passordet trenger ikke byttes.
 		await exec(
-			'UPDATE user_account SET totp_secret_enc = $2, mfa_aktivert = true, ma_bytte_passord = false WHERE id = $1',
-			[bruker.id, krypter(DEMO_TOTP)]
+			'UPDATE user_account SET totp_secret_enc = $2, mfa_aktivert = true, must_change_password = false WHERE id = $1',
+			[user.id, encrypt(DEMO_TOTP)]
 		);
 	}
-	console.log(`Opprettet ${brukere.length} brukere (passord: ${PASSORD}).`);
+	console.log(`Opprettet ${users.length} brukere (passord: ${PASSWORD}).`);
 
 	// --- Pasienter med journalinnhold -------------------------------------
-	const legeId = idPerBrukernavn.get('lege') as string;
-	const sykepleierId = idPerBrukernavn.get('sykepleier') as string;
-	const sekretaerId = idPerBrukernavn.get('sekretaer') as string;
+	const doctorId = idPerUsername.get('lege') as string;
+	const nurseId = idPerUsername.get('sykepleier') as string;
+	const sekretaerId = idPerUsername.get('sekretaer') as string;
 
-	for (const p of PASIENTER) {
-		if (!gyldigNorskPersonnummer(p.fnr)) {
+	for (const p of PATIENTS) {
+		if (!validNorwegianNationalId(p.fnr)) {
 			throw new Error(`Demodata inneholder ugyldig fødselsnummer: ${p.fnr}`);
 		}
-		const svar = await fhirKlient.opprett(await pasientRessurs(p));
-		const patientId = svar.ressurs.id as string;
+		const response = await fhirClient.create(await patientResource(p));
+		const patientId = response.resource.id as string;
 		const subject = { reference: `Patient/${patientId}` };
 
-		const encounter = await fhirKlient.opprett({
+		const encounter = await fhirClient.create({
 			resourceType: 'Encounter',
 			status: 'completed',
 			class: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode', code: 'AMB', display: 'Poliklinisk kontakt' }] }],
 			subject,
 			actualPeriod: { start: new Date(Date.now() - 7 * 86400_000).toISOString(), end: new Date(Date.now() - 7 * 86400_000 + 1800_000).toISOString() },
-			participant: [{ actor: { reference: `Practitioner/${legeRes.ressurs.id}` } }]
+			participant: [{ actor: { reference: `Practitioner/${doctorRes.resource.id}` } }]
 		});
 
-		for (const d of p.diagnoser) {
-			await fhirKlient.opprett({
+		for (const d of p.diagnoses) {
+			await fhirClient.create({
 				resourceType: 'Condition',
 				clinicalStatus: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-clinical', code: 'active' }] },
 				verificationStatus: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-ver-status', code: 'confirmed' }] },
 				category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-category', code: 'problem-list-item' }] }],
-				code: { coding: [{ system: SYSTEM.ICPC2, code: d.kode, display: d.tekst }], text: d.tekst },
+				code: { coding: [{ system: SYSTEM.ICPC2, code: d.code, display: d.text }], text: d.text },
 				subject,
 				recordedDate: new Date(Date.now() - 200 * 86400_000).toISOString()
 			});
 		}
 
 		for (const m of p.malinger) {
-			await fhirKlient.opprett({
+			await fhirClient.create({
 				resourceType: 'Observation',
 				status: 'final',
 				category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'vital-signs' }] }],
-				code: { coding: [{ system: SYSTEM.LOINC, code: m.kode, display: m.navn }], text: m.navn },
+				code: { coding: [{ system: SYSTEM.LOINC, code: m.code, display: m.name }], text: m.name },
 				subject,
-				encounter: { reference: `Encounter/${encounter.ressurs.id}` },
+				encounter: { reference: `Encounter/${encounter.resource.id}` },
 				effectiveDateTime: new Date(Date.now() - 7 * 86400_000).toISOString(),
-				valueQuantity: { value: m.verdi, unit: m.enhet, system: 'http://unitsofmeasure.org', code: m.enhet }
+				valueQuantity: { value: m.value, unit: m.unit, system: 'http://unitsofmeasure.org', code: m.unit }
 			});
 		}
 
 		for (const a of p.allergier ?? []) {
-			await fhirKlient.opprett({
+			await fhirClient.create({
 				resourceType: 'AllergyIntolerance',
 				clinicalStatus: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical', code: 'active' }] },
 				type: { coding: [{ code: 'allergy' }] },
@@ -232,64 +232,64 @@ async function seed(tenant: Tenant): Promise<void> {
 			});
 		}
 
-		await fhirKlient.opprett({
+		await fhirClient.create({
 			resourceType: 'Composition',
 			status: 'final',
 			type: { coding: [{ system: SYSTEM.LOINC, code: '11488-4', display: 'Konsultasjonsnotat' }] },
 			subject,
-			encounter: { reference: `Encounter/${encounter.ressurs.id}` },
+			encounter: { reference: `Encounter/${encounter.resource.id}` },
 			date: new Date(Date.now() - 7 * 86400_000).toISOString(),
-			author: [{ reference: `Practitioner/${legeRes.ressurs.id}` }],
+			author: [{ reference: `Practitioner/${doctorRes.resource.id}` }],
 			title: 'Konsultasjon',
 			section: [
-				{ title: 'Subjektivt', text: { status: 'generated', div: `<div xmlns="http://www.w3.org/1999/xhtml">Pasienten møter til kontroll for ${p.diagnoser[0]?.tekst ?? 'plagene sine'}.</div>` } },
+				{ title: 'Subjektivt', text: { status: 'generated', div: `<div xmlns="http://www.w3.org/1999/xhtml">Pasienten møter til kontroll for ${p.diagnoses[0]?.text ?? 'plagene sine'}.</div>` } },
 				{ title: 'Objektivt', text: { status: 'generated', div: '<div xmlns="http://www.w3.org/1999/xhtml">Allmenntilstanden er god. Målinger registrert.</div>' } },
 				{ title: 'Vurdering og plan', text: { status: 'generated', div: '<div xmlns="http://www.w3.org/1999/xhtml">Fortsetter uendret behandling. Ny kontroll om tre måneder.</div>' } }
 			]
 		});
 
-		await fhirKlient.opprett({
+		await fhirClient.create({
 			resourceType: 'Appointment',
 			status: 'booked',
-			start: new Date(Date.now() + 86400_000 + PASIENTER.indexOf(p) * 1800_000).toISOString(),
-			end: new Date(Date.now() + 86400_000 + PASIENTER.indexOf(p) * 1800_000 + 1200_000).toISOString(),
+			start: new Date(Date.now() + 86400_000 + PATIENTS.indexOf(p) * 1800_000).toISOString(),
+			end: new Date(Date.now() + 86400_000 + PATIENTS.indexOf(p) * 1800_000 + 1200_000).toISOString(),
 			description: 'Kontroll',
 			participant: [
 				{ actor: subject, status: 'accepted' },
-				{ actor: { reference: `Practitioner/${legeRes.ressurs.id}` }, status: 'accepted' }
+				{ actor: { reference: `Practitioner/${doctorRes.resource.id}` }, status: 'accepted' }
 			]
 		});
 
 		// Behandlingsrelasjoner: legen for alle, sykepleier for de to første,
 		// helsesekretær administrativt for alle.
-		const relasjon = (userId: string, grunnlag: string) =>
-			exec('INSERT INTO care_relationship (id, tenant_id, user_id, patient_id, grunnlag) VALUES ($1,$2,$3,$4,$5)', [
-				nyId(), tenant.id, userId, patientId, grunnlag
+		const relationship = (userId: string, basis: string) =>
+			exec('INSERT INTO care_relationship (id, tenant_id, user_id, patient_id, basis) VALUES ($1,$2,$3,$4,$5)', [
+				newId(), tenant.id, userId, patientId, basis
 			]);
-		await relasjon(legeId, 'fastlege');
-		if (PASIENTER.indexOf(p) < 2) await relasjon(sykepleierId, 'konsultasjon');
-		await relasjon(sekretaerId, 'administrativ');
+		await relationship(doctorId, 'fastlege');
+		if (PATIENTS.indexOf(p) < 2) await relationship(nurseId, 'konsultasjon');
+		await relationship(sekretaerId, 'administrativ');
 
-		console.log(`Pasient ${p.fornavn} ${p.etternavn} (${patientId}) opprettet.`);
+		console.log(`Pasient ${p.givenName} ${p.familyName} (${patientId}) opprettet.`);
 	}
 
 	// Én pasient sperrer journalen for sykepleieren, for å vise sperringsflyten.
-	const sperretPasient = await fhirKlient.sok('Patient', new URLSearchParams({ identifier: `${SYSTEM.FNR}|${PASIENTER[2].fnr}` }));
-	const sperretId = sperretPasient.entry?.[0]?.resource?.id as string | undefined;
-	if (sperretId) {
+	const blockedPatient = await fhirClient.search('Patient', new URLSearchParams({ identifier: `${SYSTEM.FNR}|${PATIENTS[2].fnr}` }));
+	const blockedId = blockedPatient.entry?.[0]?.resource?.id as string | undefined;
+	if (blockedId) {
 		await exec(
-			`INSERT INTO journal_sperring (id, tenant_id, patient_id, omfang, mal_user_id, begrunnelse, registrert_av)
+			`INSERT INTO record_restriction (id, tenant_id, patient_id, scope_extent, target_user_id, justification, registered_by)
 			 VALUES ($1,$6,$2,'bruker',$3,$4,$5)`,
-			[nyId(), sperretId, sykepleierId, 'Pasienten ønsker ikke at sykepleier ser journalen.', legeId, tenant.id]
+			[newId(), blockedId, nurseId, 'Pasienten ønsker ikke at sykepleier ser journalen.', doctorId, tenant.id]
 		);
-		console.log(`Sperring registrert på pasient ${sperretId} for sykepleier.`);
+		console.log(`Sperring registrert på pasient ${blockedId} for sykepleier.`);
 	}
 
 	// --- SMART-app --------------------------------------------------------
-	const { klient, secret } = await registrerKlient({
-		navn: 'Diabetesoversikt (demo)',
+	const { client, secret } = await registerClient({
+		name: 'Diabetesoversikt (demo)',
 		type: 'public',
-		kategori: 'smart-ehr',
+		category: 'smart-ehr',
 		redirectUris: ['http://localhost:4000/callback', 'http://127.0.0.1:4000/callback'],
 		scopes: [
 			'openid', 'fhirUser', 'launch', 'launch/patient', 'online_access',
@@ -298,12 +298,12 @@ async function seed(tenant: Tenant): Promise<void> {
 		launchUrl: 'http://localhost:4000/launch',
 		databehandleravtale: 'DBA-2026-001'
 	});
-	console.log(`SMART-app registrert: ${klient.client_id}${secret ? ` (hemmelighet: ${secret})` : ''}`);
+	console.log(`SMART-app registrert: ${client.client_id}${secret ? ` (hemmelighet: ${secret})` : ''}`);
 
-	console.log(`\nFerdig i virksomheten «${tenant.navn}» (${tenant.id}).`);
-	console.log('Logg inn på /logg-inn med brukernavn «lege» og passord «' + PASSORD + '».');
+	console.log(`\nFerdig i virksomheten «${tenant.name}» (${tenant.id}).`);
+	console.log('Logg inn på /logg-inn med brukernavn «lege» og passord «' + PASSWORD + '».');
 	console.log(`TOTP-hemmelighet for demobrukerne: ${DEMO_TOTP}`);
 }
 
 await main();
-await lukkPool();
+await closePool();

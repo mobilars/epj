@@ -1,5 +1,5 @@
 import { config } from '../config';
-import { krevTenant } from '../tenant/kontekst';
+import { requireTenant } from '../tenant/context';
 import { FhirError, issue } from './outcome';
 import type { Bundle, FhirResource } from './types';
 
@@ -18,13 +18,13 @@ import type { Bundle, FhirResource } from './types';
 
 export interface FhirRespons<T = FhirResource> {
 	status: number;
-	ressurs: T;
+	resource: T;
 	etag?: string;
 	location?: string;
-	lastModified?: string;
+	loadModified?: string;
 }
 
-export interface KallOpsjoner {
+export interface CallOpsjoner {
 	/** Videreføres som `X-Request-Id` for korrelering mellom EPJ-logg og HAPI-logg. */
 	requestId?: string;
 	ifMatch?: string;
@@ -40,41 +40,41 @@ export interface KallOpsjoner {
 export function tenantBase(): string {
 	const base = config.fhirServer.baseUrl;
 	if (!config.fhirServer.multitenant) return base;
-	return `${base}/${krevTenant().id}`;
+	return `${base}/${requireTenant().id}`;
 }
 
 function autorisasjonsHeader(): Record<string, string> {
-	const { brukernavn, passord } = config.fhirServer;
-	if (!brukernavn) return {};
-	return { authorization: `Basic ${Buffer.from(`${brukernavn}:${passord}`).toString('base64')}` };
+	const { username, password } = config.fhirServer;
+	if (!username) return {};
+	return { authorization: `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}` };
 }
 
-async function kall(
-	metode: string,
-	sti: string,
-	kropp?: unknown,
-	opsjoner: KallOpsjoner = {}
+async function call(
+	method: string,
+	path: string,
+	body?: unknown,
+	options: CallOpsjoner = {}
 ): Promise<FhirRespons> {
-	const url = sti.startsWith('http') ? sti : `${tenantBase()}/${sti.replace(/^\//, '')}`;
-	const kontroller = new AbortController();
-	const timeout = setTimeout(() => kontroller.abort(), config.fhirServer.timeoutMs);
-	opsjoner.signal?.addEventListener('abort', () => kontroller.abort());
+	const url = path.startsWith('http') ? path : `${tenantBase()}/${path.replace(/^\//, '')}`;
+	const check = new AbortController();
+	const timeout = setTimeout(() => check.abort(), config.fhirServer.timeoutMs);
+	options.signal?.addEventListener('abort', () => check.abort());
 
-	let svar: Response;
+	let response: Response;
 	try {
-		svar = await fetch(url, {
-			method: metode,
+		response = await fetch(url, {
+			method: method,
 			headers: {
 				accept: 'application/fhir+json',
-				...(kropp !== undefined ? { 'content-type': 'application/fhir+json' } : {}),
-				...(opsjoner.ifMatch ? { 'if-match': opsjoner.ifMatch } : {}),
-				...(opsjoner.ifNoneExist ? { 'if-none-exist': opsjoner.ifNoneExist } : {}),
-				...(opsjoner.requestId ? { 'x-request-id': opsjoner.requestId } : {}),
+				...(body !== undefined ? { 'content-type': 'application/fhir+json' } : {}),
+				...(options.ifMatch ? { 'if-match': options.ifMatch } : {}),
+				...(options.ifNoneExist ? { 'if-none-exist': options.ifNoneExist } : {}),
+				...(options.requestId ? { 'x-request-id': options.requestId } : {}),
 				...autorisasjonsHeader(),
-				...opsjoner.headers
+				...options.headers
 			},
-			body: kropp === undefined ? undefined : JSON.stringify(kropp),
-			signal: kontroller.signal
+			body: body === undefined ? undefined : JSON.stringify(body),
+			signal: check.signal
 		});
 	} catch (err) {
 		throw new FhirError(503, [
@@ -84,57 +84,57 @@ async function kall(
 		clearTimeout(timeout);
 	}
 
-	const tekst = await svar.text();
+	const text = await response.text();
 	let kropp2: unknown = undefined;
-	if (tekst.length > 0) {
+	if (text.length > 0) {
 		try {
-			kropp2 = JSON.parse(tekst);
+			kropp2 = JSON.parse(text);
 		} catch {
-			kropp2 = { resourceType: 'OperationOutcome', issue: [issue('fatal', 'exception', tekst.slice(0, 500))] };
+			kropp2 = { resourceType: 'OperationOutcome', issue: [issue('fatal', 'exception', text.slice(0, 500))] };
 		}
 	}
 
-	if (!svar.ok) {
+	if (!response.ok) {
 		const outcome = kropp2 as { resourceType?: string; issue?: unknown[] } | undefined;
 		const issues = outcome?.resourceType === 'OperationOutcome' && Array.isArray(outcome.issue)
 			? (outcome.issue as never[])
-			: [issue('error', 'processing', `FHIR-serveren svarte ${svar.status}`)];
-		throw new FhirError(svar.status, issues);
+			: [issue('error', 'processing', `FHIR-serveren svarte ${response.status}`)];
+		throw new FhirError(response.status, issues);
 	}
 
 	return {
-		status: svar.status,
-		ressurs: (kropp2 ?? {}) as FhirResource,
-		etag: svar.headers.get('etag') ?? undefined,
-		location: svar.headers.get('location') ?? undefined,
-		lastModified: svar.headers.get('last-modified') ?? undefined
+		status: response.status,
+		resource: (kropp2 ?? {}) as FhirResource,
+		etag: response.headers.get('etag') ?? undefined,
+		location: response.headers.get('location') ?? undefined,
+		loadModified: response.headers.get('last-modified') ?? undefined
 	};
 }
 
-export const fhirKlient = {
-	async les(resourceType: string, id: string, o?: KallOpsjoner): Promise<FhirResource> {
-		return (await kall('GET', `${resourceType}/${encodeURIComponent(id)}`, undefined, o)).ressurs;
+export const fhirClient = {
+	async read(resourceType: string, id: string, o?: CallOpsjoner): Promise<FhirResource> {
+		return (await call('GET', `${resourceType}/${encodeURIComponent(id)}`, undefined, o)).resource;
 	},
 
-	async lesVersjon(resourceType: string, id: string, versionId: string, o?: KallOpsjoner): Promise<FhirResource> {
-		return (await kall('GET', `${resourceType}/${encodeURIComponent(id)}/_history/${encodeURIComponent(versionId)}`, undefined, o)).ressurs;
+	async readVersion(resourceType: string, id: string, versionId: string, o?: CallOpsjoner): Promise<FhirResource> {
+		return (await call('GET', `${resourceType}/${encodeURIComponent(id)}/_history/${encodeURIComponent(versionId)}`, undefined, o)).resource;
 	},
 
-	async historikk(resourceType: string, id: string, query = new URLSearchParams(), o?: KallOpsjoner): Promise<Bundle> {
+	async history(resourceType: string, id: string, query = new URLSearchParams(), o?: CallOpsjoner): Promise<Bundle> {
 		const qs = query.toString();
-		return (await kall('GET', `${resourceType}/${encodeURIComponent(id)}/_history${qs ? `?${qs}` : ''}`, undefined, o)).ressurs as Bundle;
+		return (await call('GET', `${resourceType}/${encodeURIComponent(id)}/_history${qs ? `?${qs}` : ''}`, undefined, o)).resource as Bundle;
 	},
 
-	async sok(resourceType: string, query: URLSearchParams, o?: KallOpsjoner): Promise<Bundle> {
+	async search(resourceType: string, query: URLSearchParams, o?: CallOpsjoner): Promise<Bundle> {
 		// POST mot /_search brukes framfor GET, slik at pasientidentifikatorer ikke
 		// havner i URL-er og dermed i mellomliggende tilgangslogger.
-		return this.sokPost(resourceType, query, o);
+		return this.searchPost(resourceType, query, o);
 	},
 
 	/** Søk med POST og skjemakodet kropp (foretrukket for pasientnære søk). */
-	async sokPost(resourceType: string, query: URLSearchParams, o?: KallOpsjoner): Promise<Bundle> {
+	async searchPost(resourceType: string, query: URLSearchParams, o?: CallOpsjoner): Promise<Bundle> {
 		const url = `${tenantBase()}/${resourceType}/_search`;
-		const svar = await fetch(url, {
+		const response = await fetch(url, {
 			method: 'POST',
 			headers: {
 				accept: 'application/fhir+json',
@@ -145,65 +145,65 @@ export const fhirKlient = {
 			body: query.toString(),
 			signal: o?.signal
 		});
-		const tekst = await svar.text();
-		const kropp = tekst ? JSON.parse(tekst) : {};
-		if (!svar.ok) {
-			throw new FhirError(svar.status, (kropp as { issue?: never[] }).issue ?? [issue('error', 'processing', `FHIR-serveren svarte ${svar.status}`)]);
+		const text = await response.text();
+		const body = text ? JSON.parse(text) : {};
+		if (!response.ok) {
+			throw new FhirError(response.status, (body as { issue?: never[] }).issue ?? [issue('error', 'processing', `FHIR-serveren svarte ${response.status}`)]);
 		}
-		return kropp as Bundle;
+		return body as Bundle;
 	},
 
-	async opprett(ressurs: FhirResource, o?: KallOpsjoner): Promise<FhirRespons> {
-		return kall('POST', ressurs.resourceType, ressurs, o);
+	async create(resource: FhirResource, o?: CallOpsjoner): Promise<FhirRespons> {
+		return call('POST', resource.resourceType, resource, o);
 	},
 
-	async oppdater(resourceType: string, id: string, ressurs: FhirResource, o?: KallOpsjoner): Promise<FhirRespons> {
-		return kall('PUT', `${resourceType}/${encodeURIComponent(id)}`, { ...ressurs, resourceType, id }, o);
+	async update(resourceType: string, id: string, resource: FhirResource, o?: CallOpsjoner): Promise<FhirRespons> {
+		return call('PUT', `${resourceType}/${encodeURIComponent(id)}`, { ...resource, resourceType, id }, o);
 	},
 
-	async patch(resourceType: string, id: string, patch: unknown[], o?: KallOpsjoner): Promise<FhirRespons> {
-		return kall('PATCH', `${resourceType}/${encodeURIComponent(id)}`, patch, {
+	async patch(resourceType: string, id: string, patch: unknown[], o?: CallOpsjoner): Promise<FhirRespons> {
+		return call('PATCH', `${resourceType}/${encodeURIComponent(id)}`, patch, {
 			...o,
 			headers: { ...o?.headers, 'content-type': 'application/json-patch+json' }
 		});
 	},
 
-	async slett(resourceType: string, id: string, o?: KallOpsjoner): Promise<FhirRespons> {
-		return kall('DELETE', `${resourceType}/${encodeURIComponent(id)}`, undefined, o);
+	async deleteValue(resourceType: string, id: string, o?: CallOpsjoner): Promise<FhirRespons> {
+		return call('DELETE', `${resourceType}/${encodeURIComponent(id)}`, undefined, o);
 	},
 
-	async transaksjon(bundle: Bundle, o?: KallOpsjoner): Promise<Bundle> {
-		return (await kall('POST', '', bundle, o)).ressurs as Bundle;
+	async transaction(bundle: Bundle, o?: CallOpsjoner): Promise<Bundle> {
+		return (await call('POST', '', bundle, o)).resource as Bundle;
 	},
 
-	async operasjon(sti: string, parametre?: FhirResource, o?: KallOpsjoner): Promise<FhirResource> {
-		return (await kall(parametre ? 'POST' : 'GET', sti, parametre, o)).ressurs;
+	async operation(path: string, parametre?: FhirResource, o?: CallOpsjoner): Promise<FhirResource> {
+		return (await call(parametre ? 'POST' : 'GET', path, parametre, o)).resource;
 	},
 
 	/** Pasientens samlede journal. HAPI implementerer $everything med paginering. */
-	async everything(patientId: string, query = new URLSearchParams(), o?: KallOpsjoner): Promise<Bundle> {
+	async everything(patientId: string, query = new URLSearchParams(), o?: CallOpsjoner): Promise<Bundle> {
 		const qs = query.toString();
-		return (await kall('GET', `Patient/${encodeURIComponent(patientId)}/$everything${qs ? `?${qs}` : ''}`, undefined, o)).ressurs as Bundle;
+		return (await call('GET', `Patient/${encodeURIComponent(patientId)}/$everything${qs ? `?${qs}` : ''}`, undefined, o)).resource as Bundle;
 	},
 
-	async valider(ressurs: FhirResource, profil?: string, o?: KallOpsjoner): Promise<FhirResource> {
-		const sti = `${ressurs.resourceType}/$validate${profil ? `?profile=${encodeURIComponent(profil)}` : ''}`;
+	async validate(resource: FhirResource, profil?: string, o?: CallOpsjoner): Promise<FhirResource> {
+		const path = `${resource.resourceType}/$validate${profil ? `?profile=${encodeURIComponent(profil)}` : ''}`;
 		try {
-			return (await kall('POST', sti, ressurs, o)).ressurs;
+			return (await call('POST', path, resource, o)).resource;
 		} catch (err) {
 			if (err instanceof FhirError) return err.toOutcome();
 			throw err;
 		}
 	},
 
-	async capabilityStatement(o?: KallOpsjoner): Promise<FhirResource> {
-		return (await kall('GET', 'metadata', undefined, o)).ressurs;
+	async capabilityStatement(o?: CallOpsjoner): Promise<FhirResource> {
+		return (await call('GET', 'metadata', undefined, o)).resource;
 	},
 
 	/** Enkel helsesjekk brukt av /api/helse og oppstartssekvensen. */
-	async erTilgjengelig(): Promise<boolean> {
+	async isTilgjengelig(): Promise<boolean> {
 		try {
-			await kall('GET', 'metadata?_summary=true');
+			await call('GET', 'metadata?_summary=true');
 			return true;
 		} catch {
 			return false;

@@ -1,13 +1,13 @@
 import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import {
-	byggJournaluttrekk,
+	buildRecordExtract,
 	filnavn,
-	tilHtml,
-	tilTekst,
+	toHtml,
+	toText,
 	UTLEVERINGSGRUNNER,
 	type Utleveringsgrunn
-} from '$srv/journal/utlevering';
+} from '$srv/journal/disclosure';
 
 /**
  * Selve utleveringen.
@@ -20,43 +20,43 @@ import {
 export const GET: RequestHandler = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx) error(401, 'Ikke pålogget.');
-	if (!ctx.rettigheter.has('journal:utlever')) error(403, 'Rollen din kan ikke utlevere journal.');
+	if (!ctx.permissions.has('journal:utlever')) error(403, 'Rollen din kan ikke utlevere journal.');
 
 	const p = event.url.searchParams;
 	const format = p.get('format') ?? 'html';
-	const grunn = p.get('grunn') ?? 'pasient-innsyn';
-	if (!UTLEVERINGSGRUNNER.some((g) => g.kode === grunn)) error(400, 'Ukjent utleveringsgrunn.');
+	const reason = p.get('grunn') ?? 'pasient-innsyn';
+	if (!UTLEVERINGSGRUNNER.some((g) => g.code === reason)) error(400, 'Ukjent utleveringsgrunn.');
 	if (!['html', 'json', 'txt'].includes(format)) error(400, 'Ukjent format.');
 
-	const dato = (n: string) => {
+	const date = (n: string) => {
 		const v = p.get(n)?.trim();
 		if (!v) return undefined;
 		if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) error(400, `Ugyldig dato: ${v}`);
 		return v;
 	};
 
-	const uttrekk = await byggJournaluttrekk(ctx, event.params.id, {
-		grunn: grunn as Utleveringsgrunn,
-		mottaker: p.get('mottaker')?.trim() || undefined,
-		fraDato: dato('fra'),
-		tilDato: dato('til')
+	const extract = await buildRecordExtract(ctx, event.params.id, {
+		reason: reason as Utleveringsgrunn,
+		recipient: p.get('mottaker')?.trim() || undefined,
+		fromDate: date('fra'),
+		toDate: date('til')
 	});
 
-	const { kropp, type, endelse } =
+	const { body, type, extension } =
 		format === 'json'
-			? { kropp: JSON.stringify(uttrekk.dokument, null, 2), type: 'application/fhir+json', endelse: 'json' as const }
+			? { body: JSON.stringify(extract.document, null, 2), type: 'application/fhir+json', extension: 'json' as const }
 			: format === 'txt'
-				? { kropp: tilTekst(uttrekk), type: 'text/plain; charset=utf-8', endelse: 'txt' as const }
-				: { kropp: tilHtml(uttrekk), type: 'text/html; charset=utf-8', endelse: 'html' as const };
+				? { body: toText(extract), type: 'text/plain; charset=utf-8', extension: 'txt' as const }
+				: { body: toHtml(extract), type: 'text/html; charset=utf-8', extension: 'html' as const };
 
-	return new Response(kropp, {
+	return new Response(body, {
 		headers: {
 			'content-type': type,
 			// Journalen skal lagres som fil, ikke vises i en ramme et sted.
-			'content-disposition': `attachment; filename="${filnavn(uttrekk, endelse)}"`,
+			'content-disposition': `attachment; filename="${filnavn(extract, extension)}"`,
 			// Helseopplysninger skal ikke ligge i noen mellomlagring.
 			'cache-control': 'no-store, private',
-			'x-utlevering': uttrekk.utleveringsId
+			'x-utlevering': extract.disclosureId
 		}
 	});
 };

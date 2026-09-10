@@ -1,12 +1,12 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { exec } from '$srv/db';
-import { krevTenant } from '$srv/tenant/kontekst';
-import { nyId } from '$srv/util/ids';
-import { logg, aktorFraKontekst } from '$srv/audit';
-import { bekreftTotp } from '$srv/auth/brukere';
+import { requireTenant } from '$srv/tenant/context';
+import { newId } from '$srv/util/ids';
+import { log, actorFromContext } from '$srv/audit';
+import { confirmTotp } from '$srv/auth/users';
 import { config } from '$srv/config';
-import { kanNodrett } from '$srv/authz/roles';
+import { canEmergencyAccess } from '$srv/authz/roles';
 
 /**
  * Nødrettstilgang ("break the glass").
@@ -24,56 +24,56 @@ export const actions: Actions = {
 	 * tidsbegrenset tilgang. Både forespørselen og selve tilgangen logges,
 	 * og oppslaget legges i kø for gjennomgang.
 	 */
-	nodrett: async (event) => {
+	emergencyAccess: async (event) => {
 		const ctx = event.locals.auth;
 		if (!ctx?.userId) redirect(303, '/logg-inn');
-		if (!kanNodrett(ctx.roller)) return fail(403, { feil: 'Rollen din kan ikke bruke nødrettstilgang.' });
+		if (!canEmergencyAccess(ctx.roles)) return fail(403, { error: 'Rollen din kan ikke bruke nødrettstilgang.' });
 
 
 		const form = await event.request.formData();
-		const begrunnelse = String(form.get('begrunnelse') ?? '').trim();
-		const engangskode = String(form.get('engangskode') ?? '').trim();
+		const justification = String(form.get('begrunnelse') ?? '').trim();
+		const oneTimeCode = String(form.get('engangskode') ?? '').trim();
 		const patientId = event.params.id;
 
-		const tilbake = (feil: string) =>
-			redirect(303, `/pasienter/${patientId}?nodrettFeil=${encodeURIComponent(feil)}`);
+		const back = (error: string) =>
+			redirect(303, `/pasienter/${patientId}?nodrettFeil=${encodeURIComponent(error)}`);
 
-		if (begrunnelse.length < 15) tilbake('Skriv en konkret begrunnelse på minst 15 tegn.');
+		if (justification.length < 15) back('Skriv en konkret begrunnelse på minst 15 tegn.');
 
 		// Reautentisering før nødrett, når kontoen har totrinnsverifisering.
 		if (config.security.requireMfa && ctx.amr !== 'helseid') {
-			if (!engangskode || !(await bekreftTotp(ctx.userId, engangskode))) {
-				tilbake('Feil eller manglende engangskode.');
+			if (!oneTimeCode || !(await confirmTotp(ctx.userId, oneTimeCode))) {
+				back('Feil eller manglende engangskode.');
 			}
 		}
 
-		const varighetTimer = 4;
+		const durationAppointments = 4;
 		await exec(
-			`INSERT INTO break_glass (id, tenant_id, user_id, patient_id, begrunnelse, utloper)
+			`INSERT INTO break_glass (id, tenant_id, user_id, patient_id, justification, expires_at)
 			 VALUES ($1,$6,$2,$3,$4, now() + ($5 || ' hours')::interval)`,
-			[nyId(), ctx.userId, patientId, begrunnelse, String(varighetTimer), krevTenant().id]
+			[newId(), ctx.userId, patientId, justification, String(durationAppointments), requireTenant().id]
 		);
-		await logg(
+		await log(
 			{
-				type: 'emergency-override', subtype: 'break-glass', handling: 'E', utfall: '0',
-				patientId, purposeOfUse: 'ETREAT', utfallBeskrivelse: begrunnelse,
-				detaljer: { varighetTimer }
+				type: 'emergency-override', subtype: 'break-glass', action: 'E', outcome: '0',
+				patientId, purposeOfUse: 'ETREAT', outcomeDescription: justification,
+				details: { durationAppointments }
 			},
-			aktorFraKontekst(ctx)
+			actorFromContext(ctx)
 		);
 		redirect(303, `/pasienter/${patientId}`);
 	},
 
-	avsluttNodrett: async (event) => {
+	endEmergencyAccess: async (event) => {
 		const ctx = event.locals.auth;
 		if (!ctx?.userId) redirect(303, '/logg-inn');
 		await exec(
-			'UPDATE break_glass SET utloper = now() WHERE user_id = $1 AND patient_id = $2 AND tenant_id = $3 AND utloper > now()',
-			[ctx.userId, event.params.id, krevTenant().id]
+			'UPDATE break_glass SET expires_at = now() WHERE user_id = $1 AND patient_id = $2 AND tenant_id = $3 AND expires_at > now()',
+			[ctx.userId, event.params.id, requireTenant().id]
 		);
-		await logg(
-			{ type: 'emergency-override', subtype: 'break-glass-avsluttet', handling: 'E', utfall: '0', patientId: event.params.id },
-			aktorFraKontekst(ctx)
+		await log(
+			{ type: 'emergency-override', subtype: 'break-glass-avsluttet', action: 'E', outcome: '0', patientId: event.params.id },
+			actorFromContext(ctx)
 		);
 		redirect(303, `/pasienter/${event.params.id}`);
 	}

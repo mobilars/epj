@@ -1,19 +1,19 @@
 <script lang="ts">
 	let { data, form } = $props();
-	const v = $derived(data.virksomhet);
+	const v = $derived(data.organisation);
 </script>
 
 <div class="rad-mellom">
-	<h2>{v.navn}</h2>
+	<h2>{v.name}</h2>
 	<a href="/systemadmin">← Alle virksomheter</a>
 </div>
 
-{#if form?.feil}<div class="varsel varsel-feil" role="alert">{form.feil}</div>{/if}
-{#if form?.lagret}<div class="varsel varsel-ok" role="status">Endringene er lagret.</div>{/if}
+{#if form?.error}<div class="varsel varsel-feil" role="alert">{form.error}</div>{/if}
+{#if form?.stored}<div class="varsel varsel-ok" role="status">Endringene er lagret.</div>{/if}
 
-{#if data.partisjonFinnes === false && !data.erPlattform}
+{#if data.partitionExists === false && !data.isPlatform}
 	<div class="varsel varsel-feil" role="alert">
-		Virksomheten har partisjons-id {v.partisjonId} i registeret, men HAPI FHIR kjenner ingen
+		Virksomheten har partisjons-id {v.partitionId} i registeret, men HAPI FHIR kjenner ingen
 		partisjon med navnet <span class="mono">{v.id}</span>. Kliniske spørringer vil feile til
 		partisjonen er gjenopprettet.
 	</div>
@@ -26,13 +26,13 @@
 <div class="kort">
 	<h3>Nøkkeltall</h3>
 	<ul class="stabel">
-		{#each data.tall as t (t.hva)}
-			<li>{t.hva}: <strong class="tall">{t.n}</strong></li>
+		{#each data.number as t (t.label)}
+			<li>{t.label}: <strong class="tall">{t.n}</strong></li>
 		{/each}
 	</ul>
-	{#if data.roller.length}
+	{#if data.roles.length}
 		<p class="svak">
-			Roller i bruk: {data.roller.map((r) => `${r.rolle} (${r.n})`).join(', ')}
+			Roller i bruk: {data.roles.map((r) => `${r.role} (${r.n})`).join(', ')}
 		</p>
 	{/if}
 </div>
@@ -40,11 +40,11 @@
 <div class="kort">
 	<h3>Adresser</h3>
 	<dl>
-		<dt>Maskinnavn / partisjon</dt><dd class="mono">{v.id} · {v.partisjonId ?? 'ingen partisjon'}</dd>
+		<dt>Maskinnavn / partisjon</dt><dd class="mono">{v.id} · {v.partitionId ?? 'ingen partisjon'}</dd>
 		<dt>FHIR-endepunkt</dt><dd class="mono">{data.fhirBaseUrl}</dd>
 		<dt>OAuth issuer</dt><dd class="mono">{data.issuer}</dd>
 		<dt>SMART-metadata</dt><dd class="mono">{data.wellKnown}</dd>
-		<dt>Opprettet</dt><dd>{v.opprettet}</dd>
+		<dt>Opprettet</dt><dd>{v.created_at}</dd>
 	</dl>
 </div>
 
@@ -56,15 +56,15 @@
 	</p>
 	<form method="POST" action="?/lagre">
 		<div class="rad">
-			<div style="flex:1 1 16rem"><label for="navn">Navn</label><input id="navn" name="navn" value={v.navn} /></div>
+			<div style="flex:1 1 16rem"><label for="navn">Navn</label><input id="navn" name="navn" value={v.name} /></div>
 			<div style="flex:0 0 9rem"><label for="herId">HER-id</label><input id="herId" name="herId" value={v.herId ?? ''} /></div>
-			<div style="flex:0 0 9rem"><label for="kommunenummer">Kommunenummer</label><input id="kommunenummer" name="kommunenummer" value={v.kommunenummer ?? ''} /></div>
+			<div style="flex:0 0 9rem"><label for="kommunenummer">Kommunenummer</label><input id="kommunenummer" name="kommunenummer" value={v.municipality_code ?? ''} /></div>
 		</div>
 		<div class="rad">
-			<div style="flex:1 1 16rem"><label for="vertsnavn">Vertsnavn</label><input id="vertsnavn" name="vertsnavn" value={v.vertsnavn ?? ''} /></div>
+			<div style="flex:1 1 16rem"><label for="vertsnavn">Vertsnavn</label><input id="vertsnavn" name="vertsnavn" value={v.hostname ?? ''} /></div>
 			<div style="flex:1 1 18rem"><label for="baseUrl">Utadvendt adresse</label><input id="baseUrl" name="baseUrl" type="url" value={v.baseUrl} /></div>
 		</div>
-		<div><label for="merknad">Merknad</label><input id="merknad" name="merknad" value={v.merknad ?? ''} /></div>
+		<div><label for="merknad">Merknad</label><input id="merknad" name="merknad" value={v.note ?? ''} /></div>
 		<button type="submit" class="primar">Lagre</button>
 	</form>
 </section>

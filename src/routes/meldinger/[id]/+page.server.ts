@@ -1,40 +1,40 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { hentMelding } from '$srv/integrasjoner/nhn/meldingsko';
-import { lesHodemelding } from '$srv/integrasjoner/nhn/apprec';
-import { logg, aktorFraKontekst } from '$srv/audit';
+import { getMessage } from '$srv/integrations/nhn/message-queue';
+import { readMsgHead } from '$srv/integrations/nhn/apprec';
+import { log, actorFromContext } from '$srv/audit';
 
 /** Detaljvisning av én melding, med lesbar sammenstilling av hodemeldingen. */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx) redirect(303, `/logg-inn?retur=${encodeURIComponent(event.url.pathname)}`);
-	if (!ctx.rettigheter.has('melding:les')) error(403, 'Rollen din har ikke tilgang til meldinger.');
+	if (!ctx.permissions.has('melding:les')) error(403, 'Rollen din har ikke tilgang til meldinger.');
 
-	const melding = await hentMelding(event.params.id);
-	if (!melding) error(404, 'Meldingen finnes ikke.');
+	const message = await getMessage(event.params.id);
+	if (!message) error(404, 'Meldingen finnes ikke.');
 
-	await logg(
-		{ type: 'integrasjon', subtype: 'melding:lest', handling: 'R', utfall: '0', patientId: melding.patient_id, entityRef: `urn:melding:${melding.msg_id}` },
-		aktorFraKontekst(ctx)
+	await log(
+		{ type: 'integrasjon', subtype: 'melding:lest', action: 'R', outcome: '0', patientId: message.patient_id, entityRef: `urn:melding:${message.msg_id}` },
+		actorFromContext(ctx)
 	);
 
-	const lest = melding.payload_xml ? lesHodemelding(melding.payload_xml) : null;
+	const read = message.payload_xml ? readMsgHead(message.payload_xml) : null;
 
 	return {
-		melding: {
-			id: melding.id,
-			type: melding.meldingstype,
-			retning: melding.retning,
-			msgId: melding.msg_id,
-			status: melding.status,
-			detalj: melding.status_detalj,
-			apprec: melding.apprec_status,
-			patientId: melding.patient_id,
-			fhirRef: melding.fhir_ref,
-			opprettet: new Date(melding.opprettet).toLocaleString('nb-NO'),
-			avsender: lest?.avsender.navn ?? melding.avsender_her ?? '',
-			pasientNavn: lest?.pasientNavn ?? '',
-			xml: melding.payload_xml ?? ''
+		message: {
+			id: message.id,
+			type: message.message_type,
+			direction: message.direction,
+			msgId: message.msg_id,
+			status: message.status,
+			detalj: message.status_detail,
+			apprec: message.apprec_status,
+			patientId: message.patient_id,
+			fhirRef: message.fhir_ref,
+			created_at: new Date(message.created_at).toLocaleString('nb-NO'),
+			sender: read?.sender.name ?? message.sender_her_id ?? '',
+			patientName: read?.patientName ?? '',
+			xml: message.payload_xml ?? ''
 		}
 	};
 };

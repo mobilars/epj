@@ -1,43 +1,43 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { ressurser, sokRessurser } from '$srv/fhir/internt';
-import { tilPasientVisning } from '$srv/fhir/visning';
-import { listMeldinger, ventendeKvitteringer } from '$srv/integrasjoner/nhn/meldingsko';
-import { listKort } from '$srv/integrasjoner/helfo/regningskort';
+import { resources, searchResources } from '$srv/fhir/internal';
+import { toPatientDisplay } from '$srv/fhir/display';
+import { listMessages, pendingKvitteringer } from '$srv/integrations/nhn/message-queue';
+import { listCard } from '$srv/integrations/helfo/billing';
 import { query } from '$srv/db';
-import { krevTenant } from '$srv/tenant/kontekst';
+import { requireTenant } from '$srv/tenant/context';
 
 /** Arbeidsflaten: dagens timer, uleste meldinger og oppgjør som venter. */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx) redirect(303, `/logg-inn?retur=${encodeURIComponent(event.url.pathname)}`);
-	if (ctx.roller.length === 0) redirect(303, '/ingen-tilgang');
+	if (ctx.roles.length === 0) redirect(303, '/ingen-tilgang');
 	// Plattformadministratorer har ingen klinisk arbeidsflate å komme til.
-	if (ctx.rettigheter.has('plattform:administrer') && !ctx.rettigheter.has('journal:les')) {
+	if (ctx.permissions.has('plattform:administrer') && !ctx.permissions.has('journal:les')) {
 		redirect(303, '/systemadmin');
 	}
 
-	const idag = new Date().toISOString().slice(0, 10);
-	const kanLese = ctx.rettigheter.has('journal:les');
-	const kanMelding = ctx.rettigheter.has('melding:les');
-	const kanOppgjor = ctx.rettigheter.has('oppgjor:registrer') || ctx.rettigheter.has('oppgjor:send');
+	const today = new Date().toISOString().slice(0, 10);
+	const canLese = ctx.permissions.has('journal:les');
+	const canMessage = ctx.permissions.has('melding:les');
+	const canSettlement = ctx.permissions.has('oppgjor:registrer') || ctx.permissions.has('oppgjor:send');
 
-	const [timer, meldinger, kort, nodrett, uteKvittering] = await Promise.all([
-		kanLese
-			? sokRessurser(ctx, 'Appointment', { date: `ge${idag}`, _count: 25, _sort: 'date' }).catch(() => null)
+	const [appointments, messages, card, emergencyAccess, outsideReceipt] = await Promise.all([
+		canLese
+			? searchResources(ctx, 'Appointment', { date: `ge${today}`, _count: 25, _sort: 'date' }).catch(() => null)
 			: Promise.resolve(null),
-		kanMelding ? listMeldinger({ retning: 'inn', status: 'mottatt', grense: 15 }) : Promise.resolve([]),
-		kanOppgjor ? listKort({ status: 'klar', grense: 500 }) : Promise.resolve([]),
-		query<{ patient_id: string; utloper: string; begrunnelse: string }>(
-			'SELECT patient_id, utloper, begrunnelse FROM break_glass WHERE user_id = $1 AND tenant_id = $2 AND utloper > now() ORDER BY utloper',
-			[ctx.userId, krevTenant().id]
+		canMessage ? listMessages({ direction: 'inn', status: 'mottatt', limit: 15 }) : Promise.resolve([]),
+		canSettlement ? listCard({ status: 'klar', limit: 500 }) : Promise.resolve([]),
+		query<{ patient_id: string; expires_at: string; justification: string }>(
+			'SELECT patient_id, expires_at, justification FROM break_glass WHERE user_id = $1 AND tenant_id = $2 AND expires_at > now() ORDER BY expires_at',
+			[ctx.userId, requireTenant().id]
 		),
-		kanMelding ? ventendeKvitteringer(60) : Promise.resolve([])
+		canMessage ? pendingKvitteringer(60) : Promise.resolve([])
 	]);
 
-	const pasientIder = [
+	const patientIder = [
 		...new Set(
-			(timer ? ressurser(timer) : [])
+			(appointments ? resources(appointments) : [])
 				.flatMap((a) => (a.participant as { actor?: { reference?: string } }[] | undefined) ?? [])
 				.map((p) => p.actor?.reference)
 				.filter((r): r is string => Boolean(r?.startsWith('Patient/')))
@@ -45,13 +45,13 @@ export const load: PageServerLoad = async (event) => {
 		)
 	];
 
-	const pasienter = pasientIder.length
-		? ressurser(await sokRessurser(ctx, 'Patient', { _id: pasientIder.join(','), _count: 50 })).map(tilPasientVisning)
+	const patients = patientIder.length
+		? resources(await searchResources(ctx, 'Patient', { _id: patientIder.join(','), _count: 50 })).map(toPatientDisplay)
 		: [];
-	const pasientKart = Object.fromEntries(pasienter.map((p) => [p.id, p]));
+	const patientKart = Object.fromEntries(patients.map((p) => [p.id, p]));
 
 	return {
-		timer: (timer ? ressurser(timer) : []).map((a) => {
+		appointments: (appointments ? resources(appointments) : []).map((a) => {
 			const deltaker = ((a.participant as { actor?: { reference?: string; display?: string } }[] | undefined) ?? [])
 				.map((p) => p.actor?.reference)
 				.find((r) => r?.startsWith('Patient/'));
@@ -60,22 +60,22 @@ export const load: PageServerLoad = async (event) => {
 				id: a.id as string,
 				start: a.start as string | undefined,
 				status: a.status as string,
-				beskrivelse: (a.description as string) ?? '',
-				pasient: pid ? (pasientKart[pid] ?? null) : null
+				description: (a.description as string) ?? '',
+				patient: pid ? (patientKart[pid] ?? null) : null
 			};
 		}),
-		meldinger: meldinger.map((m) => ({
+		messages: messages.map((m) => ({
 			id: m.id,
-			type: m.meldingstype,
-			avsender: m.mottaker_navn ?? m.avsender_her ?? 'Ukjent',
-			opprettet: m.opprettet,
+			type: m.message_type,
+			sender: m.recipient_name ?? m.sender_her_id ?? 'Ukjent',
+			created_at: m.created_at,
 			patientId: m.patient_id
 		})),
-		oppgjor: {
-			antallKlare: kort.length,
-			sumRefusjonOre: kort.reduce((s, k) => s + k.refusjon_ore, 0)
+		settlement: {
+			countKlare: card.length,
+			sumReimbursementOre: card.reduce((s, k) => s + k.reimbursement_ore, 0)
 		},
-		nodrett: nodrett.map((n) => ({ patientId: n.patient_id, utloper: n.utloper, begrunnelse: n.begrunnelse })),
-		uteKvittering: uteKvittering.length
+		emergencyAccess: emergencyAccess.map((n) => ({ patientId: n.patient_id, expires_at: n.expires_at, justification: n.justification })),
+		outsideReceipt: outsideReceipt.length
 	};
 };

@@ -1,103 +1,103 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { listBrukere, opprettBruker, settPassord, settRoller, settStatus } from '$srv/auth/brukere';
-import { avsluttAlleSesjoner } from '$srv/auth/session';
-import { tilbakekallForBruker } from '$srv/auth/tokens';
-import { erRolle, ROLLE_DEFINISJONER, ROLLER } from '$srv/authz/roles';
-import { logg, aktorFraKontekst } from '$srv/audit';
-import { nyToken } from '$srv/util/ids';
+import { listUsers, createUser, setPassword, setRoles, setStatus } from '$srv/auth/users';
+import { endAllSessions } from '$srv/auth/session';
+import { revokeForUser } from '$srv/auth/tokens';
+import { isRole, ROLE_DEFINISJONER, ROLES } from '$srv/authz/roles';
+import { log, actorFromContext } from '$srv/audit';
+import { newToken } from '$srv/util/ids';
 
 /** Brukeradministrasjon. Alle endringer i roller og status loggføres. */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
-	if (!ctx?.rettigheter.has('admin:brukere')) error(403, 'Ingen tilgang.');
+	if (!ctx?.permissions.has('admin:brukere')) error(403, 'Ingen tilgang.');
 	return {
-		brukere: (await listBrukere()).map((b) => ({
+		users: (await listUsers()).map((b) => ({
 			id: b.id,
-			brukernavn: b.brukernavn,
-			navn: b.navn,
-			hpr: b.hpr_nummer,
-			roller: b.roller,
+			username: b.username,
+			name: b.name,
+			hpr: b.hpr_number,
+			roles: b.roles,
 			status: b.status,
 			mfa: b.mfa_aktivert,
-			sisteInnlogging: b.siste_innlogging ? new Date(b.siste_innlogging).toLocaleString('nb-NO') : null,
-			laast: b.laast_til ? new Date(b.laast_til) > new Date() : false
+			lastLogin: b.last_login ? new Date(b.last_login).toLocaleString('nb-NO') : null,
+			locked: b.locked_until ? new Date(b.locked_until) > new Date() : false
 		})),
-		roller: ROLLER.map((r) => ({ kode: r, navn: ROLLE_DEFINISJONER[r].navn, beskrivelse: ROLLE_DEFINISJONER[r].beskrivelse }))
+		roles: ROLES.map((r) => ({ code: r, name: ROLE_DEFINISJONER[r].name, description: ROLE_DEFINISJONER[r].description }))
 	};
 };
 
 export const actions: Actions = {
-	opprett: async (event) => {
+	create: async (event) => {
 		const ctx = event.locals.auth;
-		if (!ctx?.rettigheter.has('admin:brukere')) return fail(403, { feil: 'Ingen tilgang.' });
+		if (!ctx?.permissions.has('admin:brukere')) return fail(403, { error: 'Ingen tilgang.' });
 		const form = await event.request.formData();
-		const roller = form.getAll('roller').map(String).filter(erRolle);
-		const brukernavn = String(form.get('brukernavn') ?? '').trim();
-		if (!brukernavn) return fail(400, { feil: 'Brukernavn må fylles ut.' });
+		const roles = form.getAll('roller').map(String).filter(isRole);
+		const username = String(form.get('brukernavn') ?? '').trim();
+		if (!username) return fail(400, { error: 'Brukernavn må fylles ut.' });
 
-		const midlertidig = nyToken(9);
-		const bruker = await opprettBruker({
-			brukernavn,
-			navn: String(form.get('navn') ?? '').trim() || brukernavn,
-			epost: String(form.get('epost') ?? '').trim() || undefined,
-			hprNummer: String(form.get('hpr') ?? '').trim() || undefined,
+		const temporary = newToken(9);
+		const user = await createUser({
+			username,
+			name: String(form.get('navn') ?? '').trim() || username,
+			email: String(form.get('epost') ?? '').trim() || undefined,
+			hprNumber: String(form.get('hpr') ?? '').trim() || undefined,
 			practitionerId: String(form.get('practitionerId') ?? '').trim() || undefined,
-			passord: midlertidig,
-			roller,
-			opprettetAv: ctx.userId ?? undefined
+			password: temporary,
+			roles,
+			createdOf: ctx.userId ?? undefined
 		});
-		await logg(
-			{ type: 'admin', subtype: 'bruker:opprettet', handling: 'C', utfall: '0', entityRef: `Person/${bruker.id}`, detaljer: { brukernavn, roller: roller.join(',') } },
-			aktorFraKontekst(ctx)
+		await log(
+			{ type: 'admin', subtype: 'bruker:opprettet', action: 'C', outcome: '0', entityRef: `Person/${user.id}`, details: { username, roles: roles.join(',') } },
+			actorFromContext(ctx)
 		);
-		return { ok: true, midlertidigPassord: midlertidig, brukernavn };
+		return { ok: true, temporaryPassword: temporary, username };
 	},
 
-	roller: async (event) => {
+	roles: async (event) => {
 		const ctx = event.locals.auth;
-		if (!ctx?.rettigheter.has('admin:brukere')) return fail(403, { feil: 'Ingen tilgang.' });
+		if (!ctx?.permissions.has('admin:brukere')) return fail(403, { error: 'Ingen tilgang.' });
 		const form = await event.request.formData();
 		const userId = String(form.get('id') ?? '');
-		const roller = form.getAll('roller').map(String).filter(erRolle);
-		await settRoller(userId, roller, ctx.userId ?? 'ukjent');
-		await logg(
-			{ type: 'admin', subtype: 'bruker:roller', handling: 'U', utfall: '0', entityRef: `Person/${userId}`, detaljer: { roller: roller.join(',') } },
-			aktorFraKontekst(ctx)
+		const roles = form.getAll('roller').map(String).filter(isRole);
+		await setRoles(userId, roles, ctx.userId ?? 'ukjent');
+		await log(
+			{ type: 'admin', subtype: 'bruker:roller', action: 'U', outcome: '0', entityRef: `Person/${userId}`, details: { roles: roles.join(',') } },
+			actorFromContext(ctx)
 		);
 		redirect(303, '/admin/brukere');
 	},
 
 	status: async (event) => {
 		const ctx = event.locals.auth;
-		if (!ctx?.rettigheter.has('admin:brukere')) return fail(403, { feil: 'Ingen tilgang.' });
+		if (!ctx?.permissions.has('admin:brukere')) return fail(403, { error: 'Ingen tilgang.' });
 		const form = await event.request.formData();
 		const userId = String(form.get('id') ?? '');
 		const status = String(form.get('status') ?? 'aktiv') as 'aktiv' | 'sperret' | 'avsluttet';
-		await settStatus(userId, status);
+		await setStatus(userId, status);
 		if (status !== 'aktiv') {
-			await avsluttAlleSesjoner(userId);
-			await tilbakekallForBruker(userId, `status satt til ${status}`);
+			await endAllSessions(userId);
+			await revokeForUser(userId, `status satt til ${status}`);
 		}
-		await logg(
-			{ type: 'admin', subtype: 'bruker:status', handling: 'U', utfall: '0', entityRef: `Person/${userId}`, detaljer: { status } },
-			aktorFraKontekst(ctx)
+		await log(
+			{ type: 'admin', subtype: 'bruker:status', action: 'U', outcome: '0', entityRef: `Person/${userId}`, details: { status } },
+			actorFromContext(ctx)
 		);
 		redirect(303, '/admin/brukere');
 	},
 
-	nyttPassord: async (event) => {
+	newPassword: async (event) => {
 		const ctx = event.locals.auth;
-		if (!ctx?.rettigheter.has('admin:brukere')) return fail(403, { feil: 'Ingen tilgang.' });
+		if (!ctx?.permissions.has('admin:brukere')) return fail(403, { error: 'Ingen tilgang.' });
 		const form = await event.request.formData();
 		const userId = String(form.get('id') ?? '');
-		const midlertidig = nyToken(9);
-		await settPassord(userId, midlertidig, true);
-		await avsluttAlleSesjoner(userId);
-		await logg(
-			{ type: 'admin', subtype: 'bruker:passord', handling: 'U', utfall: '0', entityRef: `Person/${userId}` },
-			aktorFraKontekst(ctx)
+		const temporary = newToken(9);
+		await setPassword(userId, temporary, true);
+		await endAllSessions(userId);
+		await log(
+			{ type: 'admin', subtype: 'bruker:passord', action: 'U', outcome: '0', entityRef: `Person/${userId}` },
+			actorFromContext(ctx)
 		);
-		return { ok: true, midlertidigPassord: midlertidig };
+		return { ok: true, temporaryPassword: temporary };
 	}
 };

@@ -1,14 +1,14 @@
 import type { RequestEvent } from '@sveltejs/kit';
-import { en, exec } from './db';
+import { one, exec } from './db';
 import { config } from './config';
-import { gjeldendeTenant } from './tenant/kontekst';
+import { currentTenant } from './tenant/context';
 
 /** Utleder klient-IP fra betrodde proxy-headere. */
-export function klientIp(event: RequestEvent): string {
+export function clientIp(event: RequestEvent): string {
 	const hops = config.security.trustedProxyHops;
 	const forwarded = event.request.headers.get('x-forwarded-for');
 	if (forwarded && hops > 0) {
-		const kjede = forwarded.split(',').map((s) => s.trim()).filter(Boolean);
+		const chain = forwarded.split(',').map((s) => s.trim()).filter(Boolean);
 		// Ta adressen som ligger `hops` fra slutten - alt lenger til venstre kan
 		// klienten selv ha satt.
 		//
@@ -16,9 +16,9 @@ export function klientIp(event: RequestEvent): string {
 		// proxyene vi tror. Da er hele headeren klientens eget verk, og vi bruker
 		// den ikke: ellers kunne hvem som helst velge sin egen adresse, og både
 		// ratebegrensningen per IP og kilde-IP i sikkerhetsloggen ville vært verdiløs.
-		if (kjede.length >= hops) {
-			const kandidat = kjede[kjede.length - hops];
-			if (kandidat) return kandidat;
+		if (chain.length >= hops) {
+			const candidate = chain[chain.length - hops];
+			if (candidate) return candidate;
 		}
 	}
 	try {
@@ -34,33 +34,33 @@ export function klientIp(event: RequestEvent): string {
  */
 export async function rateLimit(
 	bucket: string,
-	maks: number,
-	vinduSekunder: number
-): Promise<{ tillatt: boolean; gjenstaende: number; nullstillesOm: number }> {
+	max: number,
+	windowSekunder: number
+): Promise<{ allowed: boolean; remaining: number; nullstillesAbout: number }> {
 	// Virksomheten inngår i nøkkelen, slik at én virksomhets trafikk ikke kan
 	// stenge ute en annen.
-	const nokkel = `${gjeldendeTenant()?.id ?? 'ukjent'}:${bucket}`;
-	const nå = Math.floor(Date.now() / 1000);
-	const vinduStart = nå - (nå % vinduSekunder);
-	const rad = await en<{ teller: number }>(
-		`INSERT INTO rate_limit (bucket, teller, vindu_start) VALUES ($1, 1, $2)
+	const key = `${currentTenant()?.id ?? 'ukjent'}:${bucket}`;
+	const now = Math.floor(Date.now() / 1000);
+	const windowStart = now - (now % windowSekunder);
+	const row = await one<{ counter: number }>(
+		`INSERT INTO rate_limit (bucket, counter, window_start) VALUES ($1, 1, $2)
 		 ON CONFLICT (bucket) DO UPDATE SET
-		   teller = CASE WHEN rate_limit.vindu_start = $2 THEN rate_limit.teller + 1 ELSE 1 END,
-		   vindu_start = $2
-		 RETURNING teller`,
-		[nokkel, vinduStart]
+		   counter = CASE WHEN rate_limit.window_start = $2 THEN rate_limit.counter + 1 ELSE 1 END,
+		   window_start = $2
+		 RETURNING counter`,
+		[key, windowStart]
 	);
-	const teller = rad?.teller ?? 1;
+	const counter = row?.counter ?? 1;
 	return {
-		tillatt: teller <= maks,
-		gjenstaende: Math.max(0, maks - teller),
-		nullstillesOm: vinduStart + vinduSekunder - nå
+		allowed: counter <= max,
+		remaining: Math.max(0, max - counter),
+		nullstillesAbout: windowStart + windowSekunder - now
 	};
 }
 
 /** Vedlikehold. Går bevisst på tvers av virksomheter: sletter bare gamle tellere. */
-export async function ryddRateLimit(): Promise<number> {
-	return exec('DELETE FROM rate_limit WHERE vindu_start < $1', [Math.floor(Date.now() / 1000) - 86400]);
+export async function purgeRateLimit(): Promise<number> {
+	return exec('DELETE FROM rate_limit WHERE window_start < $1', [Math.floor(Date.now() / 1000) - 86400]);
 }
 
 /**
@@ -71,8 +71,8 @@ export async function ryddRateLimit(): Promise<number> {
  * får riktig nonce. Her settes de øvrige headerne, pluss en minimal policy for
  * API-svar, som aldri rendres som HTML.
  */
-export function sikkerhetsheadere(erFhirApi: boolean): Record<string, string> {
-	const felles: Record<string, string> = {
+export function securityHeaders(isFhirApi: boolean): Record<string, string> {
+	const shared: Record<string, string> = {
 		'x-content-type-options': 'nosniff',
 		'referrer-policy': 'no-referrer',
 		'cross-origin-opener-policy': 'same-origin',
@@ -80,20 +80,20 @@ export function sikkerhetsheadere(erFhirApi: boolean): Record<string, string> {
 		'x-frame-options': 'DENY'
 	};
 	if (config.security.httpsOnly) {
-		felles['strict-transport-security'] = 'max-age=31536000; includeSubDomains';
+		shared['strict-transport-security'] = 'max-age=31536000; includeSubDomains';
 	}
-	if (erFhirApi) {
+	if (isFhirApi) {
 		// API-svar rendres ikke som HTML; en minimal policy holder.
-		return { ...felles, 'content-security-policy': "default-src 'none'; frame-ancestors 'none'", 'cache-control': 'no-store' };
+		return { ...shared, 'content-security-policy': "default-src 'none'; frame-ancestors 'none'", 'cache-control': 'no-store' };
 	}
-	return { ...felles, 'cache-control': 'no-store, no-cache, must-revalidate' };
+	return { ...shared, 'cache-control': 'no-store, no-cache, must-revalidate' };
 }
 
 /** CORS for FHIR-endepunktet. SMART-apper kjører i nettleseren fra egne opphav. */
-export function corsHeadere(origin: string | null, tillatteOpphav: string[]): Record<string, string> {
+export function corsHeadere(origin: string | null, allowedOpphav: string[]): Record<string, string> {
 	if (!origin) return {};
-	const tillatt = tillatteOpphav.includes(origin) || tillatteOpphav.includes('*');
-	if (!tillatt) return {};
+	const allowed = allowedOpphav.includes(origin) || allowedOpphav.includes('*');
+	if (!allowed) return {};
 	return {
 		'access-control-allow-origin': origin,
 		'access-control-allow-credentials': 'false',

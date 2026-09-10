@@ -1,66 +1,66 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { aktorFraKontekst } from '$srv/audit';
-import { forhandsvis, genererOppgjor, listOppgjor, sendOppgjor } from '$srv/integrasjoner/helfo/oppgjor';
-import { listKort } from '$srv/integrasjoner/helfo/regningskort';
-import { oreTilKroner } from '$srv/integrasjoner/helfo/takster';
+import { actorFromContext } from '$srv/audit';
+import { forhandsvis, generateSettlement, listSettlement, sendSettlement } from '$srv/integrations/helfo/settlement';
+import { listCard } from '$srv/integrations/helfo/billing';
+import { oreToKroner } from '$srv/integrations/helfo/tariffs';
 
 /** Oppgjør mot Helfo: forhåndsvisning, generering og innsending. */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx) redirect(303, `/logg-inn?retur=${encodeURIComponent(event.url.pathname)}`);
-	if (!ctx.rettigheter.has('oppgjor:registrer') && !ctx.rettigheter.has('oppgjor:send')) redirect(303, '/');
+	if (!ctx.permissions.has('oppgjor:registrer') && !ctx.permissions.has('oppgjor:send')) redirect(303, '/');
 
-	const idag = new Date();
-	const forsteIManeden = new Date(Date.UTC(idag.getUTCFullYear(), idag.getUTCMonth(), 1)).toISOString().slice(0, 10);
-	const fra = event.url.searchParams.get('fra') ?? forsteIManeden;
-	const til = event.url.searchParams.get('til') ?? idag.toISOString().slice(0, 10);
+	const today = new Date();
+	const firstIManeden = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)).toISOString().slice(0, 10);
+	const from = event.url.searchParams.get('fra') ?? firstIManeden;
+	const to = event.url.searchParams.get('til') ?? today.toISOString().slice(0, 10);
 
-	const [forhand, oppgjor, avviste] = await Promise.all([
-		forhandsvis(fra, til),
-		listOppgjor(20),
-		listKort({ status: 'avvist', grense: 50 })
+	const [forhand, settlement, avviste] = await Promise.all([
+		forhandsvis(from, to),
+		listSettlement(20),
+		listCard({ status: 'avvist', limit: 50 })
 	]);
 
 	return {
-		fra,
-		til,
-		kanSende: ctx.rettigheter.has('oppgjor:send'),
+		from,
+		to,
+		canSende: ctx.permissions.has('oppgjor:send'),
 		forhand: {
-			antallKort: forhand.antallKort,
-			sumRefusjon: oreTilKroner(forhand.sumRefusjonOre),
-			sumEgenandel: oreTilKroner(forhand.sumEgenandelOre),
-			advarsler: forhand.advarsler
+			countCard: forhand.countCard,
+			sumReimbursement: oreToKroner(forhand.sumReimbursementOre),
+			sumCopayment: oreToKroner(forhand.sumCopaymentOre),
+			warnings: forhand.warnings
 		},
-		avviste: avviste.map((k) => ({ id: k.id, dato: k.dato, patientId: k.patient_id, arsak: k.avvisning ?? '', refusjon: oreTilKroner(k.refusjon_ore) })),
-		oppgjor: oppgjor.map((o) => ({
+		avviste: avviste.map((k) => ({ id: k.id, date: k.date, patientId: k.patient_id, arsak: k.rejection ?? '', reimbursement: oreToKroner(k.reimbursement_ore) })),
+		settlement: settlement.map((o) => ({
 			id: o.id,
-			periode: `${o.periode_fra} – ${o.periode_til}`,
-			antall: o.antall_kort,
-			sumRefusjon: oreTilKroner(o.sum_refusjon_ore),
+			period: `${o.period_from} – ${o.period_to}`,
+			count: o.card_count,
+			sumReimbursement: oreToKroner(o.sum_reimbursement_ore),
 			status: o.status,
-			opprettet: new Date(o.opprettet).toLocaleString('nb-NO'),
-			sendt: o.sendt ? new Date(o.sendt).toLocaleString('nb-NO') : null
+			created_at: new Date(o.created_at).toLocaleString('nb-NO'),
+			sent_at: o.sent_at ? new Date(o.sent_at).toLocaleString('nb-NO') : null
 		}))
 	};
 };
 
 export const actions: Actions = {
-	generer: async (event) => {
+	generate: async (event) => {
 		const ctx = event.locals.auth;
-		if (!ctx?.rettigheter.has('oppgjor:send')) return fail(403, { feil: 'Rollen din kan ikke generere oppgjør.' });
+		if (!ctx?.permissions.has('oppgjor:send')) return fail(403, { error: 'Rollen din kan ikke generere oppgjør.' });
 		const form = await event.request.formData();
-		const svar = await genererOppgjor(String(form.get('fra')), String(form.get('til')), aktorFraKontekst(ctx));
-		if (!svar.ok) return fail(400, { feil: svar.feil });
-		return { ok: true, melding: 'Oppgjøret er generert og klart for innsending.' };
+		const response = await generateSettlement(String(form.get('fra')), String(form.get('til')), actorFromContext(ctx));
+		if (!response.ok) return fail(400, { error: response.error });
+		return { ok: true, message: 'Oppgjøret er generert og klart for innsending.' };
 	},
 
 	send: async (event) => {
 		const ctx = event.locals.auth;
-		if (!ctx?.rettigheter.has('oppgjor:send')) return fail(403, { feil: 'Rollen din kan ikke sende oppgjør.' });
+		if (!ctx?.permissions.has('oppgjor:send')) return fail(403, { error: 'Rollen din kan ikke sende oppgjør.' });
 		const form = await event.request.formData();
-		const svar = await sendOppgjor(String(form.get('id')), aktorFraKontekst(ctx));
-		if (!svar.ok) return fail(400, { feil: svar.feil });
-		return { ok: true, melding: 'Oppgjøret er sendt til Helfo.' };
+		const response = await sendSettlement(String(form.get('id')), actorFromContext(ctx));
+		if (!response.ok) return fail(400, { error: response.error });
+		return { ok: true, message: 'Oppgjøret er sendt til Helfo.' };
 	}
 };

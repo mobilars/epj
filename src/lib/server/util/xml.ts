@@ -15,40 +15,40 @@ export function escapeXml(v: string): string {
 }
 
 export type XmlNode = {
-	navn: string;
-	attributter?: Record<string, string | undefined>;
-	barn?: (XmlNode | null | undefined | false)[];
-	tekst?: string | number | null;
+	name: string;
+	attributes?: Record<string, string | undefined>;
+	children?: (XmlNode | null | undefined | false)[];
+	text?: string | number | null;
 };
 
 export function el(
-	navn: string,
-	tekstEllerBarn?: string | number | null | (XmlNode | null | undefined | false)[],
-	attributter?: Record<string, string | undefined>
+	name: string,
+	textOrChildren?: string | number | null | (XmlNode | null | undefined | false)[],
+	attributes?: Record<string, string | undefined>
 ): XmlNode {
-	if (Array.isArray(tekstEllerBarn)) return { navn, barn: tekstEllerBarn, attributter };
-	return { navn, tekst: tekstEllerBarn ?? null, attributter };
+	if (Array.isArray(textOrChildren)) return { name, children: textOrChildren, attributes };
+	return { name, text: textOrChildren ?? null, attributes };
 }
 
 export function serialiser(node: XmlNode, innrykk = 0): string {
 	const pad = '  '.repeat(innrykk);
-	const attrs = Object.entries(node.attributter ?? {})
+	const attrs = Object.entries(node.attributes ?? {})
 		.filter(([, v]) => v !== undefined)
 		.map(([k, v]) => ` ${k}="${escapeXml(String(v))}"`)
 		.join('');
-	const barn = (node.barn ?? []).filter(Boolean) as XmlNode[];
-	if (barn.length === 0) {
-		if (node.tekst === null || node.tekst === undefined || node.tekst === '') {
-			return `${pad}<${node.navn}${attrs}/>`;
+	const children = (node.children ?? []).filter(Boolean) as XmlNode[];
+	if (children.length === 0) {
+		if (node.text === null || node.text === undefined || node.text === '') {
+			return `${pad}<${node.name}${attrs}/>`;
 		}
-		return `${pad}<${node.navn}${attrs}>${escapeXml(String(node.tekst))}</${node.navn}>`;
+		return `${pad}<${node.name}${attrs}>${escapeXml(String(node.text))}</${node.name}>`;
 	}
-	const inner = barn.map((b) => serialiser(b, innrykk + 1)).join('\n');
-	return `${pad}<${node.navn}${attrs}>\n${inner}\n${pad}</${node.navn}>`;
+	const inner = children.map((b) => serialiser(b, innrykk + 1)).join('\n');
+	return `${pad}<${node.name}${attrs}>\n${inner}\n${pad}</${node.name}>`;
 }
 
-export function dokument(rot: XmlNode): string {
-	return `<?xml version="1.0" encoding="UTF-8"?>\n${serialiser(rot)}\n`;
+export function document(root: XmlNode): string {
+	return `<?xml version="1.0" encoding="UTF-8"?>\n${serialiser(root)}\n`;
 }
 
 /**
@@ -62,14 +62,14 @@ export function dokument(rot: XmlNode): string {
  * produksjonsoppsettet.
  */
 export type ParsedNode = {
-	navn: string;
-	attributter: Record<string, string>;
-	barn: ParsedNode[];
-	tekst: string;
+	name: string;
+	attributes: Record<string, string>;
+	children: ParsedNode[];
+	text: string;
 };
 
 export function parseXml(xml: string): ParsedNode {
-	const uten = xml.replace(/<\?[\s\S]*?\?>/g, '').replace(/<!--[\s\S]*?-->/g, '');
+	const without = xml.replace(/<\?[\s\S]*?\?>/g, '').replace(/<!--[\s\S]*?-->/g, '');
 	let i = 0;
 
 	function unescape(v: string): string {
@@ -79,83 +79,83 @@ export function parseXml(xml: string): ParsedNode {
 			.replace(/&amp;/g, '&');
 	}
 
-	function krev(betingelse: boolean, melding: string): void {
-		if (!betingelse) throw new Error(`Ugyldig XML: ${melding} (posisjon ${i})`);
+	function require(betingelse: boolean, message: string): void {
+		if (!betingelse) throw new Error(`Ugyldig XML: ${message} (posisjon ${i})`);
 	}
 
 	function parseNode(dybde: number): ParsedNode {
-		krev(dybde < 100, 'for dyp nøsting');
-		while (i < uten.length && uten[i] !== '<') i++;
-		krev(i < uten.length, 'fant ingen elementstart');
+		require(dybde < 100, 'for dyp nøsting');
+		while (i < without.length && without[i] !== '<') i++;
+		require(i < without.length, 'fant ingen elementstart');
 		i++; // '<'
 
-		const navnStart = i;
-		while (i < uten.length && !/[\s/>]/.test(uten[i])) i++;
-		krev(i < uten.length, 'uavsluttet elementnavn');
-		const navn = uten.slice(navnStart, i);
-		krev(navn.length > 0, 'tomt elementnavn');
+		const nameStart = i;
+		while (i < without.length && !/[\s/>]/.test(without[i])) i++;
+		require(i < without.length, 'uavsluttet elementnavn');
+		const name = without.slice(nameStart, i);
+		require(name.length > 0, 'tomt elementnavn');
 
-		const attributter: Record<string, string> = {};
+		const attributes: Record<string, string> = {};
 		for (;;) {
-			while (i < uten.length && /\s/.test(uten[i])) i++;
-			krev(i < uten.length, 'uavsluttet starttagg');
-			if (uten[i] === '/' || uten[i] === '>') break;
+			while (i < without.length && /\s/.test(without[i])) i++;
+			require(i < without.length, 'uavsluttet starttagg');
+			if (without[i] === '/' || without[i] === '>') break;
 
 			const aStart = i;
-			while (i < uten.length && uten[i] !== '=' && !/\s/.test(uten[i]) && uten[i] !== '>') i++;
-			krev(i < uten.length && uten[i] !== '>', 'uavsluttet attributtnavn');
-			const aNavn = uten.slice(aStart, i);
-			while (i < uten.length && uten[i] !== '"' && uten[i] !== "'" && uten[i] !== '>') i++;
-			krev(i < uten.length && uten[i] !== '>', `attributtet ${aNavn} mangler verdi`);
-			const quote = uten[i++];
+			while (i < without.length && without[i] !== '=' && !/\s/.test(without[i]) && without[i] !== '>') i++;
+			require(i < without.length && without[i] !== '>', 'uavsluttet attributtnavn');
+			const aName = without.slice(aStart, i);
+			while (i < without.length && without[i] !== '"' && without[i] !== "'" && without[i] !== '>') i++;
+			require(i < without.length && without[i] !== '>', `attributtet ${aName} mangler verdi`);
+			const quote = without[i++];
 			const vStart = i;
-			while (i < uten.length && uten[i] !== quote) i++;
-			krev(i < uten.length, `uavsluttet verdi for attributtet ${aNavn}`);
-			attributter[aNavn] = unescape(uten.slice(vStart, i));
+			while (i < without.length && without[i] !== quote) i++;
+			require(i < without.length, `uavsluttet verdi for attributtet ${aName}`);
+			attributes[aName] = unescape(without.slice(vStart, i));
 			i++;
 		}
 
-		if (uten[i] === '/') {
-			krev(uten[i + 1] === '>', 'forventet «/>»');
+		if (without[i] === '/') {
+			require(without[i + 1] === '>', 'forventet «/>»');
 			i += 2;
-			return { navn, attributter, barn: [], tekst: '' };
+			return { name, attributes, children: [], text: '' };
 		}
 		i++; // '>'
 
-		const barn: ParsedNode[] = [];
-		let tekst = '';
+		const children: ParsedNode[] = [];
+		let text = '';
 		for (;;) {
-			const neste = uten.indexOf('<', i);
-			krev(neste !== -1, `elementet ${navn} er ikke lukket`);
-			tekst += uten.slice(i, neste);
-			if (uten[neste + 1] === '/') {
-				const slutt = uten.indexOf('>', neste);
-				krev(slutt !== -1, `uavsluttet sluttagg for ${navn}`);
+			const next = without.indexOf('<', i);
+			require(next !== -1, `elementet ${name} er ikke lukket`);
+			text += without.slice(i, next);
+			if (without[next + 1] === '/') {
+				const slutt = without.indexOf('>', next);
+				require(slutt !== -1, `uavsluttet sluttagg for ${name}`);
 				i = slutt + 1;
 				break;
 			}
-			i = neste;
-			barn.push(parseNode(dybde + 1));
+			i = next;
+			children.push(parseNode(dybde + 1));
 		}
-		return { navn, attributter, barn, tekst: unescape(tekst).trim() };
+		return { name, attributes, children, text: unescape(text).trim() };
 	}
 
 	return parseNode(0);
 }
 
-export function finn(node: ParsedNode, sti: string): ParsedNode | undefined {
-	const deler = sti.split('/');
-	let gjeldende: ParsedNode | undefined = node;
-	for (const d of deler) {
-		gjeldende = gjeldende?.barn.find((b) => lokaltNavn(b.navn) === d);
-		if (!gjeldende) return undefined;
+export function find(node: ParsedNode, path: string): ParsedNode | undefined {
+	const parts = path.split('/');
+	let current: ParsedNode | undefined = node;
+	for (const d of parts) {
+		current = current?.children.find((b) => lokaltName(b.name) === d);
+		if (!current) return undefined;
 	}
-	return gjeldende;
+	return current;
 }
 
-export const lokaltNavn = (navn: string): string => navn.split(':').pop() ?? navn;
+export const lokaltName = (name: string): string => name.split(':').pop() ?? name;
 
-export function tekstVerdi(node: ParsedNode | undefined, sti: string): string | undefined {
+export function textValue(node: ParsedNode | undefined, path: string): string | undefined {
 	if (!node) return undefined;
-	return finn(node, sti)?.tekst || undefined;
+	return find(node, path)?.text || undefined;
 }

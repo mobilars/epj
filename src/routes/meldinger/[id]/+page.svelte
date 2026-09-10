@@ -1,15 +1,15 @@
 <script lang="ts">
 	let { data } = $props();
-	const m = $derived(data.melding);
+	const m = $derived(data.message);
 </script>
 
 <h1>{m.type}</h1>
 <div class="kort">
 	<dl class="rutenett">
-		<div><dt class="svak">Retning</dt><dd>{m.retning === 'ut' ? 'Sendt' : 'Mottatt'}</dd></div>
-		<div><dt class="svak">Tidspunkt</dt><dd>{m.opprettet}</dd></div>
-		<div><dt class="svak">Motpart</dt><dd>{m.avsender}</dd></div>
-		<div><dt class="svak">Pasient</dt><dd>{m.pasientNavn || '–'}</dd></div>
+		<div><dt class="svak">Retning</dt><dd>{m.direction === 'ut' ? 'Sendt' : 'Mottatt'}</dd></div>
+		<div><dt class="svak">Tidspunkt</dt><dd>{m.created_at}</dd></div>
+		<div><dt class="svak">Motpart</dt><dd>{m.sender}</dd></div>
+		<div><dt class="svak">Pasient</dt><dd>{m.patientName || '–'}</dd></div>
 		<div><dt class="svak">Status</dt><dd>{m.status}{#if m.apprec} (AppRec {m.apprec}){/if}</dd></div>
 		<div><dt class="svak">MsgId</dt><dd class="mono">{m.msgId}</dd></div>
 	</dl>

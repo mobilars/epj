@@ -26,7 +26,7 @@ export default defineConfig({
 		minify: false,
 		rollupOptions: {
 			input: {
-				migrer: fileURLToPath(new URL('./migrer.ts', import.meta.url)),
+				migrate: fileURLToPath(new URL('./migrer.ts', import.meta.url)),
 				seed: fileURLToPath(new URL('./seed.ts', import.meta.url))
 			},
 			// `pg` lastes fra node_modules i bildet.

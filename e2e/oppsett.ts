@@ -7,8 +7,8 @@ import { execFileSync } from 'node:child_process';
  * det før applikasjonen starter. Her venter vi på at FHIR-serveren svarer, og
  * kjører deretter seedingen.
  */
-export default async function oppsett(): Promise<void> {
-	await ventPa(`${process.env.EPJ_HAPI_BASE_URL}/metadata`, 60_000);
+export default async function setup(): Promise<void> {
+	await waitOn(`${process.env.EPJ_HAPI_BASE_URL}/metadata`, 60_000);
 
 	execFileSync('npx', ['vite-node', '-c', 'scripts/vite.config.ts', 'scripts/seed.ts'], {
 		stdio: 'inherit',
@@ -16,12 +16,12 @@ export default async function oppsett(): Promise<void> {
 	});
 }
 
-async function ventPa(url: string, timeoutMs: number): Promise<void> {
+async function waitOn(url: string, timeoutMs: number): Promise<void> {
 	const frist = Date.now() + timeoutMs;
 	for (;;) {
 		try {
-			const svar = await fetch(url, { signal: AbortSignal.timeout(3000) });
-			if (svar.ok) return;
+			const response = await fetch(url, { signal: AbortSignal.timeout(3000) });
+			if (response.ok) return;
 		} catch {
 			/* prøver igjen */
 		}

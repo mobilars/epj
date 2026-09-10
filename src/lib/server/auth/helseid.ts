@@ -1,13 +1,13 @@
 import { randomBytes, createHash } from 'node:crypto';
 import type { Cookies } from '@sveltejs/kit';
 import { config } from '../config';
-import { dekrypter, krypter } from '../util/crypto';
-import { nyId } from '../util/ids';
-import { signer, verifiser, type Algoritme, type Jwk } from './jws';
-import { en, exec, transaction } from '../db';
-import { krevTenant, utstederFor } from '../tenant/kontekst';
-import { opprettBruker, hentBruker, rollerFor, type Bruker } from './brukere';
-import type { Rolle } from '../authz/roles';
+import { decrypt, encrypt } from '../util/crypto';
+import { newId } from '../util/ids';
+import { sign, verify, type Algoritme, type Jwk } from './jws';
+import { one, exec, transaction } from '../db';
+import { requireTenant, issuerFor } from '../tenant/context';
+import { createUser, getUser, rolesFor, type User } from './users';
+import type { Role } from '../authz/roles';
 
 /**
  * HelseID som identitetsleverandør.
@@ -48,49 +48,49 @@ interface Metadata {
 	end_session_endpoint?: string;
 }
 
-let metadataCache: { verdi: Metadata; til: number } | null = null;
-let jwksCache: { verdi: Jwk[]; til: number } | null = null;
+let metadataCache: { value: Metadata; to: number } | null = null;
+let jwksCache: { value: Jwk[]; to: number } | null = null;
 
-export async function hentMetadata(): Promise<Metadata> {
-	if (metadataCache && Date.now() < metadataCache.til) return metadataCache.verdi;
-	const url = `${config.integrasjoner.helseId.issuer}/.well-known/openid-configuration`;
-	const svar = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-	if (!svar.ok) throw new Error(`Klarte ikke å hente HelseID-metadata (${svar.status})`);
-	const verdi = (await svar.json()) as Metadata;
-	metadataCache = { verdi, til: Date.now() + 3600_000 };
-	return verdi;
+export async function getMetadata(): Promise<Metadata> {
+	if (metadataCache && Date.now() < metadataCache.to) return metadataCache.value;
+	const url = `${config.integrations.healthId.issuer}/.well-known/openid-configuration`;
+	const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+	if (!response.ok) throw new Error(`Klarte ikke å hente HelseID-metadata (${response.status})`);
+	const value = (await response.json()) as Metadata;
+	metadataCache = { value, to: Date.now() + 3600_000 };
+	return value;
 }
 
-async function hentJwks(): Promise<Jwk[]> {
-	if (jwksCache && Date.now() < jwksCache.til) return jwksCache.verdi;
-	const meta = await hentMetadata();
-	const svar = await fetch(meta.jwks_uri, { signal: AbortSignal.timeout(10_000) });
-	if (!svar.ok) throw new Error(`Klarte ikke å hente HelseID-nøkler (${svar.status})`);
-	const jwks = (await svar.json()) as { keys: Jwk[] };
-	jwksCache = { verdi: jwks.keys, til: Date.now() + 3600_000 };
+async function getJwks(): Promise<Jwk[]> {
+	if (jwksCache && Date.now() < jwksCache.to) return jwksCache.value;
+	const meta = await getMetadata();
+	const response = await fetch(meta.jwks_uri, { signal: AbortSignal.timeout(10_000) });
+	if (!response.ok) throw new Error(`Klarte ikke å hente HelseID-nøkler (${response.status})`);
+	const jwks = (await response.json()) as { keys: Jwk[] };
+	jwksCache = { value: jwks.keys, to: Date.now() + 3600_000 };
 	return jwks.keys;
 }
 
 const STATE_COOKIE = 'epj_helseid';
 
-interface Flyttilstand {
+interface FlowState {
 	state: string;
 	nonce: string;
 	codeVerifier: string;
-	retur: string;
-	opprettet: number;
+	returnTo: string;
+	created_at: number;
 }
 
 /** Bygger autorisasjons-URL og legger flyttilstanden i en kryptert cookie. */
-export async function startPalogging(cookies: Cookies, retur: string): Promise<string> {
-	const meta = await hentMetadata();
+export async function startLogin(cookies: Cookies, returnTo: string): Promise<string> {
+	const meta = await getMetadata();
 	const state = randomBytes(24).toString('base64url');
 	const nonce = randomBytes(24).toString('base64url');
 	const codeVerifier = randomBytes(48).toString('base64url');
 	const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
 
-	const tilstand: Flyttilstand = { state, nonce, codeVerifier, retur, opprettet: Date.now() };
-	cookies.set(STATE_COOKIE, krypter(JSON.stringify(tilstand)), {
+	const flowState: FlowState = { state, nonce, codeVerifier, returnTo, created_at: Date.now() };
+	cookies.set(STATE_COOKIE, encrypt(JSON.stringify(flowState)), {
 		path: '/',
 		httpOnly: true,
 		sameSite: 'lax', // må overleve omdirigering tilbake fra HelseID
@@ -100,9 +100,9 @@ export async function startPalogging(cookies: Cookies, retur: string): Promise<s
 
 	const url = new URL(meta.authorization_endpoint);
 	url.searchParams.set('response_type', 'code');
-	url.searchParams.set('client_id', config.integrasjoner.helseId.clientId);
+	url.searchParams.set('client_id', config.integrations.healthId.clientId);
 	url.searchParams.set('redirect_uri', redirectUri());
-	url.searchParams.set('scope', config.integrasjoner.helseId.scopes.join(' '));
+	url.searchParams.set('scope', config.integrations.healthId.scopes.join(' '));
 	url.searchParams.set('state', state);
 	url.searchParams.set('nonce', nonce);
 	url.searchParams.set('code_challenge', codeChallenge);
@@ -113,32 +113,32 @@ export async function startPalogging(cookies: Cookies, retur: string): Promise<s
 export function redirectUri(): string {
 	// Tilbakekallsadressen må ligge på virksomhetens eget vertsnavn, siden
 	// sesjonen opprettes der.
-	return config.integrasjoner.helseId.redirectUri || `${utstederFor(krevTenant())}/logg-inn/helseid/tilbake`;
+	return config.integrations.healthId.redirectUri || `${issuerFor(requireTenant())}/logg-inn/helseid/tilbake`;
 }
 
-function lesTilstand(cookies: Cookies): Flyttilstand | null {
-	const rå = cookies.get(STATE_COOKIE);
-	if (!rå) return null;
+function readState(cookies: Cookies): FlowState | null {
+	const raw = cookies.get(STATE_COOKIE);
+	if (!raw) return null;
 	try {
-		const t = JSON.parse(dekrypter(rå)) as Flyttilstand;
-		if (Date.now() - t.opprettet > 600_000) return null;
+		const t = JSON.parse(decrypt(raw)) as FlowState;
+		if (Date.now() - t.created_at > 600_000) return null;
 		return t;
 	} catch {
 		return null;
 	}
 }
 
-export function avsluttFlyt(cookies: Cookies): void {
+export function endFlow(cookies: Cookies): void {
 	cookies.delete(STATE_COOKIE, { path: '/' });
 }
 
 /** Klientassertion (private_key_jwt) mot HelseID sitt token-endepunkt. */
-function klientAssertion(tokenEndpoint: string): string {
-	const { clientId, privateKeyPem, keyId, signeringsalgoritme } = config.integrasjoner.helseId;
+function clientAssertion(tokenEndpoint: string): string {
+	const { clientId, privateKeyPem, keyId, signeringsalgoritme } = config.integrations.healthId;
 	if (!privateKeyPem) throw new Error('HelseID-klientnøkkel mangler (EPJ_HELSEID_PRIVATE_KEY)');
-	const nå = Math.floor(Date.now() / 1000);
-	return signer(
-		{ iss: clientId, sub: clientId, aud: tokenEndpoint, jti: nyId(), iat: nå, nbf: nå, exp: nå + 60 },
+	const now = Math.floor(Date.now() / 1000);
+	return sign(
+		{ iss: clientId, sub: clientId, aud: tokenEndpoint, jti: newId(), iat: now, nbf: now, exp: now + 60 },
 		privateKeyPem,
 		keyId,
 		'JWT',
@@ -146,83 +146,83 @@ function klientAssertion(tokenEndpoint: string): string {
 	);
 }
 
-export interface HelseIdKrav {
+export interface HealthIdRequirement {
 	sub: string;
-	navn: string;
+	name: string;
 	pid: string | null;
-	hprNummer: string | null;
+	hprNumber: string | null;
 	sikkerhetsniva: string | null;
-	rå: Record<string, unknown>;
+	raw: Record<string, unknown>;
 }
 
-export type PaloggingsResultat =
-	| { ok: true; krav: HelseIdKrav; retur: string; bruker: Bruker; roller: Rolle[]; nyBruker: boolean }
-	| { ok: false; feil: string };
+export type PaloggingsResult =
+	| { ok: true; requirement: HealthIdRequirement; returnTo: string; user: User; roles: Role[]; newUser: boolean }
+	| { ok: false; error: string };
 
 /**
  * Fullfører flyten: bytter koden mot tokens, verifiserer id_token og
  * kobler eller oppretter den lokale brukeren.
  */
-export async function fullforPalogging(
+export async function fullforLogin(
 	cookies: Cookies,
-	kode: string,
+	code: string,
 	state: string
-): Promise<PaloggingsResultat> {
-	const tilstand = lesTilstand(cookies);
-	avsluttFlyt(cookies);
-	if (!tilstand) return { ok: false, feil: 'Påloggingen tok for lang tid. Prøv igjen.' };
-	if (tilstand.state !== state) return { ok: false, feil: 'Ugyldig state - påloggingen ble avbrutt av sikkerhetshensyn.' };
+): Promise<PaloggingsResult> {
+	const flowState = readState(cookies);
+	endFlow(cookies);
+	if (!flowState) return { ok: false, error: 'Påloggingen tok for lang tid. Prøv igjen.' };
+	if (flowState.state !== state) return { ok: false, error: 'Ugyldig state - påloggingen ble avbrutt av sikkerhetshensyn.' };
 
-	const meta = await hentMetadata();
-	const kropp = new URLSearchParams({
+	const meta = await getMetadata();
+	const body = new URLSearchParams({
 		grant_type: 'authorization_code',
-		code: kode,
+		code: code,
 		redirect_uri: redirectUri(),
-		client_id: config.integrasjoner.helseId.clientId,
-		code_verifier: tilstand.codeVerifier,
+		client_id: config.integrations.healthId.clientId,
+		code_verifier: flowState.codeVerifier,
 		client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
-		client_assertion: klientAssertion(meta.token_endpoint)
+		client_assertion: clientAssertion(meta.token_endpoint)
 	});
 
-	const svar = await fetch(meta.token_endpoint, {
+	const response = await fetch(meta.token_endpoint, {
 		method: 'POST',
 		headers: { 'content-type': 'application/x-www-form-urlencoded' },
-		body: kropp,
+		body: body,
 		signal: AbortSignal.timeout(15_000)
 	});
-	if (!svar.ok) {
-		return { ok: false, feil: `HelseID avviste innloggingen (${svar.status})` };
+	if (!response.ok) {
+		return { ok: false, error: `HelseID avviste innloggingen (${response.status})` };
 	}
-	const tokens = (await svar.json()) as { id_token?: string; access_token?: string };
-	if (!tokens.id_token) return { ok: false, feil: 'HelseID returnerte ikke id_token' };
+	const tokens = (await response.json()) as { id_token?: string; access_token?: string };
+	if (!tokens.id_token) return { ok: false, error: 'HelseID returnerte ikke id_token' };
 
-	let krav: Record<string, unknown>;
+	let requirement: Record<string, unknown>;
 	try {
-		krav = verifiser(tokens.id_token, await hentJwks()) as Record<string, unknown>;
+		requirement = verify(tokens.id_token, await getJwks()) as Record<string, unknown>;
 	} catch (err) {
-		return { ok: false, feil: `Kunne ikke verifisere id_token: ${(err as Error).message}` };
+		return { ok: false, error: `Kunne ikke verifisere id_token: ${(err as Error).message}` };
 	}
-	if (krav.iss !== config.integrasjoner.helseId.issuer) return { ok: false, feil: 'Feil utsteder i id_token' };
-	const aud = Array.isArray(krav.aud) ? krav.aud : [krav.aud];
-	if (!aud.includes(config.integrasjoner.helseId.clientId)) return { ok: false, feil: 'id_token er utstedt til en annen klient' };
-	if (krav.nonce !== tilstand.nonce) return { ok: false, feil: 'Nonce stemmer ikke - mulig gjenspillingsforsøk' };
+	if (requirement.iss !== config.integrations.healthId.issuer) return { ok: false, error: 'Feil utsteder i id_token' };
+	const aud = Array.isArray(requirement.aud) ? requirement.aud : [requirement.aud];
+	if (!aud.includes(config.integrations.healthId.clientId)) return { ok: false, error: 'id_token er utstedt til en annen klient' };
+	if (requirement.nonce !== flowState.nonce) return { ok: false, error: 'Nonce stemmer ikke - mulig gjenspillingsforsøk' };
 
-	const sikkerhetsniva = (krav[CLAIM.SECURITY_LEVEL] as string) ?? null;
+	const sikkerhetsniva = (requirement[CLAIM.SECURITY_LEVEL] as string) ?? null;
 	if (sikkerhetsniva && sikkerhetsniva !== '4') {
-		return { ok: false, feil: `Innlogging krever sikkerhetsnivå 4 (fikk ${sikkerhetsniva})` };
+		return { ok: false, error: `Innlogging krever sikkerhetsnivå 4 (fikk ${sikkerhetsniva})` };
 	}
 
-	const parsed: HelseIdKrav = {
-		sub: String(krav.sub),
-		navn: (krav.name as string) ?? 'Ukjent',
-		pid: (krav[CLAIM.PID] as string) ?? null,
-		hprNummer: (krav[CLAIM.HPR_NUMBER] as string) ?? null,
+	const parsed: HealthIdRequirement = {
+		sub: String(requirement.sub),
+		name: (requirement.name as string) ?? 'Ukjent',
+		pid: (requirement[CLAIM.PID] as string) ?? null,
+		hprNumber: (requirement[CLAIM.HPR_NUMBER] as string) ?? null,
 		sikkerhetsniva,
-		rå: krav
+		raw: requirement
 	};
 
-	const { bruker, roller, nyBruker } = await koblePaLokalBruker(parsed);
-	return { ok: true, krav: parsed, retur: tilstand.retur, bruker, roller, nyBruker };
+	const { user, roles, newUser } = await kobleOnLokalUser(parsed);
+	return { ok: true, requirement: parsed, returnTo: flowState.returnTo, user, roles, newUser };
 }
 
 /**
@@ -232,47 +232,47 @@ export async function fullforPalogging(
  * en bruker som er forhåndsregistrert av systemansvarlig kobles automatisk ved
  * første pålogging. Nye brukere opprettes uten roller og uten tilgang.
  */
-export async function koblePaLokalBruker(
-	krav: HelseIdKrav
-): Promise<{ bruker: Bruker; roller: Rolle[]; nyBruker: boolean }> {
+export async function kobleOnLokalUser(
+	requirement: HealthIdRequirement
+): Promise<{ user: User; roles: Role[]; newUser: boolean }> {
 	return transaction(async () => {
-		const tenantId = krevTenant().id;
-		let rad = await en<{ id: string }>(
+		const tenantId = requireTenant().id;
+		let row = await one<{ id: string }>(
 			'SELECT id FROM user_account WHERE helseid_sub = $1 AND tenant_id = $2',
-			[krav.sub, tenantId]
+			[requirement.sub, tenantId]
 		);
 
-		if (!rad && krav.hprNummer) {
-			rad = await en<{ id: string }>(
-				'SELECT id FROM user_account WHERE hpr_nummer = $1 AND tenant_id = $2 AND helseid_sub IS NULL',
-				[krav.hprNummer, tenantId]
+		if (!row && requirement.hprNumber) {
+			row = await one<{ id: string }>(
+				'SELECT id FROM user_account WHERE hpr_number = $1 AND tenant_id = $2 AND helseid_sub IS NULL',
+				[requirement.hprNumber, tenantId]
 			);
-			if (rad) {
-				await exec('UPDATE user_account SET helseid_sub = $2, navn = $3, oppdatert = now() WHERE id = $1', [rad.id, krav.sub, krav.navn]);
+			if (row) {
+				await exec('UPDATE user_account SET helseid_sub = $2, name = $3, updated_at = now() WHERE id = $1', [row.id, requirement.sub, requirement.name]);
 			}
 		}
 
-		if (rad) {
-			await exec('UPDATE user_account SET siste_innlogging = now(), feilede_forsok = 0, laast_til = NULL WHERE id = $1', [rad.id]);
-			const bruker = await hentBruker(rad.id);
-			if (!bruker) throw new Error('Fant ikke brukeren etter kobling');
-			return { bruker, roller: await rollerFor(bruker.id), nyBruker: false };
+		if (row) {
+			await exec('UPDATE user_account SET last_login = now(), failed_attempts = 0, locked_until = NULL WHERE id = $1', [row.id]);
+			const user = await getUser(row.id);
+			if (!user) throw new Error('Fant ikke brukeren etter kobling');
+			return { user, roles: await rolesFor(user.id), newUser: false };
 		}
 
-		const brukernavn = krav.hprNummer ? `hpr-${krav.hprNummer}` : `helseid-${krav.sub.slice(0, 12)}`;
-		const bruker = await opprettBruker({
-			brukernavn,
-			navn: krav.navn,
-			hprNummer: krav.hprNummer ?? undefined,
-			roller: [] // roller tildeles av systemansvarlig
+		const username = requirement.hprNumber ? `hpr-${requirement.hprNumber}` : `helseid-${requirement.sub.slice(0, 12)}`;
+		const user = await createUser({
+			username,
+			name: requirement.name,
+			hprNumber: requirement.hprNumber ?? undefined,
+			roles: [] // roller tildeles av systemansvarlig
 		});
-		await exec('UPDATE user_account SET helseid_sub = $2, ma_bytte_passord = false, siste_innlogging = now() WHERE id = $1', [bruker.id, krav.sub]);
-		const oppdatert = await hentBruker(bruker.id);
-		return { bruker: oppdatert ?? bruker, roller: [], nyBruker: true };
+		await exec('UPDATE user_account SET helseid_sub = $2, must_change_password = false, last_login = now() WHERE id = $1', [user.id, requirement.sub]);
+		const updated_at = await getUser(user.id);
+		return { user: updated_at ?? user, roles: [], newUser: true };
 	});
 }
 
-export function erKonfigurert(): boolean {
-	const h = config.integrasjoner.helseId;
+export function isKonfigurert(): boolean {
+	const h = config.integrations.healthId;
 	return h.enabled && Boolean(h.clientId) && Boolean(h.privateKeyPem);
 }

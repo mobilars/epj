@@ -3,26 +3,26 @@
 </script>
 
 <div class="smal" style="max-width: 560px">
-	<h1>Gi tilgang til «{data.klient.navn}»?</h1>
+	<h1>Gi tilgang til «{data.client.name}»?</h1>
 
-	{#if form?.feil}
-		<div class="varsel varsel-feil" role="alert">{form.feil}</div>
+	{#if form?.error}
+		<div class="varsel varsel-feil" role="alert">{form.error}</div>
 	{/if}
 
 	<div class="kort">
 		<div class="rad-mellom">
 			<div>
-				<strong>{data.klient.navn}</strong><br />
-				<span class="svak mono">{data.klient.clientId}</span>
+				<strong>{data.client.name}</strong><br />
+				<span class="svak mono">{data.client.clientId}</span>
 			</div>
 			<span class="merke merke-info">
-				{data.klient.kategori === 'smart-ehr' ? 'Journalstartet app' : 'Selvstendig app'}
+				{data.client.category === 'smart-ehr' ? 'Journalstartet app' : 'Selvstendig app'}
 			</span>
 		</div>
 
 		{#if data.launch.patientId}
 			<div class="varsel varsel-info" style="margin-top: 1rem">
-				Appen får tilgang til <strong>{data.launch.pasientNavn ?? `pasient ${data.launch.patientId}`}</strong>
+				Appen får tilgang til <strong>{data.launch.patientName ?? `pasient ${data.launch.patientId}`}</strong>
 				{#if data.launch.encounterId}og den åpne konsultasjonen{/if}.
 			</div>
 		{/if}
@@ -35,7 +35,7 @@
 		{:else}
 			<ul>
 				{#each data.scopes as s (s.scope)}
-					<li>{s.beskrivelse} <span class="svak mono">({s.scope})</span></li>
+					<li>{s.description} <span class="svak mono">({s.scope})</span></li>
 				{/each}
 			</ul>
 		{/if}
@@ -44,13 +44,13 @@
 			<h3>Ikke tillatt for din rolle</h3>
 			<ul class="svak">
 				{#each data.avvisteScopes as s (s.scope)}
-					<li>{s.beskrivelse} <span class="mono">({s.scope})</span></li>
+					<li>{s.description} <span class="mono">({s.scope})</span></li>
 				{/each}
 			</ul>
 			<p class="svak">Disse blir ikke gitt, selv om du godkjenner.</p>
 		{/if}
 
-		{#if !data.klient.databehandleravtale}
+		{#if !data.client.databehandleravtale}
 			<div class="varsel varsel-advarsel">
 				Det er ikke registrert databehandleravtale for denne appen. Kontroller med
 				systemansvarlig før du gir tilgang til helseopplysninger.
@@ -58,26 +58,26 @@
 		{/if}
 
 		<p class="svak">
-			Du gir tilgang som <strong>{data.bruker.navn}</strong>. Appen kan aldri se mer enn du selv
+			Du gir tilgang som <strong>{data.user.name}</strong>. Appen kan aldri se mer enn du selv
 			har tilgang til, og alle oppslag appen gjør blir loggført på deg.
 		</p>
 
 		<form method="POST" action="?/godkjenn" class="rad">
-			<input type="hidden" name="client_id" value={data.foresporsel.client_id} />
-			<input type="hidden" name="redirect_uri" value={data.foresporsel.redirect_uri} />
-			<input type="hidden" name="state" value={data.foresporsel.state} />
+			<input type="hidden" name="client_id" value={data.request.client_id} />
+			<input type="hidden" name="redirect_uri" value={data.request.redirect_uri} />
+			<input type="hidden" name="state" value={data.request.state} />
 			<input type="hidden" name="scope" value={data.innsnevret} />
-			<input type="hidden" name="code_challenge" value={data.foresporsel.code_challenge} />
-			<input type="hidden" name="code_challenge_method" value={data.foresporsel.code_challenge_method} />
-			{#if data.foresporsel.nonce}<input type="hidden" name="nonce" value={data.foresporsel.nonce} />{/if}
+			<input type="hidden" name="code_challenge" value={data.request.code_challenge} />
+			<input type="hidden" name="code_challenge_method" value={data.request.code_challenge_method} />
+			{#if data.request.nonce}<input type="hidden" name="nonce" value={data.request.nonce} />{/if}
 			{#if data.launch.patientId}<input type="hidden" name="patient_id" value={data.launch.patientId} />{/if}
 			{#if data.launch.encounterId}<input type="hidden" name="encounter_id" value={data.launch.encounterId} />{/if}
 			<button type="submit" class="primar" disabled={data.scopes.length === 0}>Gi tilgang</button>
 		</form>
 		<form method="POST" action="?/avslaa" style="margin-top: 0.5rem">
-			<input type="hidden" name="client_id" value={data.foresporsel.client_id} />
-			<input type="hidden" name="redirect_uri" value={data.foresporsel.redirect_uri} />
-			<input type="hidden" name="state" value={data.foresporsel.state} />
+			<input type="hidden" name="client_id" value={data.request.client_id} />
+			<input type="hidden" name="redirect_uri" value={data.request.redirect_uri} />
+			<input type="hidden" name="state" value={data.request.state} />
 			<button type="submit">Avbryt</button>
 		</form>
 	</div>

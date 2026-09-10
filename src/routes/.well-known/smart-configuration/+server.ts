@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { config } from '$srv/config';
-import { fhirBaseFor, krevTenant, utstederFor } from '$srv/tenant/kontekst';
+import { fhirBaseFor, requireTenant, issuerFor } from '$srv/tenant/context';
 
 /**
  * SMART on FHIR discovery (`.well-known/smart-configuration`).
@@ -14,8 +14,8 @@ export const GET: RequestHandler = () => {
 	// Metadataene er per virksomhet: hver virksomhet har sin egen `issuer` og sitt
 	// eget FHIR-endepunkt, og en app som er godkjent hos én er ikke godkjent hos
 	// en annen.
-	const tenant = krevTenant();
-	const base = utstederFor(tenant);
+	const tenant = requireTenant();
+	const base = issuerFor(tenant);
 	return json(
 		{
 			issuer: base,

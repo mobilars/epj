@@ -12,7 +12,7 @@
 	Oppsettdokument: <a href={data.wellKnown} class="mono">/.well-known/smart-configuration</a>
 </div>
 
-{#if form?.feil}<div class="varsel varsel-feil" role="alert">{form.feil}</div>{/if}
+{#if form?.error}<div class="varsel varsel-feil" role="alert">{form.error}</div>{/if}
 {#if form?.clientId}
 	<div class="varsel varsel-ok" role="status">
 		Registrert. <span class="mono">client_id: {form.clientId}</span>
@@ -69,9 +69,9 @@
 {#each data.apper as a (a.clientId)}
 	<article class="kort">
 		<div class="rad-mellom">
-			<h3>{a.navn}</h3>
+			<h3>{a.name}</h3>
 			<span class="rad">
-				<span class="merke">{a.kategori}</span>
+				<span class="merke">{a.category}</span>
 				<span class="merke">{a.type}</span>
 				<span class="merke" class:merke-ok={a.status === 'aktiv'} class:merke-fare={a.status !== 'aktiv'}>{a.status}</span>
 			</span>
@@ -83,15 +83,15 @@
 			<p class="svak">Databehandleravtale: {a.databehandleravtale}</p>
 		{/if}
 		<p class="svak">
-			Registrert {a.opprettet} · {a.aktiveTokens} aktive tokens
-			{#if a.harNokler}· asymmetrisk klientautentisering{/if}
+			Registrert {a.created_at} · {a.aktiveTokens} aktive tokens
+			{#if a.hasKeys}· asymmetrisk klientautentisering{/if}
 		</p>
 		{#if a.redirectUris.length}
 			<p class="svak mono">{a.redirectUris.join(' ')}</p>
 		{/if}
 		<details>
 			<summary>Tillatte tilganger ({a.scopes.length})</summary>
-			<ul>{#each a.scopes as s (s.scope)}<li><span class="mono">{s.scope}</span> — {s.beskrivelse}</li>{/each}</ul>
+			<ul>{#each a.scopes as s (s.scope)}<li><span class="mono">{s.scope}</span> — {s.description}</li>{/each}</ul>
 		</details>
 		<div class="rad">
 			<form method="POST" action="?/status">
@@ -101,7 +101,7 @@
 					{a.status === 'aktiv' ? 'Sperr appen og trekk tilbake tokens' : 'Aktiver'}
 				</button>
 			</form>
-			{#if a.kategori !== 'backend'}
+			{#if a.category !== 'backend'}
 				<form method="POST" action="?/testlaunch" class="rad">
 					<input type="hidden" name="clientId" value={a.clientId} />
 					<input name="patientId" placeholder="Pasient-id" style="width:14rem" />

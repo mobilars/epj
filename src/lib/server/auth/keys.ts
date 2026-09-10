@@ -1,22 +1,22 @@
-import { en, exec, query, transaction } from '../db';
-import { krevTenant } from '../tenant/kontekst';
+import { one, exec, query, transaction } from '../db';
+import { requireTenant } from '../tenant/context';
 import { config } from '../config';
-import { dekrypter, krypter } from '../util/crypto';
-import { genererNokkelpar, type Jwk } from './jws';
+import { decrypt, encrypt } from '../util/crypto';
+import { generateNokkelpar, type Jwk } from './jws';
 
-export interface AktivNokkel {
+export interface ActiveKey {
 	kid: string;
 	privatePem: string;
 }
 
-interface NokkelRad {
+interface KeyRow {
 	kid: string;
 	alg: string;
 	public_jwk: Jwk;
 	private_enc: string;
-	opprettet: string;
-	aktiv: boolean;
-	utfases_etter: string | null;
+	created_at: string;
+	active: boolean;
+	phased_out_after: string | null;
 }
 
 /**
@@ -30,77 +30,77 @@ interface NokkelRad {
  * De holdes i minnet mellom kall for å slippe dekryptering per forespørsel.
  */
 
-const cachet = new Map<string, { nokkel: AktivNokkel; til: number }>();
-const jwksCache = new Map<string, { keys: Jwk[]; til: number }>();
+const cached = new Map<string, { key: ActiveKey; to: number }>();
+const jwksCache = new Map<string, { keys: Jwk[]; to: number }>();
 
-function forGammel(opprettet: string): boolean {
-	return Date.now() - new Date(opprettet).getTime() > config.oauth.signingKeyRotationDays * 24 * 3600 * 1000;
+function forOld(created_at: string): boolean {
+	return Date.now() - new Date(created_at).getTime() > config.oauth.signingKeyRotationDays * 24 * 3600 * 1000;
 }
 
-export async function aktivSigneringsnokkel(): Promise<AktivNokkel> {
-	const tenantId = krevTenant().id;
-	const fraCache = cachet.get(tenantId);
-	if (fraCache && Date.now() < fraCache.til) return fraCache.nokkel;
+export async function activeSigningKey(): Promise<ActiveKey> {
+	const tenantId = requireTenant().id;
+	const fromCache = cached.get(tenantId);
+	if (fromCache && Date.now() < fromCache.to) return fromCache.key;
 
-	const rad = await en<NokkelRad>(
-		'SELECT * FROM signing_key WHERE tenant_id = $1 AND aktiv = true ORDER BY opprettet DESC LIMIT 1',
+	const row = await one<KeyRow>(
+		'SELECT * FROM signing_key WHERE tenant_id = $1 AND active = true ORDER BY created_at DESC LIMIT 1',
 		[tenantId]
 	);
-	if (rad && !forGammel(rad.opprettet)) {
-		const nokkel = { kid: rad.kid, privatePem: dekrypter(rad.private_enc) };
-		cachet.set(tenantId, { nokkel, til: Date.now() + 300_000 });
-		return nokkel;
+	if (row && !forOld(row.created_at)) {
+		const key = { kid: row.kid, privatePem: decrypt(row.private_enc) };
+		cached.set(tenantId, { key, to: Date.now() + 300_000 });
+		return key;
 	}
-	return roterNokkel();
+	return rotateKey();
 }
 
-export async function roterNokkel(): Promise<AktivNokkel> {
-	const tenantId = krevTenant().id;
-	const { privatePkcs8, publicJwk, kid } = genererNokkelpar();
+export async function rotateKey(): Promise<ActiveKey> {
+	const tenantId = requireTenant().id;
+	const { privatePkcs8, publicJwk, kid } = generateNokkelpar();
 	await transaction(async () => {
 		await exec(
-			"UPDATE signing_key SET aktiv = false, utfases_etter = now() + ($1 || ' seconds')::interval WHERE tenant_id = $2 AND aktiv = true",
+			"UPDATE signing_key SET active = false, phased_out_after = now() + ($1 || ' seconds')::interval WHERE tenant_id = $2 AND active = true",
 			[String(config.oauth.accessTokenTtl * 2), tenantId]
 		);
-		await exec('INSERT INTO signing_key (kid, tenant_id, alg, public_jwk, private_enc, aktiv) VALUES ($1,$2,$3,$4,$5,true)', [
-			kid, tenantId, 'ES256', JSON.stringify(publicJwk), krypter(privatePkcs8)
+		await exec('INSERT INTO signing_key (kid, tenant_id, alg, public_jwk, private_enc, active) VALUES ($1,$2,$3,$4,$5,true)', [
+			kid, tenantId, 'ES256', JSON.stringify(publicJwk), encrypt(privatePkcs8)
 		]);
 	});
-	const nokkel = { kid, privatePem: privatePkcs8 };
-	cachet.set(tenantId, { nokkel, til: Date.now() + 300_000 });
+	const key = { kid, privatePem: privatePkcs8 };
+	cached.set(tenantId, { key, to: Date.now() + 300_000 });
 	jwksCache.delete(tenantId);
-	return nokkel;
+	return key;
 }
 
 /** Alle offentlige nøkler som fortsatt kan verifisere utstedte tokens. */
 export async function jwks(): Promise<{ keys: Jwk[] }> {
-	const tenantId = krevTenant().id;
-	const fraCache = jwksCache.get(tenantId);
-	if (fraCache && Date.now() < fraCache.til) return { keys: fraCache.keys };
+	const tenantId = requireTenant().id;
+	const fromCache = jwksCache.get(tenantId);
+	if (fromCache && Date.now() < fromCache.to) return { keys: fromCache.keys };
 
-	const rader = await query<NokkelRad>(
+	const rows = await query<KeyRow>(
 		`SELECT * FROM signing_key
-		 WHERE tenant_id = $1 AND (aktiv = true OR utfases_etter IS NULL OR utfases_etter > now())
-		 ORDER BY opprettet DESC`,
+		 WHERE tenant_id = $1 AND (active = true OR phased_out_after IS NULL OR phased_out_after > now())
+		 ORDER BY created_at DESC`,
 		[tenantId]
 	);
-	if (rader.length === 0) {
-		await aktivSigneringsnokkel();
+	if (rows.length === 0) {
+		await activeSigningKey();
 		return jwks();
 	}
-	const keys = rader.map((r) => r.public_jwk);
-	jwksCache.set(tenantId, { keys, til: Date.now() + 60_000 });
+	const keys = rows.map((r) => r.public_jwk);
+	jwksCache.set(tenantId, { keys, to: Date.now() + 60_000 });
 	return { keys };
 }
 
 /** Vedlikehold. Går bevisst på tvers av virksomheter: sletter bare utfasede nøkler. */
-export async function fjernUtdaterteNokler(): Promise<number> {
+export async function removeUtdaterteKeys(): Promise<number> {
 	jwksCache.clear();
-	return exec("DELETE FROM signing_key WHERE aktiv = false AND utfases_etter IS NOT NULL AND utfases_etter < now() - interval '1 day'");
+	return exec("DELETE FROM signing_key WHERE active = false AND phased_out_after IS NOT NULL AND phased_out_after < now() - interval '1 day'");
 }
 
 /** Brukes av testene. */
-export function tomNokkelCache(): void {
-	cachet.clear();
+export function emptyKeyCache(): void {
+	cached.clear();
 	jwksCache.clear();
 }

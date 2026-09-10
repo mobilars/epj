@@ -1,11 +1,11 @@
-import { en, exec, transaction } from '../db';
-import { fhirBaseFor, krevTenant } from '../tenant/kontekst';
+import { one, exec, transaction } from '../db';
+import { fhirBaseFor, requireTenant } from '../tenant/context';
 import { config } from '../config';
 import { tokenHash } from '../util/crypto';
-import { nyId, nyToken } from '../util/ids';
-import type { LaunchKontekst } from '../authz/context';
-import { pkceUtfordring, utstedTokens, type UtstedtToken } from './tokens';
-import { gyldigRedirectUri, type OAuthKlient } from './klienter';
+import { newId, newToken } from '../util/ids';
+import type { LaunchContext } from '../authz/context';
+import { pkceChallenge, issueTokens, type IssuedToken } from './tokens';
+import { validRedirectUri, type OAuthClient } from './clients';
 
 /**
  * Autorisasjonskodeflyt etter OAuth 2.1 og SMART App Launch 2.x.
@@ -14,7 +14,7 @@ import { gyldigRedirectUri, type OAuthKlient } from './klienter';
  * engangsbruk og kortlivet, og bindes til klient, redirect_uri og bruker.
  */
 
-export interface KodeInn {
+export interface CodeIn {
 	clientId: string;
 	userId: string;
 	redirectUri: string;
@@ -22,114 +22,114 @@ export interface KodeInn {
 	codeChallenge: string;
 	codeChallengeMethod: string;
 	nonce?: string | null;
-	launch: LaunchKontekst;
+	launch: LaunchContext;
 }
 
-export async function opprettAutorisasjonskode(inn: KodeInn): Promise<string> {
-	const kode = nyToken(32);
+export async function createAuthorisationCode(inValue: CodeIn): Promise<string> {
+	const code = newToken(32);
 	await exec(
 		`INSERT INTO oauth_authorization_code
-		 (code_hash, tenant_id, client_id, user_id, redirect_uri, scope, code_challenge, code_challenge_method, nonce, launch_context, utloper)
+		 (code_hash, tenant_id, client_id, user_id, redirect_uri, scope, code_challenge, code_challenge_method, nonce, launch_context, expires_at)
 		 VALUES ($1,$11,$2,$3,$4,$5,$6,$7,$8,$9, now() + ($10 || ' seconds')::interval)`,
 		[
-			tokenHash(kode), inn.clientId, inn.userId, inn.redirectUri, inn.scope,
-			inn.codeChallenge, inn.codeChallengeMethod, inn.nonce ?? null,
-			JSON.stringify(inn.launch), String(config.oauth.authorizationCodeTtl), krevTenant().id
+			tokenHash(code), inValue.clientId, inValue.userId, inValue.redirectUri, inValue.scope,
+			inValue.codeChallenge, inValue.codeChallengeMethod, inValue.nonce ?? null,
+			JSON.stringify(inValue.launch), String(config.oauth.authorizationCodeTtl), requireTenant().id
 		]
 	);
-	return kode;
+	return code;
 }
 
-export type KodeBytte =
-	| { ok: true; tokens: UtstedtToken }
-	| { ok: false; feil: string; beskrivelse: string };
+export type CodeExchange =
+	| { ok: true; tokens: IssuedToken }
+	| { ok: false; error: string; description: string };
 
-export async function bytteInnKode(
-	kode: string,
-	klient: OAuthKlient,
+export async function exchangeInCode(
+	code: string,
+	client: OAuthClient,
 	redirectUri: string,
 	codeVerifier: string | null
-): Promise<KodeBytte> {
+): Promise<CodeExchange> {
 	return transaction(async () => {
-		const rad = await en<{
+		const row = await one<{
 			code_hash: string; client_id: string; user_id: string; redirect_uri: string; scope: string;
 			code_challenge: string; code_challenge_method: string; nonce: string | null;
-			launch_context: LaunchKontekst; utloper: string; brukt: boolean;
+			launch_context: LaunchContext; expires_at: string; used: boolean;
 		}>('SELECT * FROM oauth_authorization_code WHERE code_hash = $1 AND tenant_id = $2 FOR UPDATE', [
-			tokenHash(kode), krevTenant().id
+			tokenHash(code), requireTenant().id
 		]);
 
-		if (!rad) return { ok: false as const, feil: 'invalid_grant', beskrivelse: 'Ukjent autorisasjonskode' };
-		if (rad.brukt) {
+		if (!row) return { ok: false as const, error: 'invalid_grant', description: 'Ukjent autorisasjonskode' };
+		if (row.used) {
 			// Gjenbruk av kode: trekk tilbake alt som er utstedt til klienten for brukeren.
 			await exec(
-				"UPDATE oauth_token SET tilbakekalt = true, tilbakekalt_grunn = 'gjenbruk av autorisasjonskode' WHERE client_id = $1 AND user_id = $2 AND tenant_id = $3",
-				[rad.client_id, rad.user_id, krevTenant().id]
+				"UPDATE oauth_token SET revoked = true, revoked_reason = 'gjenbruk av autorisasjonskode' WHERE client_id = $1 AND user_id = $2 AND tenant_id = $3",
+				[row.client_id, row.user_id, requireTenant().id]
 			);
-			return { ok: false as const, feil: 'invalid_grant', beskrivelse: 'Autorisasjonskoden er allerede brukt' };
+			return { ok: false as const, error: 'invalid_grant', description: 'Autorisasjonskoden er allerede brukt' };
 		}
-		if (new Date(rad.utloper).getTime() <= Date.now()) {
-			return { ok: false as const, feil: 'invalid_grant', beskrivelse: 'Autorisasjonskoden er utløpt' };
+		if (new Date(row.expires_at).getTime() <= Date.now()) {
+			return { ok: false as const, error: 'invalid_grant', description: 'Autorisasjonskoden er utløpt' };
 		}
-		if (rad.client_id !== klient.client_id) {
-			return { ok: false as const, feil: 'invalid_grant', beskrivelse: 'Koden tilhører en annen klient' };
+		if (row.client_id !== client.client_id) {
+			return { ok: false as const, error: 'invalid_grant', description: 'Koden tilhører en annen klient' };
 		}
-		if (rad.redirect_uri !== redirectUri) {
-			return { ok: false as const, feil: 'invalid_grant', beskrivelse: 'redirect_uri stemmer ikke med autorisasjonsforespørselen' };
+		if (row.redirect_uri !== redirectUri) {
+			return { ok: false as const, error: 'invalid_grant', description: 'redirect_uri stemmer ikke med autorisasjonsforespørselen' };
 		}
 		if (!codeVerifier) {
-			return { ok: false as const, feil: 'invalid_request', beskrivelse: 'code_verifier mangler' };
+			return { ok: false as const, error: 'invalid_request', description: 'code_verifier mangler' };
 		}
-		const forventet = rad.code_challenge_method === 'S256' ? pkceUtfordring(codeVerifier) : codeVerifier;
-		if (forventet !== rad.code_challenge) {
-			return { ok: false as const, feil: 'invalid_grant', beskrivelse: 'PKCE-verifisering feilet' };
+		const expected = row.code_challenge_method === 'S256' ? pkceChallenge(codeVerifier) : codeVerifier;
+		if (expected !== row.code_challenge) {
+			return { ok: false as const, error: 'invalid_grant', description: 'PKCE-verifisering feilet' };
 		}
 
-		await exec('UPDATE oauth_authorization_code SET brukt = true WHERE code_hash = $1 AND tenant_id = $2', [rad.code_hash, krevTenant().id]);
+		await exec('UPDATE oauth_authorization_code SET used = true WHERE code_hash = $1 AND tenant_id = $2', [row.code_hash, requireTenant().id]);
 
-		const scopes = rad.scope.split(/\s+/);
-		const tokens = await utstedTokens({
-			clientId: klient.client_id,
-			userId: rad.user_id,
-			scope: rad.scope,
-			launch: rad.launch_context ?? {},
-			medRefresh: scopes.includes('offline_access') || scopes.includes('online_access'),
-			nonce: rad.nonce
+		const scopes = row.scope.split(/\s+/);
+		const tokens = await issueTokens({
+			clientId: client.client_id,
+			userId: row.user_id,
+			scope: row.scope,
+			launch: row.launch_context ?? {},
+			withRefresh: scopes.includes('offline_access') || scopes.includes('online_access'),
+			nonce: row.nonce
 		});
 		return { ok: true as const, tokens };
 	});
 }
 
 /** EHR launch: journalen oppretter kontekst før SMART-appen åpnes. */
-export async function opprettLaunch(inn: {
+export async function createLaunch(inValue: {
 	clientId: string;
 	userId: string;
 	patientId?: string | null;
 	encounterId?: string | null;
 	intent?: string | null;
 }): Promise<string> {
-	const launchId = nyToken(24);
+	const launchId = newToken(24);
 	await exec(
-		`INSERT INTO smart_launch (launch_id, tenant_id, client_id, user_id, patient_id, encounter_id, intent, utloper)
+		`INSERT INTO smart_launch (launch_id, tenant_id, client_id, user_id, patient_id, encounter_id, intent, expires_at)
 		 VALUES ($1,$8,$2,$3,$4,$5,$6, now() + ($7 || ' seconds')::interval)`,
-		[launchId, inn.clientId, inn.userId, inn.patientId ?? null, inn.encounterId ?? null, inn.intent ?? null, String(config.oauth.launchTtl), krevTenant().id]
+		[launchId, inValue.clientId, inValue.userId, inValue.patientId ?? null, inValue.encounterId ?? null, inValue.intent ?? null, String(config.oauth.launchTtl), requireTenant().id]
 	);
 	return launchId;
 }
 
-export async function forbrukLaunch(launchId: string, clientId: string, userId: string): Promise<LaunchKontekst | null> {
-	const rad = await en<{ patient_id: string | null; encounter_id: string | null; intent: string | null; brukt: boolean; utloper: string; client_id: string; user_id: string }>(
-		'SELECT patient_id, encounter_id, intent, brukt, utloper, client_id, user_id FROM smart_launch WHERE launch_id = $1 AND tenant_id = $2',
-		[launchId, krevTenant().id]
+export async function consumeLaunch(launchId: string, clientId: string, userId: string): Promise<LaunchContext | null> {
+	const row = await one<{ patient_id: string | null; encounter_id: string | null; intent: string | null; used: boolean; expires_at: string; client_id: string; user_id: string }>(
+		'SELECT patient_id, encounter_id, intent, used, expires_at, client_id, user_id FROM smart_launch WHERE launch_id = $1 AND tenant_id = $2',
+		[launchId, requireTenant().id]
 	);
-	if (!rad || rad.brukt) return null;
-	if (rad.client_id !== clientId || rad.user_id !== userId) return null;
-	if (new Date(rad.utloper).getTime() <= Date.now()) return null;
-	await exec('UPDATE smart_launch SET brukt = true WHERE launch_id = $1 AND tenant_id = $2', [launchId, krevTenant().id]);
-	return { patientId: rad.patient_id, encounterId: rad.encounter_id, intent: rad.intent };
+	if (!row || row.used) return null;
+	if (row.client_id !== clientId || row.user_id !== userId) return null;
+	if (new Date(row.expires_at).getTime() <= Date.now()) return null;
+	await exec('UPDATE smart_launch SET used = true WHERE launch_id = $1 AND tenant_id = $2', [launchId, requireTenant().id]);
+	return { patientId: row.patient_id, encounterId: row.encounter_id, intent: row.intent };
 }
 
-export interface AutorisasjonsForesporsel {
+export interface AutorisasjonsRequest {
 	response_type: string;
 	client_id: string;
 	redirect_uri: string;
@@ -143,9 +143,9 @@ export interface AutorisasjonsForesporsel {
 	prompt?: string;
 }
 
-export type Validering =
-	| { ok: true; foresporsel: AutorisasjonsForesporsel; klient: OAuthKlient }
-	| { ok: false; feil: string; beskrivelse: string; kanOmdirigere: boolean; redirectUri?: string; state?: string };
+export type Validation =
+	| { ok: true; request: AutorisasjonsRequest; client: OAuthClient }
+	| { ok: false; error: string; description: string; canRedirect: boolean; redirectUri?: string; state?: string };
 
 /**
  * Validerer autorisasjonsforespørselen.
@@ -153,64 +153,64 @@ export type Validering =
  * Feil i `client_id`/`redirect_uri` skal aldri omdirigeres tilbake - da kunne en
  * angriper bruke journalen som åpen omdirigering.
  */
-export function validerAutorisasjonsforesporsel(
-	sok: URLSearchParams,
-	klient: OAuthKlient | null
-): Validering {
-	const f: AutorisasjonsForesporsel = {
-		response_type: sok.get('response_type') ?? '',
-		client_id: sok.get('client_id') ?? '',
-		redirect_uri: sok.get('redirect_uri') ?? '',
-		scope: sok.get('scope') ?? '',
-		state: sok.get('state') ?? '',
-		aud: sok.get('aud') ?? undefined,
-		launch: sok.get('launch') ?? undefined,
-		code_challenge: sok.get('code_challenge') ?? undefined,
-		code_challenge_method: sok.get('code_challenge_method') ?? undefined,
-		nonce: sok.get('nonce') ?? undefined,
-		prompt: sok.get('prompt') ?? undefined
+export function validateAuthorisationRequest(
+	search: URLSearchParams,
+	client: OAuthClient | null
+): Validation {
+	const f: AutorisasjonsRequest = {
+		response_type: search.get('response_type') ?? '',
+		client_id: search.get('client_id') ?? '',
+		redirect_uri: search.get('redirect_uri') ?? '',
+		scope: search.get('scope') ?? '',
+		state: search.get('state') ?? '',
+		aud: search.get('aud') ?? undefined,
+		launch: search.get('launch') ?? undefined,
+		code_challenge: search.get('code_challenge') ?? undefined,
+		code_challenge_method: search.get('code_challenge_method') ?? undefined,
+		nonce: search.get('nonce') ?? undefined,
+		prompt: search.get('prompt') ?? undefined
 	};
 
-	const avvis = (feil: string, beskrivelse: string, kanOmdirigere = true): Validering => ({
-		ok: false, feil, beskrivelse, kanOmdirigere,
-		redirectUri: kanOmdirigere ? f.redirect_uri : undefined,
+	const reject = (error: string, description: string, canRedirect = true): Validation => ({
+		ok: false, error, description, canRedirect,
+		redirectUri: canRedirect ? f.redirect_uri : undefined,
 		state: f.state
 	});
 
-	if (!klient) return avvis('unauthorized_client', 'Ukjent client_id', false);
-	if (klient.status !== 'aktiv') return avvis('unauthorized_client', 'Klienten er sperret', false);
-	if (!gyldigRedirectUri(klient, f.redirect_uri)) return avvis('invalid_request', 'redirect_uri er ikke registrert', false);
-	if (f.response_type !== 'code') return avvis('unsupported_response_type', 'Kun response_type=code støttes');
-	if (!f.state) return avvis('invalid_request', 'state er påkrevd');
-	if (!f.code_challenge) return avvis('invalid_request', 'PKCE (code_challenge) er påkrevd');
-	if ((f.code_challenge_method ?? 'plain') !== 'S256') return avvis('invalid_request', 'code_challenge_method må være S256');
-	if (!klient.grant_types.includes('authorization_code')) return avvis('unauthorized_client', 'Klienten kan ikke bruke authorization_code');
-	const fhirBase = fhirBaseFor(krevTenant());
+	if (!client) return reject('unauthorized_client', 'Ukjent client_id', false);
+	if (client.status !== 'aktiv') return reject('unauthorized_client', 'Klienten er sperret', false);
+	if (!validRedirectUri(client, f.redirect_uri)) return reject('invalid_request', 'redirect_uri er ikke registrert', false);
+	if (f.response_type !== 'code') return reject('unsupported_response_type', 'Kun response_type=code støttes');
+	if (!f.state) return reject('invalid_request', 'state er påkrevd');
+	if (!f.code_challenge) return reject('invalid_request', 'PKCE (code_challenge) er påkrevd');
+	if ((f.code_challenge_method ?? 'plain') !== 'S256') return reject('invalid_request', 'code_challenge_method må være S256');
+	if (!client.grant_types.includes('authorization_code')) return reject('unauthorized_client', 'Klienten kan ikke bruke authorization_code');
+	const fhirBase = fhirBaseFor(requireTenant());
 	if (f.aud && !f.aud.startsWith(fhirBase) && f.aud !== fhirBase) {
-		return avvis('invalid_request', `aud må være ${fhirBase}`);
+		return reject('invalid_request', `aud må være ${fhirBase}`);
 	}
 	if (f.scope.split(/\s+/).includes('launch') && !f.launch) {
-		return avvis('invalid_request', 'scope «launch» krever parameteren launch');
+		return reject('invalid_request', 'scope «launch» krever parameteren launch');
 	}
 
-	return { ok: true, foresporsel: f, klient };
+	return { ok: true, request: f, client };
 }
 
-export function feilOmdirigering(redirectUri: string, feil: string, beskrivelse: string, state?: string): string {
+export function errorRedirect(redirectUri: string, error: string, description: string, state?: string): string {
 	const url = new URL(redirectUri);
-	url.searchParams.set('error', feil);
-	url.searchParams.set('error_description', beskrivelse);
+	url.searchParams.set('error', error);
+	url.searchParams.set('error_description', description);
 	if (state) url.searchParams.set('state', state);
 	return url.toString();
 }
 
 /** Vedlikehold. Går bevisst på tvers av virksomheter: sletter bare utløpte rader. */
-export async function ryddUtlopteKoder(): Promise<number> {
-	const a = await exec("DELETE FROM oauth_authorization_code WHERE utloper < now() - interval '1 day'");
-	const b = await exec("DELETE FROM smart_launch WHERE utloper < now() - interval '1 day'");
+export async function purgeUtlopteCodes(): Promise<number> {
+	const a = await exec("DELETE FROM oauth_authorization_code WHERE expires_at < now() - interval '1 day'");
+	const b = await exec("DELETE FROM smart_launch WHERE expires_at < now() - interval '1 day'");
 	return a + b;
 }
 
-export function nyStateVerdi(): string {
-	return nyId();
+export function newStateValue(): string {
+	return newId();
 }

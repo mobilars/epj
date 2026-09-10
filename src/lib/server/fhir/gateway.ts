@@ -1,14 +1,14 @@
-import { fhirKlient } from './client';
+import { fhirClient } from './client';
 import { FhirError, issue } from './outcome';
-import { valider } from './validate';
-import { PASIENTKOMPARTMENT, SEARCH_PARAMS } from './searchparams';
+import { validate } from './validate';
+import { PATIENTCOMPARTMENT, SEARCH_PARAMS } from './searchparams';
 import type { Bundle, FhirResource } from './types';
 import { config } from '../config';
-import { fhirBaseFor, krevTenant, utstederFor } from '../tenant/kontekst';
+import { fhirBaseFor, requireTenant, issuerFor } from '../tenant/context';
 import type { AuthContext } from '../authz/context';
-import { erPasientnaer, pasientIdFraRessurs, sperredePasienter, tillattePasienter, vurder } from '../authz/tilgang';
-import type { Operasjon } from '../authz/scopes';
-import { aktorFraKontekst, logg } from '../audit';
+import { isPatientRelated, patientIdFromResource, blockedPatients, allowedPatients, evaluate } from '../authz/access';
+import type { Operation } from '../authz/scopes';
+import { actorFromContext, log } from '../audit';
 
 /**
  * Vokteren foran HAPI FHIR.
@@ -25,296 +25,296 @@ import { aktorFraKontekst, logg } from '../audit';
  * er det et brudd på nettverksdesignet, ikke en omgåelse av denne koden.
  */
 
-export interface GatewaySvar {
+export interface GatewayResponse {
 	status: number;
-	ressurs: FhirResource;
+	resource: FhirResource;
 	headers: Record<string, string>;
 }
 
-const METODE_TIL_OPERASJON: Record<string, Operasjon> = {
+const METHOD_TO_OPERATION: Record<string, Operation> = {
 	GET: 'r', HEAD: 'r', POST: 'c', PUT: 'u', PATCH: 'u', DELETE: 'd'
 };
 
 /** Søkeparametere som brukes til å avgrense på pasient per ressurstype. */
-function pasientParam(resourceType: string): string | null {
+function patientParam(resourceType: string): string | null {
 	if (resourceType === 'Patient') return '_id';
-	const kandidater = PASIENTKOMPARTMENT[resourceType] ?? [];
-	return kandidater.includes('patient') ? 'patient' : (kandidater[0] ?? null);
+	const candidates = PATIENTCOMPARTMENT[resourceType] ?? [];
+	return candidates.includes('patient') ? 'patient' : (candidates[0] ?? null);
 }
 
-export interface Forespørsel {
+export interface Request {
 	ctx: AuthContext;
-	metode: string;
+	method: string;
 	/** Sti under /fhir, f.eks. `Patient/123` eller `Observation/_search`. */
-	sti: string;
-	sok: URLSearchParams;
-	kropp?: unknown;
+	path: string;
+	search: URLSearchParams;
+	body?: unknown;
 	ifMatch?: string;
 	ifNoneExist?: string;
 }
 
-export async function utfor(f: Forespørsel): Promise<GatewaySvar> {
-	const deler = f.sti.split('/').filter(Boolean);
+export async function execute(f: Request): Promise<GatewayResponse> {
+	const parts = f.path.split('/').filter(Boolean);
 	const requestId = f.ctx.requestId;
 
-	if (deler.length === 0) {
-		if (f.metode === 'POST') return transaksjon(f);
-		throw FhirError.ugyldig('Tom FHIR-sti');
+	if (parts.length === 0) {
+		if (f.method === 'POST') return transaction(f);
+		throw FhirError.invalid('Tom FHIR-sti');
 	}
-	if (deler[0] === 'metadata') return metadata(f);
-	if (deler[0] === '_history') return systemhistorikk(f);
-	if (deler[0].startsWith('$')) throw FhirError.ikkeStottet(`Systemoperasjonen ${deler[0]} er ikke tilgjengelig`);
+	if (parts[0] === 'metadata') return metadata(f);
+	if (parts[0] === '_history') return systemhistorikk(f);
+	if (parts[0].startsWith('$')) throw FhirError.notStottet(`Systemoperasjonen ${parts[0]} er ikke tilgjengelig`);
 
-	const resourceType = deler[0];
+	const resourceType = parts[0];
 	if (!SEARCH_PARAMS[resourceType]) {
-		throw FhirError.ikkeStottet(`Ressurstypen ${resourceType} er ikke støttet`);
+		throw FhirError.notStottet(`Ressurstypen ${resourceType} er ikke støttet`);
 	}
 
 	// [type]/_search  og  [type]?...  -> søk
-	if ((deler.length === 2 && deler[1] === '_search') || deler.length === 1) {
-		if (f.metode === 'POST' && deler.length === 1) return opprettRessurs(f, resourceType);
-		if (f.metode === 'DELETE') throw FhirError.ikkeStottet('Betinget sletting er slått av');
-		return sokRessurser(f, resourceType);
+	if ((parts.length === 2 && parts[1] === '_search') || parts.length === 1) {
+		if (f.method === 'POST' && parts.length === 1) return createResource(f, resourceType);
+		if (f.method === 'DELETE') throw FhirError.notStottet('Betinget sletting er slått av');
+		return searchResources(f, resourceType);
 	}
 
-	if (deler.length >= 2 && deler[1].startsWith('$')) {
-		return typeOperasjon(f, resourceType, deler[1]);
+	if (parts.length >= 2 && parts[1].startsWith('$')) {
+		return typeOperation(f, resourceType, parts[1]);
 	}
 
-	const id = deler[1];
+	const id = parts[1];
 
-	if (deler.length === 2) {
-		switch (f.metode) {
-			case 'GET': return lesRessurs(f, resourceType, id);
-			case 'PUT': return oppdaterRessurs(f, resourceType, id);
-			case 'PATCH': return patchRessurs(f, resourceType, id);
-			case 'DELETE': return slettRessurs(f, resourceType, id);
-			default: throw FhirError.ikkeStottet(`${f.metode} er ikke støttet på ${resourceType}/${id}`);
+	if (parts.length === 2) {
+		switch (f.method) {
+			case 'GET': return readResource(f, resourceType, id);
+			case 'PUT': return updateResource(f, resourceType, id);
+			case 'PATCH': return patchResource(f, resourceType, id);
+			case 'DELETE': return deleteResource(f, resourceType, id);
+			default: throw FhirError.notStottet(`${f.method} er ikke støttet på ${resourceType}/${id}`);
 		}
 	}
 
-	if (deler.length === 3 && deler[2] === '_history') return ressurshistorikk(f, resourceType, id);
-	if (deler.length === 4 && deler[2] === '_history') return lesVersjon(f, resourceType, id, deler[3]);
-	if (deler.length === 3 && deler[2].startsWith('$')) return instansOperasjon(f, resourceType, id, deler[2]);
+	if (parts.length === 3 && parts[2] === '_history') return ressurshistorikk(f, resourceType, id);
+	if (parts.length === 4 && parts[2] === '_history') return readVersion(f, resourceType, id, parts[3]);
+	if (parts.length === 3 && parts[2].startsWith('$')) return instansOperation(f, resourceType, id, parts[2]);
 
-	throw FhirError.ugyldig(`Ukjent FHIR-sti: ${f.sti}`);
+	throw FhirError.invalid(`Ukjent FHIR-sti: ${f.path}`);
 }
 
 // ---------------------------------------------------------------------------
 // Enkeltressurser
 // ---------------------------------------------------------------------------
 
-async function lesRessurs(f: Forespørsel, resourceType: string, id: string): Promise<GatewaySvar> {
-	const ressurs = await fhirKlient.les(resourceType, id, { requestId: f.ctx.requestId });
-	const patientId = pasientIdFraRessurs(ressurs);
-	const beslutning = await vurder({ ctx: f.ctx, resourceType, operasjon: 'r', ressurs, patientId });
+async function readResource(f: Request, resourceType: string, id: string): Promise<GatewayResponse> {
+	const resource = await fhirClient.read(resourceType, id, { requestId: f.ctx.requestId });
+	const patientId = patientIdFromResource(resource);
+	const decision = await evaluate({ ctx: f.ctx, resourceType, operation: 'r', resource, patientId });
 
-	await logg(
+	await log(
 		{
-			type: 'rest', subtype: 'read', handling: 'R',
-			utfall: beslutning.tillatt ? '0' : '4',
-			utfallBeskrivelse: beslutning.grunn,
+			type: 'rest', subtype: 'read', action: 'R',
+			outcome: decision.allowed ? '0' : '4',
+			outcomeDescription: decision.reason,
 			patientId, entityRef: `${resourceType}/${id}`,
-			purposeOfUse: beslutning.purposeOfUse
+			purposeOfUse: decision.purposeOfUse
 		},
-		aktorFraKontekst(f.ctx)
+		actorFromContext(f.ctx)
 	);
-	if (!beslutning.tillatt) throw new FhirError(beslutning.status, [issue('error', 'forbidden', beslutning.grunn ?? 'Ingen tilgang')]);
+	if (!decision.allowed) throw new FhirError(decision.status, [issue('error', 'forbidden', decision.reason ?? 'Ingen tilgang')]);
 
 	return {
 		status: 200,
-		ressurs,
+		resource,
 		headers: {
-			etag: `W/"${ressurs.meta?.versionId ?? '1'}"`,
-			'last-modified': ressurs.meta?.lastUpdated ?? new Date().toISOString()
+			etag: `W/"${resource.meta?.versionId ?? '1'}"`,
+			'last-modified': resource.meta?.loadUpdated ?? new Date().toISOString()
 		}
 	};
 }
 
-async function lesVersjon(f: Forespørsel, resourceType: string, id: string, versionId: string): Promise<GatewaySvar> {
-	const ressurs = await fhirKlient.lesVersjon(resourceType, id, versionId, { requestId: f.ctx.requestId });
-	const patientId = pasientIdFraRessurs(ressurs);
-	const beslutning = await vurder({ ctx: f.ctx, resourceType, operasjon: 'r', ressurs, patientId });
-	await logg(
-		{ type: 'rest', subtype: 'vread', handling: 'R', utfall: beslutning.tillatt ? '0' : '4', patientId, entityRef: `${resourceType}/${id}/_history/${versionId}`, purposeOfUse: beslutning.purposeOfUse },
-		aktorFraKontekst(f.ctx)
+async function readVersion(f: Request, resourceType: string, id: string, versionId: string): Promise<GatewayResponse> {
+	const resource = await fhirClient.readVersion(resourceType, id, versionId, { requestId: f.ctx.requestId });
+	const patientId = patientIdFromResource(resource);
+	const decision = await evaluate({ ctx: f.ctx, resourceType, operation: 'r', resource, patientId });
+	await log(
+		{ type: 'rest', subtype: 'vread', action: 'R', outcome: decision.allowed ? '0' : '4', patientId, entityRef: `${resourceType}/${id}/_history/${versionId}`, purposeOfUse: decision.purposeOfUse },
+		actorFromContext(f.ctx)
 	);
-	if (!beslutning.tillatt) throw new FhirError(beslutning.status, [issue('error', 'forbidden', beslutning.grunn ?? 'Ingen tilgang')]);
-	return { status: 200, ressurs, headers: {} };
+	if (!decision.allowed) throw new FhirError(decision.status, [issue('error', 'forbidden', decision.reason ?? 'Ingen tilgang')]);
+	return { status: 200, resource, headers: {} };
 }
 
-async function opprettRessurs(f: Forespørsel, resourceType: string): Promise<GatewaySvar> {
-	const ressurs = kroppSomRessurs(f.kropp, resourceType);
-	const funn = valider(ressurs, resourceType).filter((i) => i.severity === 'error' || i.severity === 'fatal');
-	if (funn.length > 0) throw new FhirError(422, funn);
+async function createResource(f: Request, resourceType: string): Promise<GatewayResponse> {
+	const resource = bodySomResource(f.body, resourceType);
+	const findings = validate(resource, resourceType).filter((i) => i.severity === 'error' || i.severity === 'fatal');
+	if (findings.length > 0) throw new FhirError(422, findings);
 
-	const patientId = pasientIdFraRessurs(ressurs);
-	const beslutning = await vurder({ ctx: f.ctx, resourceType, operasjon: 'c', ressurs, patientId });
-	if (!beslutning.tillatt) {
-		await logg({ type: 'rest', subtype: 'create', handling: 'C', utfall: '4', utfallBeskrivelse: beslutning.grunn, patientId, entityRef: resourceType, purposeOfUse: beslutning.purposeOfUse }, aktorFraKontekst(f.ctx));
-		throw new FhirError(beslutning.status, [issue('error', 'forbidden', beslutning.grunn ?? 'Ingen tilgang')]);
+	const patientId = patientIdFromResource(resource);
+	const decision = await evaluate({ ctx: f.ctx, resourceType, operation: 'c', resource, patientId });
+	if (!decision.allowed) {
+		await log({ type: 'rest', subtype: 'create', action: 'C', outcome: '4', outcomeDescription: decision.reason, patientId, entityRef: resourceType, purposeOfUse: decision.purposeOfUse }, actorFromContext(f.ctx));
+		throw new FhirError(decision.status, [issue('error', 'forbidden', decision.reason ?? 'Ingen tilgang')]);
 	}
 
-	const svar = await fhirKlient.opprett(medProvenance(ressurs, f.ctx), {
+	const response = await fhirClient.create(withProvenance(resource, f.ctx), {
 		requestId: f.ctx.requestId,
 		ifNoneExist: f.ifNoneExist
 	});
-	await logg(
-		{ type: 'rest', subtype: 'create', handling: 'C', utfall: '0', patientId, entityRef: `${resourceType}/${svar.ressurs.id}`, purposeOfUse: beslutning.purposeOfUse },
-		aktorFraKontekst(f.ctx)
+	await log(
+		{ type: 'rest', subtype: 'create', action: 'C', outcome: '0', patientId, entityRef: `${resourceType}/${response.resource.id}`, purposeOfUse: decision.purposeOfUse },
+		actorFromContext(f.ctx)
 	);
 	return {
-		status: svar.status,
-		ressurs: svar.ressurs,
+		status: response.status,
+		resource: response.resource,
 		headers: {
-			location: `${fhirBaseFor(krevTenant())}/${resourceType}/${svar.ressurs.id}`,
-			...(svar.etag ? { etag: svar.etag } : {})
+			location: `${fhirBaseFor(requireTenant())}/${resourceType}/${response.resource.id}`,
+			...(response.etag ? { etag: response.etag } : {})
 		}
 	};
 }
 
-async function oppdaterRessurs(f: Forespørsel, resourceType: string, id: string): Promise<GatewaySvar> {
-	const ny = kroppSomRessurs(f.kropp, resourceType);
-	const funn = valider({ ...ny, id }, resourceType).filter((i) => i.severity === 'error' || i.severity === 'fatal');
-	if (funn.length > 0) throw new FhirError(422, funn);
+async function updateResource(f: Request, resourceType: string, id: string): Promise<GatewayResponse> {
+	const newValue = bodySomResource(f.body, resourceType);
+	const findings = validate({ ...newValue, id }, resourceType).filter((i) => i.severity === 'error' || i.severity === 'fatal');
+	if (findings.length > 0) throw new FhirError(422, findings);
 
 	// Tilgang må vurderes både mot den nye og den eksisterende versjonen: en
 	// bruker skal ikke kunne flytte en ressurs over på «sin» pasient.
-	const eksisterende = await fhirKlient.les(resourceType, id, { requestId: f.ctx.requestId }).catch(() => null);
-	for (const kandidat of [ny, eksisterende].filter(Boolean) as FhirResource[]) {
-		const beslutning = await vurder({ ctx: f.ctx, resourceType, operasjon: 'u', ressurs: kandidat, patientId: pasientIdFraRessurs(kandidat) });
-		if (!beslutning.tillatt) {
-			await logg({ type: 'rest', subtype: 'update', handling: 'U', utfall: '4', utfallBeskrivelse: beslutning.grunn, patientId: pasientIdFraRessurs(kandidat), entityRef: `${resourceType}/${id}`, purposeOfUse: beslutning.purposeOfUse }, aktorFraKontekst(f.ctx));
-			throw new FhirError(beslutning.status, [issue('error', 'forbidden', beslutning.grunn ?? 'Ingen tilgang')]);
+	const existing = await fhirClient.read(resourceType, id, { requestId: f.ctx.requestId }).catch(() => null);
+	for (const candidate of [newValue, existing].filter(Boolean) as FhirResource[]) {
+		const decision = await evaluate({ ctx: f.ctx, resourceType, operation: 'u', resource: candidate, patientId: patientIdFromResource(candidate) });
+		if (!decision.allowed) {
+			await log({ type: 'rest', subtype: 'update', action: 'U', outcome: '4', outcomeDescription: decision.reason, patientId: patientIdFromResource(candidate), entityRef: `${resourceType}/${id}`, purposeOfUse: decision.purposeOfUse }, actorFromContext(f.ctx));
+			throw new FhirError(decision.status, [issue('error', 'forbidden', decision.reason ?? 'Ingen tilgang')]);
 		}
 	}
 
-	const svar = await fhirKlient.oppdater(resourceType, id, medProvenance(ny, f.ctx), {
+	const response = await fhirClient.update(resourceType, id, withProvenance(newValue, f.ctx), {
 		requestId: f.ctx.requestId,
 		ifMatch: f.ifMatch
 	});
-	await logg(
-		{ type: 'rest', subtype: 'update', handling: 'U', utfall: '0', patientId: pasientIdFraRessurs(ny), entityRef: `${resourceType}/${id}`, purposeOfUse: 'TREAT' },
-		aktorFraKontekst(f.ctx)
+	await log(
+		{ type: 'rest', subtype: 'update', action: 'U', outcome: '0', patientId: patientIdFromResource(newValue), entityRef: `${resourceType}/${id}`, purposeOfUse: 'TREAT' },
+		actorFromContext(f.ctx)
 	);
-	return { status: svar.status, ressurs: svar.ressurs, headers: svar.etag ? { etag: svar.etag } : {} };
+	return { status: response.status, resource: response.resource, headers: response.etag ? { etag: response.etag } : {} };
 }
 
-async function patchRessurs(f: Forespørsel, resourceType: string, id: string): Promise<GatewaySvar> {
-	const eksisterende = await fhirKlient.les(resourceType, id, { requestId: f.ctx.requestId });
-	const beslutning = await vurder({ ctx: f.ctx, resourceType, operasjon: 'u', ressurs: eksisterende, patientId: pasientIdFraRessurs(eksisterende) });
-	if (!beslutning.tillatt) throw new FhirError(beslutning.status, [issue('error', 'forbidden', beslutning.grunn ?? 'Ingen tilgang')]);
-	if (!Array.isArray(f.kropp)) throw FhirError.ugyldig('PATCH krever en JSON Patch-array');
+async function patchResource(f: Request, resourceType: string, id: string): Promise<GatewayResponse> {
+	const existing = await fhirClient.read(resourceType, id, { requestId: f.ctx.requestId });
+	const decision = await evaluate({ ctx: f.ctx, resourceType, operation: 'u', resource: existing, patientId: patientIdFromResource(existing) });
+	if (!decision.allowed) throw new FhirError(decision.status, [issue('error', 'forbidden', decision.reason ?? 'Ingen tilgang')]);
+	if (!Array.isArray(f.body)) throw FhirError.invalid('PATCH krever en JSON Patch-array');
 
-	const svar = await fhirKlient.patch(resourceType, id, f.kropp as unknown[], { requestId: f.ctx.requestId, ifMatch: f.ifMatch });
-	await logg(
-		{ type: 'rest', subtype: 'patch', handling: 'U', utfall: '0', patientId: pasientIdFraRessurs(eksisterende), entityRef: `${resourceType}/${id}`, purposeOfUse: beslutning.purposeOfUse },
-		aktorFraKontekst(f.ctx)
+	const response = await fhirClient.patch(resourceType, id, f.body as unknown[], { requestId: f.ctx.requestId, ifMatch: f.ifMatch });
+	await log(
+		{ type: 'rest', subtype: 'patch', action: 'U', outcome: '0', patientId: patientIdFromResource(existing), entityRef: `${resourceType}/${id}`, purposeOfUse: decision.purposeOfUse },
+		actorFromContext(f.ctx)
 	);
-	return { status: svar.status, ressurs: svar.ressurs, headers: {} };
+	return { status: response.status, resource: response.resource, headers: {} };
 }
 
-async function slettRessurs(f: Forespørsel, resourceType: string, id: string): Promise<GatewaySvar> {
-	const eksisterende = await fhirKlient.les(resourceType, id, { requestId: f.ctx.requestId }).catch(() => null);
-	const patientId = eksisterende ? pasientIdFraRessurs(eksisterende) : null;
-	const beslutning = await vurder({ ctx: f.ctx, resourceType, operasjon: 'd', ressurs: eksisterende, patientId, ressursId: id });
-	if (!beslutning.tillatt) {
-		await logg({ type: 'rest', subtype: 'delete', handling: 'D', utfall: '4', utfallBeskrivelse: beslutning.grunn, patientId, entityRef: `${resourceType}/${id}` }, aktorFraKontekst(f.ctx));
-		throw new FhirError(beslutning.status, [issue('error', 'forbidden', beslutning.grunn ?? 'Ingen tilgang')]);
+async function deleteResource(f: Request, resourceType: string, id: string): Promise<GatewayResponse> {
+	const existing = await fhirClient.read(resourceType, id, { requestId: f.ctx.requestId }).catch(() => null);
+	const patientId = existing ? patientIdFromResource(existing) : null;
+	const decision = await evaluate({ ctx: f.ctx, resourceType, operation: 'd', resource: existing, patientId, resourceId: id });
+	if (!decision.allowed) {
+		await log({ type: 'rest', subtype: 'delete', action: 'D', outcome: '4', outcomeDescription: decision.reason, patientId, entityRef: `${resourceType}/${id}` }, actorFromContext(f.ctx));
+		throw new FhirError(decision.status, [issue('error', 'forbidden', decision.reason ?? 'Ingen tilgang')]);
 	}
 	// Journalinnhold skal ikke slettes uten vedtak; markering som feilført er
 	// hovedveien (`entered-in-error`). Sletting her fjerner ressursen fra søk,
 	// mens HAPI beholder versjonshistorikken.
-	const svar = await fhirKlient.slett(resourceType, id, { requestId: f.ctx.requestId });
-	await logg(
-		{ type: 'rest', subtype: 'delete', handling: 'D', utfall: '0', patientId, entityRef: `${resourceType}/${id}`, purposeOfUse: beslutning.purposeOfUse },
-		aktorFraKontekst(f.ctx)
+	const response = await fhirClient.deleteValue(resourceType, id, { requestId: f.ctx.requestId });
+	await log(
+		{ type: 'rest', subtype: 'delete', action: 'D', outcome: '0', patientId, entityRef: `${resourceType}/${id}`, purposeOfUse: decision.purposeOfUse },
+		actorFromContext(f.ctx)
 	);
-	return { status: svar.status === 204 ? 200 : svar.status, ressurs: svar.ressurs ?? { resourceType: 'OperationOutcome', issue: [issue('information', 'informational', 'Slettet')] }, headers: {} };
+	return { status: response.status === 204 ? 200 : response.status, resource: response.resource ?? { resourceType: 'OperationOutcome', issue: [issue('information', 'informational', 'Slettet')] }, headers: {} };
 }
 
 // ---------------------------------------------------------------------------
 // Søk
 // ---------------------------------------------------------------------------
 
-async function sokRessurser(f: Forespørsel, resourceType: string): Promise<GatewaySvar> {
-	const beslutning = await vurder({ ctx: f.ctx, resourceType, operasjon: 's' });
-	if (!beslutning.tillatt) {
-		await logg({ type: 'rest', subtype: 'search-type', handling: 'E', utfall: '4', utfallBeskrivelse: beslutning.grunn, entityRef: resourceType }, aktorFraKontekst(f.ctx));
-		throw new FhirError(beslutning.status, [issue('error', 'forbidden', beslutning.grunn ?? 'Ingen tilgang')]);
+async function searchResources(f: Request, resourceType: string): Promise<GatewayResponse> {
+	const decision = await evaluate({ ctx: f.ctx, resourceType, operation: 's' });
+	if (!decision.allowed) {
+		await log({ type: 'rest', subtype: 'search-type', action: 'E', outcome: '4', outcomeDescription: decision.reason, entityRef: resourceType }, actorFromContext(f.ctx));
+		throw new FhirError(decision.status, [issue('error', 'forbidden', decision.reason ?? 'Ingen tilgang')]);
 	}
 
-	const sok = new URLSearchParams(f.sok);
-	if (f.metode === 'POST' && f.kropp instanceof URLSearchParams) {
-		for (const [k, v] of f.kropp) sok.append(k, v);
+	const search = new URLSearchParams(f.search);
+	if (f.method === 'POST' && f.body instanceof URLSearchParams) {
+		for (const [k, v] of f.body) search.append(k, v);
 	}
 
 	// Tvinger inn scope-begrensninger, f.eks. `patient/Observation.rs?category=vital-signs`.
-	for (const begrensning of beslutning.begrensninger) {
-		for (const [k, v] of begrensning) sok.append(k, v);
+	for (const limitation of decision.limitations) {
+		for (const [k, v] of limitation) search.append(k, v);
 	}
 
 	// Avgrensning til pasienter brukeren faktisk har tjenstlig behov for.
-	const tillatte = await tillattePasienter(f.ctx);
-	const param = pasientParam(resourceType);
-	if (tillatte !== 'alle') {
+	const allowed = await allowedPatients(f.ctx);
+	const param = patientParam(resourceType);
+	if (allowed !== 'alle') {
 		// Uten et parameter å avgrense på ville spørringen gått ufiltrert til HAPI
 		// og returnert hele virksomhetens data for typen. `vurder` skal allerede ha
 		// avvist slike typer; dette er den andre låsen på samme dør.
-		if (!param && erPasientnaer(resourceType)) {
+		if (!param && isPatientRelated(resourceType)) {
 			throw new FhirError(403, [
 				issue('error', 'forbidden', `Søk i ${resourceType} kan ikke avgrenses til pasientene du har tjenstlig behov for`)
 			]);
 		}
 		if (param) {
-			if (tillatte.length === 0) {
-				return { status: 200, ressurs: tomBundle(), headers: {} };
+			if (allowed.length === 0) {
+				return { status: 200, resource: emptyBundle(), headers: {} };
 			}
-			sok.append(param, tillatte.map((id) => (param === '_id' ? id : `Patient/${id}`)).join(','));
+			search.append(param, allowed.map((id) => (param === '_id' ? id : `Patient/${id}`)).join(','));
 		}
 	}
 
-	const grense = Math.min(Number(sok.get('_count') ?? 50), 200);
-	sok.set('_count', String(grense));
+	const limit = Math.min(Number(search.get('_count') ?? 50), 200);
+	search.set('_count', String(limit));
 
-	const bundle = await fhirKlient.sok(resourceType, sok, { requestId: f.ctx.requestId });
+	const bundle = await fhirClient.search(resourceType, search, { requestId: f.ctx.requestId });
 
 	// Etterfilter for sperringer. Sperring kan endres mellom to kall, og HAPI
 	// kjenner ikke sperringsmodellen, så filteret gjøres her.
-	const sperret = await sperredePasienter(f.ctx);
-	const beholdt = (bundle.entry ?? []).filter((e) => {
+	const blocked = await blockedPatients(f.ctx);
+	const kept = (bundle.entry ?? []).filter((e) => {
 		if (!e.resource) return true;
-		const p = pasientIdFraRessurs(e.resource);
-		return !p || !sperret.has(p);
+		const p = patientIdFromResource(e.resource);
+		return !p || !blocked.has(p);
 	});
-	const fjernet = (bundle.entry ?? []).length - beholdt.length;
+	const removed = (bundle.entry ?? []).length - kept.length;
 
-	await logg(
+	await log(
 		{
-			type: 'rest', subtype: 'search-type', handling: 'E', utfall: '0',
-			entityRef: resourceType, purposeOfUse: beslutning.purposeOfUse,
-			detaljer: { antall: beholdt.length, filtrertBortSperret: fjernet, spørring: renseForLogg(sok) }
+			type: 'rest', subtype: 'search-type', action: 'E', outcome: '0',
+			entityRef: resourceType, purposeOfUse: decision.purposeOfUse,
+			details: { count: kept.length, filtrertBortSperret: removed, 'spørring': renseForLog(search) }
 		},
-		aktorFraKontekst(f.ctx)
+		actorFromContext(f.ctx)
 	);
 
 	return {
 		status: 200,
-		ressurs: { ...bundle, entry: beholdt, total: typeof bundle.total === 'number' ? bundle.total - fjernet : undefined } as FhirResource,
+		resource: { ...bundle, entry: kept, total: typeof bundle.total === 'number' ? bundle.total - removed : undefined } as FhirResource,
 		headers: {}
 	};
 }
 
 /** Fjerner identifikatorer fra spørringen før den lagres i loggen. */
-function renseForLogg(sok: URLSearchParams): string {
-	const kopi = new URLSearchParams(sok);
-	for (const nokkel of ['identifier', 'name', 'family', 'given', 'phone', 'email', 'telecom', 'address']) {
-		if (kopi.has(nokkel)) kopi.set(nokkel, '[maskert]');
+function renseForLog(search: URLSearchParams): string {
+	const kopi = new URLSearchParams(search);
+	for (const key of ['identifier', 'name', 'family', 'given', 'phone', 'email', 'telecom', 'address']) {
+		if (kopi.has(key)) kopi.set(key, '[maskert]');
 	}
 	return kopi.toString().slice(0, 500);
 }
 
-function tomBundle(): FhirResource {
+function emptyBundle(): FhirResource {
 	return { resourceType: 'Bundle', type: 'searchset', total: 0, entry: [] };
 }
 
@@ -322,104 +322,104 @@ function tomBundle(): FhirResource {
 // Historikk, operasjoner og transaksjoner
 // ---------------------------------------------------------------------------
 
-async function ressurshistorikk(f: Forespørsel, resourceType: string, id: string): Promise<GatewaySvar> {
-	const ressurs = await fhirKlient.les(resourceType, id, { requestId: f.ctx.requestId }).catch(() => null);
-	const patientId = ressurs ? pasientIdFraRessurs(ressurs) : null;
-	const beslutning = await vurder({ ctx: f.ctx, resourceType, operasjon: 'r', ressurs, patientId, ressursId: id });
-	if (!beslutning.tillatt) throw new FhirError(beslutning.status, [issue('error', 'forbidden', beslutning.grunn ?? 'Ingen tilgang')]);
-	const bundle = await fhirKlient.historikk(resourceType, id, f.sok, { requestId: f.ctx.requestId });
-	await logg({ type: 'rest', subtype: 'history-instance', handling: 'R', utfall: '0', patientId, entityRef: `${resourceType}/${id}`, purposeOfUse: beslutning.purposeOfUse }, aktorFraKontekst(f.ctx));
-	return { status: 200, ressurs: bundle as FhirResource, headers: {} };
+async function ressurshistorikk(f: Request, resourceType: string, id: string): Promise<GatewayResponse> {
+	const resource = await fhirClient.read(resourceType, id, { requestId: f.ctx.requestId }).catch(() => null);
+	const patientId = resource ? patientIdFromResource(resource) : null;
+	const decision = await evaluate({ ctx: f.ctx, resourceType, operation: 'r', resource, patientId, resourceId: id });
+	if (!decision.allowed) throw new FhirError(decision.status, [issue('error', 'forbidden', decision.reason ?? 'Ingen tilgang')]);
+	const bundle = await fhirClient.history(resourceType, id, f.search, { requestId: f.ctx.requestId });
+	await log({ type: 'rest', subtype: 'history-instance', action: 'R', outcome: '0', patientId, entityRef: `${resourceType}/${id}`, purposeOfUse: decision.purposeOfUse }, actorFromContext(f.ctx));
+	return { status: 200, resource: bundle as FhirResource, headers: {} };
 }
 
-async function systemhistorikk(f: Forespørsel): Promise<GatewaySvar> {
-	if (!f.ctx.rettigheter.has('admin:logg')) throw FhirError.ikkeTillatt('Systemhistorikk krever administratorrettigheter');
-	const bundle = await fhirKlient.operasjon(`_history?${f.sok}`, undefined, { requestId: f.ctx.requestId });
-	await logg({ type: 'rest', subtype: 'history-system', handling: 'R', utfall: '0' }, aktorFraKontekst(f.ctx));
-	return { status: 200, ressurs: bundle, headers: {} };
+async function systemhistorikk(f: Request): Promise<GatewayResponse> {
+	if (!f.ctx.permissions.has('admin:logg')) throw FhirError.notAllowed('Systemhistorikk krever administratorrettigheter');
+	const bundle = await fhirClient.operation(`_history?${f.search}`, undefined, { requestId: f.ctx.requestId });
+	await log({ type: 'rest', subtype: 'history-system', action: 'R', outcome: '0' }, actorFromContext(f.ctx));
+	return { status: 200, resource: bundle, headers: {} };
 }
 
-async function typeOperasjon(f: Forespørsel, resourceType: string, operasjon: string): Promise<GatewaySvar> {
-	if (operasjon === '$validate') {
-		const ressurs = kroppSomRessurs(f.kropp, resourceType);
-		const lokal = valider(ressurs, resourceType);
-		const fra = await fhirKlient.valider(ressurs, undefined, { requestId: f.ctx.requestId });
-		const samlet = [...lokal, ...((fra as { issue?: unknown[] }).issue ?? [])];
-		return { status: 200, ressurs: { resourceType: 'OperationOutcome', issue: samlet.length ? samlet : [issue('information', 'informational', 'Ingen feil funnet')] }, headers: {} };
+async function typeOperation(f: Request, resourceType: string, operation: string): Promise<GatewayResponse> {
+	if (operation === '$validate') {
+		const resource = bodySomResource(f.body, resourceType);
+		const lokal = validate(resource, resourceType);
+		const from = await fhirClient.validate(resource, undefined, { requestId: f.ctx.requestId });
+		const combined = [...lokal, ...((from as { issue?: unknown[] }).issue ?? [])];
+		return { status: 200, resource: { resourceType: 'OperationOutcome', issue: combined.length ? combined : [issue('information', 'informational', 'Ingen feil funnet')] }, headers: {} };
 	}
-	throw FhirError.ikkeStottet(`Operasjonen ${operasjon} på ${resourceType} er ikke tilgjengelig`);
+	throw FhirError.notStottet(`Operasjonen ${operation} på ${resourceType} er ikke tilgjengelig`);
 }
 
-async function instansOperasjon(f: Forespørsel, resourceType: string, id: string, operasjon: string): Promise<GatewaySvar> {
-	if (resourceType === 'Patient' && operasjon === '$everything') {
-		const beslutning = await vurder({ ctx: f.ctx, resourceType: 'Patient', operasjon: 'r', patientId: id, ressursId: id });
-		await logg(
-			{ type: 'rest', subtype: 'operation', handling: 'R', utfall: beslutning.tillatt ? '0' : '4', utfallBeskrivelse: beslutning.grunn, patientId: id, entityRef: `Patient/${id}/$everything`, purposeOfUse: beslutning.purposeOfUse },
-			aktorFraKontekst(f.ctx)
+async function instansOperation(f: Request, resourceType: string, id: string, operation: string): Promise<GatewayResponse> {
+	if (resourceType === 'Patient' && operation === '$everything') {
+		const decision = await evaluate({ ctx: f.ctx, resourceType: 'Patient', operation: 'r', patientId: id, resourceId: id });
+		await log(
+			{ type: 'rest', subtype: 'operation', action: 'R', outcome: decision.allowed ? '0' : '4', outcomeDescription: decision.reason, patientId: id, entityRef: `Patient/${id}/$everything`, purposeOfUse: decision.purposeOfUse },
+			actorFromContext(f.ctx)
 		);
-		if (!beslutning.tillatt) throw new FhirError(beslutning.status, [issue('error', 'forbidden', beslutning.grunn ?? 'Ingen tilgang')]);
-		const bundle = await fhirKlient.everything(id, f.sok, { requestId: f.ctx.requestId });
-		return { status: 200, ressurs: filtrerBundlePaScope(bundle, f.ctx), headers: {} };
+		if (!decision.allowed) throw new FhirError(decision.status, [issue('error', 'forbidden', decision.reason ?? 'Ingen tilgang')]);
+		const bundle = await fhirClient.everything(id, f.search, { requestId: f.ctx.requestId });
+		return { status: 200, resource: filterBundleOnScope(bundle, f.ctx), headers: {} };
 	}
-	throw FhirError.ikkeStottet(`Operasjonen ${operasjon} er ikke tilgjengelig`);
+	throw FhirError.notStottet(`Operasjonen ${operation} er ikke tilgjengelig`);
 }
 
 /** Fjerner ressurstyper appen ikke har lesescope for fra en samlebundle. */
-function filtrerBundlePaScope(bundle: Bundle, ctx: AuthContext): FhirResource {
-	const tillatt = (type: string) =>
-		ctx.scopes.kliniske.some((s) => (s.ressurs === '*' || s.ressurs === type) && (s.operasjoner.has('r') || s.operasjoner.has('s')));
-	const entry = (bundle.entry ?? []).filter((e) => !e.resource || tillatt(e.resource.resourceType));
+function filterBundleOnScope(bundle: Bundle, ctx: AuthContext): FhirResource {
+	const allowed = (type: string) =>
+		ctx.scopes.clinical.some((s) => (s.resource === '*' || s.resource === type) && (s.operations.has('r') || s.operations.has('s')));
+	const entry = (bundle.entry ?? []).filter((e) => !e.resource || allowed(e.resource.resourceType));
 	return { ...bundle, entry } as FhirResource;
 }
 
-async function transaksjon(f: Forespørsel): Promise<GatewaySvar> {
-	const bundle = f.kropp as Bundle;
-	if (!bundle || bundle.resourceType !== 'Bundle') throw FhirError.ugyldig('Forventet en Bundle');
+async function transaction(f: Request): Promise<GatewayResponse> {
+	const bundle = f.body as Bundle;
+	if (!bundle || bundle.resourceType !== 'Bundle') throw FhirError.invalid('Forventet en Bundle');
 	if (bundle.type !== 'transaction' && bundle.type !== 'batch') {
-		throw FhirError.ugyldig('Bundle.type må være «transaction» eller «batch»');
+		throw FhirError.invalid('Bundle.type må være «transaction» eller «batch»');
 	}
 
 	// Hver oppføring vurderes for seg. En transaksjon skal ikke kunne brukes til
 	// å omgå tilgangskontrollen ved å pakke inn kall brukeren ikke har lov til.
 	for (const entry of bundle.entry ?? []) {
-		const metode = entry.request?.method ?? 'POST';
+		const method = entry.request?.method ?? 'POST';
 		const url = entry.request?.url ?? '';
 		const resourceType = entry.resource?.resourceType ?? url.split('/')[0].split('?')[0];
-		if (!resourceType) throw FhirError.ugyldig('Oppføring i Bundle mangler ressurstype');
-		const operasjon = METODE_TIL_OPERASJON[metode] ?? 'r';
-		const beslutning = await vurder({
-			ctx: f.ctx, resourceType, operasjon,
-			ressurs: entry.resource ?? null,
-			patientId: entry.resource ? pasientIdFraRessurs(entry.resource) : null
+		if (!resourceType) throw FhirError.invalid('Oppføring i Bundle mangler ressurstype');
+		const operation = METHOD_TO_OPERATION[method] ?? 'r';
+		const decision = await evaluate({
+			ctx: f.ctx, resourceType, operation,
+			resource: entry.resource ?? null,
+			patientId: entry.resource ? patientIdFromResource(entry.resource) : null
 		});
-		if (!beslutning.tillatt) {
-			await logg({ type: 'rest', subtype: 'transaction', handling: 'E', utfall: '4', utfallBeskrivelse: beslutning.grunn, entityRef: `${metode} ${url}` }, aktorFraKontekst(f.ctx));
-			throw new FhirError(beslutning.status, [issue('error', 'forbidden', `${metode} ${url}: ${beslutning.grunn}`)]);
+		if (!decision.allowed) {
+			await log({ type: 'rest', subtype: 'transaction', action: 'E', outcome: '4', outcomeDescription: decision.reason, entityRef: `${method} ${url}` }, actorFromContext(f.ctx));
+			throw new FhirError(decision.status, [issue('error', 'forbidden', `${method} ${url}: ${decision.reason}`)]);
 		}
 	}
 
 	const merket: Bundle = {
 		...bundle,
-		entry: (bundle.entry ?? []).map((e) => (e.resource ? { ...e, resource: medProvenance(e.resource, f.ctx) } : e))
+		entry: (bundle.entry ?? []).map((e) => (e.resource ? { ...e, resource: withProvenance(e.resource, f.ctx) } : e))
 	};
-	const svar = await fhirKlient.transaksjon(merket, { requestId: f.ctx.requestId });
-	await logg(
-		{ type: 'rest', subtype: 'transaction', handling: 'E', utfall: '0', detaljer: { oppføringer: (bundle.entry ?? []).length } },
-		aktorFraKontekst(f.ctx)
+	const response = await fhirClient.transaction(merket, { requestId: f.ctx.requestId });
+	await log(
+		{ type: 'rest', subtype: 'transaction', action: 'E', outcome: '0', details: { entries: (bundle.entry ?? []).length } },
+		actorFromContext(f.ctx)
 	);
-	return { status: 200, ressurs: svar as FhirResource, headers: {} };
+	return { status: 200, resource: response as FhirResource, headers: {} };
 }
 
-async function metadata(f: Forespørsel): Promise<GatewaySvar> {
-	const fra = await fhirKlient.capabilityStatement({ requestId: f.ctx.requestId });
-	return { status: 200, ressurs: berikCapabilityStatement(fra), headers: {} };
+async function metadata(f: Request): Promise<GatewayResponse> {
+	const from = await fhirClient.capabilityStatement({ requestId: f.ctx.requestId });
+	return { status: 200, resource: enrichCapabilityStatement(from), headers: {} };
 }
 
 /** Legger SMART on FHIR-utvidelsen på HAPI sin CapabilityStatement. */
-export function berikCapabilityStatement(fra: FhirResource): FhirResource {
-	const tenant = krevTenant();
-	const base = utstederFor(tenant);
-	const rest = Array.isArray(fra.rest) ? [...(fra.rest as Record<string, unknown>[])] : [{ mode: 'server' }];
+export function enrichCapabilityStatement(from: FhirResource): FhirResource {
+	const tenant = requireTenant();
+	const base = issuerFor(tenant);
+	const rest = Array.isArray(from.rest) ? [...(from.rest as Record<string, unknown>[])] : [{ mode: 'server' }];
 	rest[0] = {
 		...rest[0],
 		security: {
@@ -441,9 +441,9 @@ export function berikCapabilityStatement(fra: FhirResource): FhirResource {
 		}
 	};
 	return {
-		...fra,
-		publisher: tenant.navn,
-		implementation: { description: `EPJ for fastleger - ${tenant.navn}`, url: fhirBaseFor(tenant) },
+		...from,
+		publisher: tenant.name,
+		implementation: { description: `EPJ for fastleger - ${tenant.name}`, url: fhirBaseFor(tenant) },
 		rest
 	};
 }
@@ -452,13 +452,13 @@ export function berikCapabilityStatement(fra: FhirResource): FhirResource {
 // Hjelpefunksjoner
 // ---------------------------------------------------------------------------
 
-function kroppSomRessurs(kropp: unknown, forventetType: string): FhirResource {
-	if (typeof kropp !== 'object' || kropp === null || Array.isArray(kropp)) {
-		throw FhirError.ugyldig('Forventet en FHIR-ressurs som JSON');
+function bodySomResource(body: unknown, expectedType: string): FhirResource {
+	if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+		throw FhirError.invalid('Forventet en FHIR-ressurs som JSON');
 	}
-	const r = kropp as FhirResource;
-	if (r.resourceType !== forventetType) {
-		throw FhirError.ugyldig(`Forventet ${forventetType}, fikk ${r.resourceType ?? 'ukjent'}`);
+	const r = body as FhirResource;
+	if (r.resourceType !== expectedType) {
+		throw FhirError.invalid(`Forventet ${expectedType}, fikk ${r.resourceType ?? 'ukjent'}`);
 	}
 	return r;
 }
@@ -468,16 +468,16 @@ function kroppSomRessurs(kropp: unknown, forventetType: string): FhirResource {
  * denne taggen gjør at forfatteren også er synlig i selve ressursen, slik
  * EPJ-standarden krever for signering og kontrasignering.
  */
-function medProvenance(ressurs: FhirResource, ctx: AuthContext): FhirResource {
-	const kilde = ctx.clientId ? `${ctx.actorRef} via ${ctx.clientId}` : ctx.actorRef;
+function withProvenance(resource: FhirResource, ctx: AuthContext): FhirResource {
+	const source = ctx.clientId ? `${ctx.actorRef} via ${ctx.clientId}` : ctx.actorRef;
 	return {
-		...ressurs,
+		...resource,
 		meta: {
-			...(ressurs.meta ?? {}),
-			source: `urn:epj:${kilde}`,
+			...(resource.meta ?? {}),
+			source: `urn:epj:${source}`,
 			tag: [
-				...(ressurs.meta?.tag ?? []).filter((t) => t.system !== 'urn:epj:forfatter'),
-				{ system: 'urn:epj:forfatter', code: ctx.actorRef, display: ctx.navn }
+				...(resource.meta?.tag ?? []).filter((t) => t.system !== 'urn:epj:forfatter'),
+				{ system: 'urn:epj:forfatter', code: ctx.actorRef, display: ctx.name }
 			]
 		}
 	};

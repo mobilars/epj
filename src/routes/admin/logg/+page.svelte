@@ -1,15 +1,15 @@
 <script lang="ts">
 	let { data } = $props();
-	const utfallTekst: Record<string, string> = { '0': 'OK', '4': 'Avvist', '8': 'Feil', '12': 'Alvorlig feil' };
+	const outcomeText: Record<string, string> = { '0': 'OK', '4': 'Avvist', '8': 'Feil', '12': 'Alvorlig feil' };
 </script>
 
 <h2>Sikkerhetslogg</h2>
 
-{#if data.kjede.gyldig}
-	<div class="varsel varsel-ok">Hash-kjeden er ubrutt ({data.kjede.kontrollerte} innslag kontrollert).</div>
+{#if data.chain.valid}
+	<div class="varsel varsel-ok">Hash-kjeden er ubrutt ({data.chain.checked} innslag kontrollert).</div>
 {:else}
 	<div class="varsel varsel-feil" role="alert">
-		Brudd i hash-kjeden fra og med innslag {data.kjede.forsteBrudd?.seq}. Loggen kan ha blitt endret.
+		Brudd i hash-kjeden fra og med innslag {data.chain.firstBrudd?.seq}. Loggen kan ha blitt endret.
 	</div>
 {/if}
 
@@ -27,7 +27,7 @@
 			</select>
 		</div>
 		<label style="flex:0 0 auto; align-self:flex-end; font-weight:400">
-			<input type="checkbox" name="nodrett" value="1" checked={data.filter.kunNodrett} style="width:auto" /> Bare nødrett
+			<input type="checkbox" name="nodrett" value="1" checked={data.filter.onlyEmergencyAccess} style="width:auto" /> Bare nødrett
 		</label>
 		<button type="submit" class="primar" style="align-self:flex-end">Filtrer</button>
 	</div>
@@ -39,16 +39,16 @@
 			<tr><th>#</th><th>Tidspunkt</th><th>Hvem</th><th>Hendelse</th><th>Pasient</th><th>Ressurs</th><th>Formål</th><th>Utfall</th></tr>
 		</thead>
 		<tbody>
-			{#each data.rader as r (r.seq)}
+			{#each data.rows as r (r.seq)}
 				<tr>
 					<td class="mono svak">{r.seq}</td>
-					<td class="svak">{r.tidspunkt}</td>
-					<td>{r.hvem}<br /><span class="svak">{r.rolle}{#if r.app} · {r.app}{/if}</span></td>
+					<td class="svak">{r.timestamp}</td>
+					<td>{r.hvem}<br /><span class="svak">{r.role}{#if r.app} · {r.app}{/if}</span></td>
 					<td>{r.type}<br /><span class="svak">{r.subtype}</span></td>
-					<td>{#if r.pasient}<a href="/pasienter/{r.pasient}/logg">{r.pasient.slice(0, 8)}…</a>{/if}</td>
-					<td class="mono svak">{r.ressurs}</td>
+					<td>{#if r.patient}<a href="/pasienter/{r.patient}/logg">{r.patient.slice(0, 8)}…</a>{/if}</td>
+					<td class="mono svak">{r.resource}</td>
 					<td>{#if r.formal === 'ETREAT'}<span class="merke merke-fare">Nødrett</span>{:else}{r.formal}{/if}</td>
-					<td><span class="merke" class:merke-ok={r.utfall === '0'} class:merke-advarsel={r.utfall === '4'} class:merke-fare={r.utfall === '8'}>{utfallTekst[r.utfall] ?? r.utfall}</span></td>
+					<td><span class="merke" class:merke-ok={r.outcome === '0'} class:merke-advarsel={r.outcome === '4'} class:merke-fare={r.outcome === '8'}>{outcomeText[r.outcome] ?? r.outcome}</span></td>
 				</tr>
 			{/each}
 		</tbody>
@@ -56,7 +56,7 @@
 </div>
 
 <div class="rad">
-	{#if data.side > 0}<a class="knapp liten" href="?side={data.side - 1}">Forrige</a>{/if}
-	<span class="svak">{data.side * 100 + 1}–{data.side * 100 + data.rader.length} av {data.total}</span>
-	{#if (data.side + 1) * 100 < data.total}<a class="knapp liten" href="?side={data.side + 1}">Neste</a>{/if}
+	{#if data.page > 0}<a class="knapp liten" href="?side={data.page - 1}">Forrige</a>{/if}
+	<span class="svak">{data.page * 100 + 1}–{data.page * 100 + data.rows.length} av {data.total}</span>
+	{#if (data.page + 1) * 100 < data.total}<a class="knapp liten" href="?side={data.page + 1}">Neste</a>{/if}
 </div>

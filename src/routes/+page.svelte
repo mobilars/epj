@@ -8,14 +8,14 @@
 
 <h1>Arbeidsflate</h1>
 
-{#if data.nodrett.length}
+{#if data.emergencyAccess.length}
 	<div class="varsel varsel-feil" role="alert">
 		<strong>Aktiv nødrettstilgang</strong>
 		<ul>
-			{#each data.nodrett as n (n.patientId)}
+			{#each data.emergencyAccess as n (n.patientId)}
 				<li>
-					<a href="/pasienter/{n.patientId}">Pasient {n.patientId}</a> - utløper {klokke(n.utloper)}.
-					Begrunnelse: {n.begrunnelse}
+					<a href="/pasienter/{n.patientId}">Pasient {n.patientId}</a> - utløper {klokke(n.expires_at)}.
+					Begrunnelse: {n.justification}
 				</li>
 			{/each}
 		</ul>
@@ -23,9 +23,9 @@
 	</div>
 {/if}
 
-{#if data.uteKvittering > 0}
+{#if data.outsideReceipt > 0}
 	<div class="varsel varsel-advarsel">
-		{data.uteKvittering} sendte meldinger mangler applikasjonskvittering.
+		{data.outsideReceipt} sendte meldinger mangler applikasjonskvittering.
 		<a href="/meldinger?filter=uten-kvittering">Se hvilke</a>
 	</div>
 {/if}
@@ -33,19 +33,19 @@
 <div class="rutenett">
 	<section class="kort">
 		<h2>Timeboken</h2>
-		{#if data.timer.length === 0}
+		{#if data.appointments.length === 0}
 			<p class="svak">Ingen kommende timer.</p>
 		{:else}
 			<ul class="tidslinje">
-				{#each data.timer as t (t.id)}
+				{#each data.appointments as t (t.id)}
 					<li>
 						<strong>{klokke(t.start)}</strong>
-						{#if t.pasient}
-							· <a href="/pasienter/{t.pasient.id}">{t.pasient.navn}</a>
-							<span class="svak">({t.pasient.alder} år)</span>
+						{#if t.patient}
+							· <a href="/pasienter/{t.patient.id}">{t.patient.name}</a>
+							<span class="svak">({t.patient.age} år)</span>
 						{/if}
 						<span class="merke">{t.status}</span>
-						{#if t.beskrivelse}<br /><span class="svak">{t.beskrivelse}</span>{/if}
+						{#if t.description}<br /><span class="svak">{t.description}</span>{/if}
 					</li>
 				{/each}
 			</ul>
@@ -54,14 +54,14 @@
 
 	<section class="kort">
 		<h2>Nye meldinger</h2>
-		{#if data.meldinger.length === 0}
+		{#if data.messages.length === 0}
 			<p class="svak">Ingen ubehandlede meldinger.</p>
 		{:else}
 			<ul class="tidslinje">
-				{#each data.meldinger as m (m.id)}
+				{#each data.messages as m (m.id)}
 					<li>
-						<a href="/meldinger/{m.id}">{m.type}</a> fra {m.avsender}<br />
-						<span class="svak">{klokke(m.opprettet)}</span>
+						<a href="/meldinger/{m.id}">{m.type}</a> fra {m.sender}<br />
+						<span class="svak">{klokke(m.created_at)}</span>
 					</li>
 				{/each}
 			</ul>
@@ -72,8 +72,8 @@
 	<section class="kort">
 		<h2>Oppgjør</h2>
 		<p>
-			<strong class="tall">{data.oppgjor.antallKlare}</strong> regningskort er klare for innsending.<br />
-			Samlet refusjon: <strong class="tall">{kroner(data.oppgjor.sumRefusjonOre)}</strong>
+			<strong class="tall">{data.settlement.countKlare}</strong> regningskort er klare for innsending.<br />
+			Samlet refusjon: <strong class="tall">{kroner(data.settlement.sumReimbursementOre)}</strong>
 		</p>
 		<a class="knapp liten" href="/oppgjor">Gå til oppgjør</a>
 	</section>

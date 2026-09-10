@@ -4,7 +4,7 @@ export interface FhirResource {
 	id?: string;
 	meta?: {
 		versionId?: string;
-		lastUpdated?: string;
+		loadUpdated?: string;
 		profile?: string[];
 		security?: Coding[];
 		tag?: Coding[];
@@ -45,7 +45,7 @@ export interface BundleEntry {
 	resource?: FhirResource;
 	search?: { mode?: 'match' | 'include' | 'outcome'; score?: number };
 	request?: { method: string; url: string; ifNoneExist?: string; ifMatch?: string };
-	response?: { status: string; location?: string; etag?: string; lastModified?: string; outcome?: FhirResource };
+	response?: { status: string; location?: string; etag?: string; loadModified?: string; outcome?: FhirResource };
 }
 
 export interface Bundle extends FhirResource {

@@ -11,9 +11,9 @@ CREATE SCHEMA IF NOT EXISTS epj;
 SET search_path TO epj, public;
 
 CREATE TABLE IF NOT EXISTS schema_migration (
-  versjon   INTEGER PRIMARY KEY,
-  navn      TEXT NOT NULL,
-  anvendt   TIMESTAMPTZ NOT NULL DEFAULT now()
+  version   INTEGER PRIMARY KEY,
+  name      TEXT NOT NULL,
+  applied_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ---------------------------------------------------------------------------
@@ -31,8 +31,8 @@ CREATE TABLE IF NOT EXISTS audit_event (
   outcome_desc   TEXT,
   actor_user_id  TEXT,
   actor_ref      TEXT,
-  actor_navn     TEXT,
-  actor_rolle    TEXT,
+  actor_name     TEXT,
+  actor_role    TEXT,
   client_id      TEXT,
   source_ip      TEXT,
   patient_id     TEXT,
@@ -66,33 +66,33 @@ CREATE TRIGGER trg_audit_append_only
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS user_account (
   id                TEXT PRIMARY KEY,
-  brukernavn        TEXT NOT NULL UNIQUE,
-  navn              TEXT NOT NULL,
-  epost             TEXT,
-  hpr_nummer        TEXT,
+  username        TEXT NOT NULL UNIQUE,
+  name              TEXT NOT NULL,
+  email             TEXT,
+  hpr_number        TEXT,
   practitioner_id   TEXT,
-  passord_hash      TEXT,
+  password_hash      TEXT,
   totp_secret_enc   TEXT,
   mfa_aktivert      BOOLEAN NOT NULL DEFAULT false,
   helseid_sub       TEXT UNIQUE,
   status            TEXT NOT NULL DEFAULT 'aktiv',
-  ma_bytte_passord  BOOLEAN NOT NULL DEFAULT false,
-  feilede_forsok    INTEGER NOT NULL DEFAULT 0,
-  laast_til         TIMESTAMPTZ,
-  siste_innlogging  TIMESTAMPTZ,
-  opprettet         TIMESTAMPTZ NOT NULL DEFAULT now(),
-  oppdatert         TIMESTAMPTZ NOT NULL DEFAULT now()
+  must_change_password  BOOLEAN NOT NULL DEFAULT false,
+  failed_attempts    INTEGER NOT NULL DEFAULT 0,
+  locked_until         TIMESTAMPTZ,
+  last_login  TIMESTAMPTZ,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_user_practitioner ON user_account (practitioner_id);
 
 CREATE TABLE IF NOT EXISTS role_assignment (
   id           TEXT PRIMARY KEY,
   user_id      TEXT NOT NULL REFERENCES user_account(id) ON DELETE CASCADE,
-  rolle        TEXT NOT NULL,
-  gyldig_fra   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  gyldig_til   TIMESTAMPTZ,
-  tildelt_av   TEXT,
-  begrunnelse  TEXT
+  role        TEXT NOT NULL,
+  valid_from   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  valid_until   TIMESTAMPTZ,
+  assigned_by   TEXT,
+  justification  TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_role_user ON role_assignment (user_id);
 
@@ -101,10 +101,10 @@ CREATE TABLE IF NOT EXISTS care_relationship (
   id            TEXT PRIMARY KEY,
   user_id       TEXT NOT NULL REFERENCES user_account(id) ON DELETE CASCADE,
   patient_id    TEXT NOT NULL,
-  grunnlag      TEXT NOT NULL,
-  gyldig_fra    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  gyldig_til    TIMESTAMPTZ,
-  opprettet_av  TEXT
+  basis      TEXT NOT NULL,
+  valid_from    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  valid_until    TIMESTAMPTZ,
+  created_by  TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_care_user_patient ON care_relationship (user_id, patient_id);
 CREATE INDEX IF NOT EXISTS idx_care_patient ON care_relationship (patient_id);
@@ -114,53 +114,53 @@ CREATE TABLE IF NOT EXISTS break_glass (
   id              TEXT PRIMARY KEY,
   user_id         TEXT NOT NULL REFERENCES user_account(id) ON DELETE CASCADE,
   patient_id      TEXT NOT NULL,
-  begrunnelse     TEXT NOT NULL,
-  startet         TIMESTAMPTZ NOT NULL DEFAULT now(),
-  utloper         TIMESTAMPTZ NOT NULL,
-  varslet         BOOLEAN NOT NULL DEFAULT false,
-  gjennomgatt_av  TEXT,
-  gjennomgatt_tid TIMESTAMPTZ
+  justification     TEXT NOT NULL,
+  started_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at         TIMESTAMPTZ NOT NULL,
+  notified         BOOLEAN NOT NULL DEFAULT false,
+  reviewed_by  TEXT,
+  reviewed_at TIMESTAMPTZ
 );
-CREATE INDEX IF NOT EXISTS idx_bg_aktiv ON break_glass (user_id, patient_id, utloper DESC);
+CREATE INDEX IF NOT EXISTS idx_bg_active ON break_glass (user_id, patient_id, expires_at DESC);
 
 -- Sperring av journal. Speiles som FHIR Consent, men håndheves herfra.
-CREATE TABLE IF NOT EXISTS journal_sperring (
+CREATE TABLE IF NOT EXISTS record_restriction (
   id             TEXT PRIMARY KEY,
   patient_id     TEXT NOT NULL,
-  omfang         TEXT NOT NULL,
-  mal_user_id    TEXT,
-  mal_rolle      TEXT,
-  mal_ressurs    TEXT,
-  begrunnelse    TEXT,
+  scope_extent         TEXT NOT NULL,
+  target_user_id    TEXT,
+  target_role      TEXT,
+  target_resource    TEXT,
+  justification    TEXT,
   consent_id     TEXT,
-  registrert     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  registrert_av  TEXT NOT NULL,
-  gyldig_til     TIMESTAMPTZ,
-  opphevet       BOOLEAN NOT NULL DEFAULT false
+  registered_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  registered_by  TEXT NOT NULL,
+  valid_until     TIMESTAMPTZ,
+  lifted       BOOLEAN NOT NULL DEFAULT false
 );
-CREATE INDEX IF NOT EXISTS idx_sperring_patient ON journal_sperring (patient_id) WHERE opphevet = false;
+CREATE INDEX IF NOT EXISTS idx_restriction_patient ON record_restriction (patient_id) WHERE lifted = false;
 
 -- ---------------------------------------------------------------------------
 -- OAuth 2.1 / SMART on FHIR
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS oauth_client (
   client_id           TEXT PRIMARY KEY,
-  navn                TEXT NOT NULL,
+  name                TEXT NOT NULL,
   type                TEXT NOT NULL,
-  klient_kategori     TEXT NOT NULL,
+  client_category     TEXT NOT NULL,
   secret_hash         TEXT,
   jwks                JSONB,
   jwks_uri            TEXT,
   redirect_uris       JSONB NOT NULL DEFAULT '[]'::jsonb,
-  tillatte_scopes     JSONB NOT NULL DEFAULT '[]'::jsonb,
+  allowed_scopes     JSONB NOT NULL DEFAULT '[]'::jsonb,
   grant_types         JSONB NOT NULL DEFAULT '["authorization_code"]'::jsonb,
-  krev_pkce           BOOLEAN NOT NULL DEFAULT true,
-  krev_samtykke       BOOLEAN NOT NULL DEFAULT true,
+  require_pkce           BOOLEAN NOT NULL DEFAULT true,
+  require_consent       BOOLEAN NOT NULL DEFAULT true,
   logo_url            TEXT,
   databehandleravtale TEXT,
   status              TEXT NOT NULL DEFAULT 'aktiv',
-  opprettet           TIMESTAMPTZ NOT NULL DEFAULT now(),
-  opprettet_av        TEXT
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_by        TEXT
 );
 
 CREATE TABLE IF NOT EXISTS oauth_authorization_code (
@@ -173,10 +173,10 @@ CREATE TABLE IF NOT EXISTS oauth_authorization_code (
   code_challenge_method TEXT NOT NULL,
   nonce                 TEXT,
   launch_context        JSONB NOT NULL DEFAULT '{}'::jsonb,
-  utloper               TIMESTAMPTZ NOT NULL,
-  brukt                 BOOLEAN NOT NULL DEFAULT false
+  expires_at               TIMESTAMPTZ NOT NULL,
+  used                 BOOLEAN NOT NULL DEFAULT false
 );
-CREATE INDEX IF NOT EXISTS idx_authcode_utloper ON oauth_authorization_code (utloper);
+CREATE INDEX IF NOT EXISTS idx_authcode_expires_at ON oauth_authorization_code (expires_at);
 
 CREATE TABLE IF NOT EXISTS oauth_token (
   id                TEXT PRIMARY KEY,
@@ -187,10 +187,10 @@ CREATE TABLE IF NOT EXISTS oauth_token (
   scope             TEXT NOT NULL,
   launch_context    JSONB NOT NULL DEFAULT '{}'::jsonb,
   familie           TEXT NOT NULL,
-  utstedt           TIMESTAMPTZ NOT NULL DEFAULT now(),
-  utloper           TIMESTAMPTZ NOT NULL,
-  tilbakekalt       BOOLEAN NOT NULL DEFAULT false,
-  tilbakekalt_grunn TEXT
+  issued_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at           TIMESTAMPTZ NOT NULL,
+  revoked       BOOLEAN NOT NULL DEFAULT false,
+  revoked_reason TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_token_family ON oauth_token (familie);
 CREATE INDEX IF NOT EXISTS idx_token_user   ON oauth_token (user_id, kind);
@@ -202,9 +202,9 @@ CREATE TABLE IF NOT EXISTS smart_launch (
   patient_id    TEXT,
   encounter_id  TEXT,
   intent        TEXT,
-  opprettet     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  utloper       TIMESTAMPTZ NOT NULL,
-  brukt         BOOLEAN NOT NULL DEFAULT false
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at       TIMESTAMPTZ NOT NULL,
+  used         BOOLEAN NOT NULL DEFAULT false
 );
 
 CREATE TABLE IF NOT EXISTS signing_key (
@@ -212,135 +212,135 @@ CREATE TABLE IF NOT EXISTS signing_key (
   alg           TEXT NOT NULL,
   public_jwk    JSONB NOT NULL,
   private_enc   TEXT NOT NULL,
-  opprettet     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  aktiv         BOOLEAN NOT NULL DEFAULT true,
-  utfases_etter TIMESTAMPTZ
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  active         BOOLEAN NOT NULL DEFAULT true,
+  phased_out_after TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS user_session (
   id           TEXT PRIMARY KEY,
   token_hash   TEXT NOT NULL UNIQUE,
   user_id      TEXT NOT NULL REFERENCES user_account(id) ON DELETE CASCADE,
-  opprettet    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  sist_aktiv   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  utloper      TIMESTAMPTZ NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_active   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at      TIMESTAMPTZ NOT NULL,
   ip           TEXT,
   user_agent   TEXT,
   amr          TEXT,
-  elevert_til  TIMESTAMPTZ,
-  avsluttet    BOOLEAN NOT NULL DEFAULT false
+  elevated_until  TIMESTAMPTZ,
+  ended    BOOLEAN NOT NULL DEFAULT false
 );
-CREATE INDEX IF NOT EXISTS idx_session_user ON user_session (user_id) WHERE avsluttet = false;
+CREATE INDEX IF NOT EXISTS idx_session_user ON user_session (user_id) WHERE ended = false;
 
 CREATE TABLE IF NOT EXISTS rate_limit (
   bucket      TEXT PRIMARY KEY,
-  teller      INTEGER NOT NULL,
-  vindu_start BIGINT NOT NULL
+  counter      INTEGER NOT NULL,
+  window_start BIGINT NOT NULL
 );
 
 -- ---------------------------------------------------------------------------
 -- Integrasjoner
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS melding (
+CREATE TABLE IF NOT EXISTS message (
   id            TEXT PRIMARY KEY,
-  retning       TEXT NOT NULL,
-  meldingstype  TEXT NOT NULL,
+  direction       TEXT NOT NULL,
+  message_type  TEXT NOT NULL,
   msg_id        TEXT NOT NULL,
   ref_msg_id    TEXT,
   patient_id    TEXT,
-  avsender_her  TEXT,
-  mottaker_her  TEXT,
-  mottaker_navn TEXT,
+  sender_her_id  TEXT,
+  recipient_her_id  TEXT,
+  recipient_name TEXT,
   status        TEXT NOT NULL,
-  status_detalj TEXT,
+  status_detail TEXT,
   apprec_status TEXT,
-  forsok        INTEGER NOT NULL DEFAULT 0,
-  neste_forsok  TIMESTAMPTZ,
+  attempts        INTEGER NOT NULL DEFAULT 0,
+  next_attempt  TIMESTAMPTZ,
   payload_xml   TEXT,
   ebxml         TEXT,
   fhir_ref      TEXT,
-  opprettet     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  oppdatert     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  opprettet_av  TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_by  TEXT,
   signatur      TEXT
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_melding_msgid ON melding (retning, msg_id);
-CREATE INDEX IF NOT EXISTS idx_melding_ko ON melding (status, neste_forsok);
-CREATE INDEX IF NOT EXISTS idx_melding_pasient ON melding (patient_id, opprettet DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_message_msgid ON message (direction, msg_id);
+CREATE INDEX IF NOT EXISTS idx_message_queue ON message (status, next_attempt);
+CREATE INDEX IF NOT EXISTS idx_message_patient ON message (patient_id, created_at DESC);
 
-CREATE TABLE IF NOT EXISTS sfm_synk (
+CREATE TABLE IF NOT EXISTS sfm_sync (
   id           TEXT PRIMARY KEY,
   patient_id   TEXT NOT NULL,
-  operasjon    TEXT NOT NULL,
+  operation    TEXT NOT NULL,
   status       TEXT NOT NULL,
-  foresporsel  JSONB,
-  svar         JSONB,
+  request  JSONB,
+  response         JSONB,
   feilmelding  TEXT,
   reseptid     TEXT,
-  opprettet    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  oppdatert    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  utfort_av    TEXT
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  performed_by    TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_sfm_pasient ON sfm_synk (patient_id, opprettet DESC);
+CREATE INDEX IF NOT EXISTS idx_sfm_patient ON sfm_sync (patient_id, created_at DESC);
 
-CREATE TABLE IF NOT EXISTS regningskort (
+CREATE TABLE IF NOT EXISTS billing_card (
   id              TEXT PRIMARY KEY,
   patient_id      TEXT NOT NULL,
   encounter_id    TEXT,
-  behandler_id    TEXT NOT NULL,
-  hpr_nummer      TEXT,
-  dato            DATE NOT NULL,
+  practitioner_id    TEXT NOT NULL,
+  hpr_number      TEXT,
+  date            DATE NOT NULL,
   kontakttype     TEXT NOT NULL,
-  diagnose_kode   TEXT,
-  diagnose_system TEXT,
-  refusjon_ore    BIGINT NOT NULL DEFAULT 0,
-  egenandel_ore   BIGINT NOT NULL DEFAULT 0,
-  frikort         BOOLEAN NOT NULL DEFAULT false,
-  fritak_grunn    TEXT,
+  diagnosis_code   TEXT,
+  diagnosis_system TEXT,
+  reimbursement_ore    BIGINT NOT NULL DEFAULT 0,
+  copayment_ore   BIGINT NOT NULL DEFAULT 0,
+  exemption_card         BOOLEAN NOT NULL DEFAULT false,
+  exemption_reason    TEXT,
   status          TEXT NOT NULL DEFAULT 'kladd',
-  oppgjor_id      TEXT,
-  avvisning       TEXT,
+  settlement_id      TEXT,
+  rejection       TEXT,
   claim_id        TEXT,
-  opprettet       TIMESTAMPTZ NOT NULL DEFAULT now(),
-  oppdatert       TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_regningskort_status ON regningskort (status, dato);
-CREATE INDEX IF NOT EXISTS idx_regningskort_pasient ON regningskort (patient_id, dato DESC);
+CREATE INDEX IF NOT EXISTS idx_billing_card_status ON billing_card (status, date);
+CREATE INDEX IF NOT EXISTS idx_billing_card_patient ON billing_card (patient_id, date DESC);
 
-CREATE TABLE IF NOT EXISTS regningslinje (
+CREATE TABLE IF NOT EXISTS billing_line (
   id              TEXT PRIMARY KEY,
-  regningskort_id TEXT NOT NULL REFERENCES regningskort(id) ON DELETE CASCADE,
-  takstkode       TEXT NOT NULL,
-  antall          INTEGER NOT NULL DEFAULT 1,
-  refusjon_ore    BIGINT NOT NULL DEFAULT 0,
-  egenandel_ore   BIGINT NOT NULL DEFAULT 0,
-  merknad         TEXT
+  billing_card_id TEXT NOT NULL REFERENCES billing_card(id) ON DELETE CASCADE,
+  tariff_code       TEXT NOT NULL,
+  count          INTEGER NOT NULL DEFAULT 1,
+  reimbursement_ore    BIGINT NOT NULL DEFAULT 0,
+  copayment_ore   BIGINT NOT NULL DEFAULT 0,
+  note         TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_regningslinje_kort ON regningslinje (regningskort_id);
+CREATE INDEX IF NOT EXISTS idx_billing_line_card ON billing_line (billing_card_id);
 
-CREATE TABLE IF NOT EXISTS oppgjor (
+CREATE TABLE IF NOT EXISTS settlement (
   id                TEXT PRIMARY KEY,
-  periode_fra       DATE NOT NULL,
-  periode_til       DATE NOT NULL,
-  antall_kort       INTEGER NOT NULL,
-  sum_refusjon_ore  BIGINT NOT NULL,
-  sum_egenandel_ore BIGINT NOT NULL,
+  period_from       DATE NOT NULL,
+  period_to       DATE NOT NULL,
+  card_count       INTEGER NOT NULL,
+  sum_reimbursement_ore  BIGINT NOT NULL,
+  sum_copayment_ore BIGINT NOT NULL,
   status            TEXT NOT NULL,
-  kvittering        JSONB,
-  fil               TEXT,
-  opprettet         TIMESTAMPTZ NOT NULL DEFAULT now(),
-  sendt             TIMESTAMPTZ,
-  sendt_av          TEXT
+  receipt        JSONB,
+  file               TEXT,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  sent_at             TIMESTAMPTZ,
+  sent_by          TEXT
 );
 
-CREATE TABLE IF NOT EXISTS egenandel_oppslag (
+CREATE TABLE IF NOT EXISTS copayment_lookup (
   id           TEXT PRIMARY KEY,
   patient_id   TEXT NOT NULL,
   utfort       TIMESTAMPTZ NOT NULL DEFAULT now(),
-  utfort_av    TEXT NOT NULL,
-  har_frikort  BOOLEAN NOT NULL,
-  frikort_til  DATE,
-  opptjent_ore BIGINT,
-  kilde        TEXT NOT NULL
+  performed_by    TEXT NOT NULL,
+  has_exemption_card  BOOLEAN NOT NULL,
+  exemption_card_until  DATE,
+  earned_ore BIGINT,
+  source        TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_egenandel_pasient ON egenandel_oppslag (patient_id, utfort DESC);
+CREATE INDEX IF NOT EXISTS idx_copayment_patient ON copayment_lookup (patient_id, utfort DESC);

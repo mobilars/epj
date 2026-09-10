@@ -1,18 +1,18 @@
 import type { Cookies } from '@sveltejs/kit';
-import { en, exec } from '../db';
-import { krevTenant } from '../tenant/kontekst';
+import { one, exec } from '../db';
+import { requireTenant } from '../tenant/context';
 import { config } from '../config';
-import { nyId, nyToken } from '../util/ids';
+import { newId, newToken } from '../util/ids';
 import { likeStrenger, tokenHash } from '../util/crypto';
 
-export interface Sesjon {
+export interface Session {
 	id: string;
 	user_id: string;
-	opprettet: string;
-	sist_aktiv: string;
-	utloper: string;
+	created_at: string;
+	last_active: string;
+	expires_at: string;
 	amr: string | null;
-	elevert_til: string | null;
+	elevated_until: string | null;
 	ip: string | null;
 }
 
@@ -23,19 +23,19 @@ export interface Sesjon {
  * inneholder kun et tilfeldig token - aldri brukerdata. Sesjonen har både en
  * inaktivitetsgrense og en absolutt levetid.
  */
-export async function opprettSesjon(
+export async function createSession(
 	userId: string,
 	amr: string,
 	ip: string,
 	userAgent: string | null,
 	cookies: Cookies
 ): Promise<string> {
-	const id = nyId();
-	const token = nyToken(32);
-	const utloper = new Date(Date.now() + config.session.absoluteSeconds * 1000).toISOString();
+	const id = newId();
+	const token = newToken(32);
+	const expires_at = new Date(Date.now() + config.session.absoluteSeconds * 1000).toISOString();
 	await exec(
-		'INSERT INTO user_session (id, token_hash, user_id, utloper, ip, user_agent, amr) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-		[id, tokenHash(token), userId, utloper, ip, userAgent, amr]
+		'INSERT INTO user_session (id, token_hash, user_id, expires_at, ip, user_agent, amr) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+		[id, tokenHash(token), userId, expires_at, ip, userAgent, amr]
 	);
 	cookies.set(config.session.cookieName, `${id}.${token}`, {
 		path: '/',
@@ -47,63 +47,63 @@ export async function opprettSesjon(
 	return id;
 }
 
-export async function hentSesjon(cookies: Cookies): Promise<Sesjon | null> {
-	const rå = cookies.get(config.session.cookieName);
-	if (!rå) return null;
-	const skille = rå.indexOf('.');
+export async function getSession(cookies: Cookies): Promise<Session | null> {
+	const raw = cookies.get(config.session.cookieName);
+	if (!raw) return null;
+	const skille = raw.indexOf('.');
 	if (skille < 0) return null;
-	const id = rå.slice(0, skille);
-	const token = rå.slice(skille + 1);
+	const id = raw.slice(0, skille);
+	const token = raw.slice(skille + 1);
 
 	// Sesjonen må tilhøre en bruker i virksomheten forespørselen gjelder. En
 	// gyldig sesjonscookie fra ett legekontor skal ikke virke hos et annet.
-	const rad = await en<Sesjon & { token_hash: string }>(
-		`SELECT s.id, s.user_id, s.opprettet, s.sist_aktiv, s.utloper, s.amr, s.elevert_til, s.ip, s.token_hash
+	const row = await one<Session & { token_hash: string }>(
+		`SELECT s.id, s.user_id, s.created_at, s.last_active, s.expires_at, s.amr, s.elevated_until, s.ip, s.token_hash
 		 FROM user_session s
 		 JOIN user_account u ON u.id = s.user_id
-		 WHERE s.id = $1 AND s.avsluttet = false AND u.tenant_id IS NOT DISTINCT FROM $2`,
-		[id, krevTenant().id]
+		 WHERE s.id = $1 AND s.ended = false AND u.tenant_id IS NOT DISTINCT FROM $2`,
+		[id, requireTenant().id]
 	);
-	if (!rad) return null;
-	if (!likeStrenger(rad.token_hash, tokenHash(token))) {
+	if (!row) return null;
+	if (!likeStrenger(row.token_hash, tokenHash(token))) {
 		// Gyldig sesjons-id med feil token: mulig tyveri av cookie. Avslutt sesjonen.
-		await exec('UPDATE user_session SET avsluttet = true WHERE id = $1', [id]);
+		await exec('UPDATE user_session SET ended = true WHERE id = $1', [id]);
 		return null;
 	}
-	if (new Date(rad.utloper).getTime() <= Date.now()) {
-		await exec('UPDATE user_session SET avsluttet = true WHERE id = $1', [id]);
+	if (new Date(row.expires_at).getTime() <= Date.now()) {
+		await exec('UPDATE user_session SET ended = true WHERE id = $1', [id]);
 		return null;
 	}
-	const inaktivMs = Date.now() - new Date(rad.sist_aktiv).getTime();
-	if (inaktivMs > config.session.idleSeconds * 1000) {
-		await exec('UPDATE user_session SET avsluttet = true WHERE id = $1', [id]);
+	const inactiveMs = Date.now() - new Date(row.last_active).getTime();
+	if (inactiveMs > config.session.idleSeconds * 1000) {
+		await exec('UPDATE user_session SET ended = true WHERE id = $1', [id]);
 		return null;
 	}
-	await exec('UPDATE user_session SET sist_aktiv = now() WHERE id = $1', [id]);
-	return rad;
+	await exec('UPDATE user_session SET last_active = now() WHERE id = $1', [id]);
+	return row;
 }
 
-export async function avsluttSesjon(cookies: Cookies): Promise<void> {
-	const rå = cookies.get(config.session.cookieName);
-	if (rå) {
-		const id = rå.split('.')[0];
-		await exec('UPDATE user_session SET avsluttet = true WHERE id = $1', [id]);
+export async function endSession(cookies: Cookies): Promise<void> {
+	const raw = cookies.get(config.session.cookieName);
+	if (raw) {
+		const id = raw.split('.')[0];
+		await exec('UPDATE user_session SET ended = true WHERE id = $1', [id]);
 	}
 	cookies.delete(config.session.cookieName, { path: '/' });
 }
 
 /** Markerer sesjonen som nylig reautentisert (step-up), f.eks. før nødrett. */
-export async function eleverSesjon(sesjonId: string): Promise<string> {
-	const til = new Date(Date.now() + config.session.elevationSeconds * 1000).toISOString();
-	await exec('UPDATE user_session SET elevert_til = $2 WHERE id = $1', [sesjonId, til]);
-	return til;
+export async function elevateSession(sessionId: string): Promise<string> {
+	const to = new Date(Date.now() + config.session.elevationSeconds * 1000).toISOString();
+	await exec('UPDATE user_session SET elevated_until = $2 WHERE id = $1', [sessionId, to]);
+	return to;
 }
 
-export async function avsluttAlleSesjoner(userId: string): Promise<number> {
-	return exec('UPDATE user_session SET avsluttet = true WHERE user_id = $1 AND avsluttet = false', [userId]);
+export async function endAllSessions(userId: string): Promise<number> {
+	return exec('UPDATE user_session SET ended = true WHERE user_id = $1 AND ended = false', [userId]);
 }
 
 /** Vedlikehold. Går bevisst på tvers av virksomheter: sletter bare utløpte rader. */
-export async function ryddUtlopteSesjoner(): Promise<number> {
-	return exec("DELETE FROM user_session WHERE utloper < now() - interval '30 days'");
+export async function purgeUtlopteSessions(): Promise<number> {
+	return exec("DELETE FROM user_session WHERE expires_at < now() - interval '30 days'");
 }
