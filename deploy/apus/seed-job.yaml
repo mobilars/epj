@@ -34,6 +34,10 @@ spec:
       containers:
         - name: seed
           image: ghcr.io/mobilars/epj:latest
+          # Samme bilde som journalen kjører. IfNotPresent lar jobben bruke det
+          # som allerede ligger på noden, i stedet for å kreve at registeret er
+          # oppe akkurat da.
+          imagePullPolicy: IfNotPresent
           command: ['node', 'build/verktoy/seed.js']
           envFrom:
             - configMapRef:

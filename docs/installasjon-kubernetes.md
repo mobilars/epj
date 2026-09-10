@@ -178,26 +178,50 @@ ressursbruken til noder på under 4 GB. Se
 Dette er den fellen som koster mest tid, og den gir ingen feilmelding som peker
 på årsaken.
 
-Spring binder miljøvariabler ved å gjøre om understrek til punktum.
-`HAPI_FHIR_TENANT_IDENTIFICATION_STRATEGY` blir altså
-`hapi.fhir.tenant.identification.strategy`. Nøkkelen HAPI faktisk leser heter
-`hapi.fhir.tenant_identification_strategy`, med understrek. De to er ikke det
-samme, og verdien havner et sted ingen ser etter.
-
-Det samme gjelder `spring.jpa.properties.hibernate.dialect`: der ligger
-punktumet inne i selve nøkkelen i kartet, og en miljøvariabel lager en annen
-oppføring ved siden av istedenfor å overstyre den som er der.
+Spring binder miljøvariabler ved å gjøre om understrek til punktum. HAPI sine
+nøkler har understrek i navnet - `fhir_version`,
+`request_tenant_partitioning_mode`, `allow_references_across_partitions` - og
+dialekten ligger under en kartnøkkel som bokstavelig heter
+`hibernate.dialect`. En miljøvariabel treffer derfor en annen nøkkel enn den
+som leses, og verdien havner et sted ingen ser etter. HAPI kjører videre på
+standardverdien, uten et eneste varsel.
 
 Følgene, slik de så ut i en klynge:
 
 | Innstilling som ikke ble lest | Hva som skjedde |
 | --- | --- |
 | `hibernate.dialect` | HAPI ble stående på H2-dialekten og bygde skjemaet med `clob`- og `blob`-kolonner. PostgreSQL avviste 27 tabeller. Serveren startet likevel, og feilet først på første søk med «relation "hfj_resource" does not exist» |
-| `tenant_identification_strategy` | `/fhir/<virksomhet>/` svarte 404 «Unknown resource type». `/api/helse` meldte `"fhir": false`, mens `/fhir/metadata` svarte 200 |
+| `partitioning` | `/fhir/<virksomhet>/` svarte 404 «Unknown resource type». `/api/helse` meldte `"fhir": false`, mens `/fhir/metadata` svarte 200 |
 
-Løsningen er `SPRING_APPLICATION_JSON`, som lar nøkkelen skrives ordrett og har
-høyere presedens enn konfigurasjonsfila i bildet. `04-hapi.yaml` gjør dette.
-Ikke gjør om disse tilbake til miljøvariabler fordi de ser penere ut.
+Konfigurasjonen monteres derfor som fil, gjennom
+`SPRING_CONFIG_ADDITIONAL_LOCATION`, som har høyere presedens enn
+konfigurasjonen i bildet. `SPRING_APPLICATION_JSON` med flate nøkler er ikke
+nok: dialekten endte da på Hibernates automatisk oppdagede `PostgreSQLDialect`
+i stedet for HAPI sin egen. Ikke gjør disse om til miljøvariabler igjen fordi
+det ser penere ut.
+
+### Nøkkelen for virksomhet i URL-en heter ikke det dokumentasjonen sier
+
+`tenant_identification_strategy: URL_BASED` står i mye dokumentasjon og i
+eldre oppsett. **Den finnes ikke i v8.0.0.** Ordet «tenant» forekommer ikke én
+gang i bildets egen `application.yaml`. Nøkkelen heter i stedet:
+
+```yaml
+hapi:
+  fhir:
+    partitioning:
+      request_tenant_partitioning_mode: true
+```
+
+Merk også at `partitioning:` i seg selv slår på partisjonering. Setter du
+blokken uten en modus som tildeler partisjon, feiler *hver eneste skriving* med:
+
+```
+HAPI-1319: No interceptor provided a value for pointcuts:
+[STORAGE_PARTITION_IDENTIFY_CREATE, STORAGE_PARTITION_IDENTIFY_ANY]
+```
+
+Altså: halvveis påslått partisjonering er verre enn ingen. De to hører sammen.
 
 Kontroller etter oppgradering av HAPI:
 

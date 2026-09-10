@@ -211,28 +211,6 @@ verdt navnet:
 - Testet gjenoppretting. En sikkerhetskopi ingen har gjenopprettet fra er en
   antakelse.
 
-### 4.7b HAPI-partisjonering lar seg ikke slå på **[K]**
-
-Journalen kjører nå med `EPJ_HAPI_MULTITENANT=false` i
-[deploy/apus](../deploy/apus), altså mot HAPI sin rot i stedet for
-`/fhir/<virksomhet>/`.
-
-Grunnen er at partisjoneringen ikke lar seg slå på i `hapiproject/hapi:v8.0.0`.
-Konfigurasjonen monteres nå som fil (se 04-hapi.yaml), og det virker for
-dialekten - men `tenant_identification_strategy: URL_BASED` slår ikke inn, og
-`/fhir/<virksomhet>/metadata` svarer fortsatt 404 «Unknown resource type».
-Loggen viser i tillegg at Hibernate ender på `org.hibernate.dialect.PostgreSQLDialect`
-selv om HAPI sin egen dialektklasse lastes.
-
-Det er forsvarlig i denne installasjonen fordi den har én virksomhet. Det er
-**ikke** forsvarlig med flere: uten partisjonering ligger alle virksomheters
-kliniske data i samme rom i HAPI, og skillet hviler utelukkende på at
-`tenant_id` filtreres riktig i vår egen kode. `tests/multitenancy.test.ts`
-kjører mot en partisjonsbevisst testdobbel, ikke mot HAPI selv, og fanger derfor
-ikke dette.
-
-Må løses før systemet tar imot mer enn én virksomhet. Se også 6.5 og 6.6.
-
 ### 4.8 Vedlegg (Binary) med pasienttilknytning **[V]**
 
 `Binary` ble tatt ut av de støttede ressurstypene i sikkerhetsgjennomgangen:

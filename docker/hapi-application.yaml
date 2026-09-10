@@ -29,10 +29,19 @@ hapi:
     server_address: http://hapi:8080/fhir
 
     # --- Multitenancy -----------------------------------------------------
-    # Hver virksomhet har sin egen partisjon. Med URL_BASED inngår
-    # partisjonsnavnet i FHIR-URL-en: /fhir/<virksomhet>/Patient/123.
-    tenant_identification_strategy: URL_BASED
+    # Hver virksomhet har sin egen partisjon. Partisjonsnavnet inngår i
+    # FHIR-URL-en: /fhir/<virksomhet>/Patient/123.
+    #
+    # Nøkkelen heter `request_tenant_partitioning_mode`.
+    # `tenant_identification_strategy`, som står i mye dokumentasjon, finnes
+    # ikke i v8.0.0 - ordet «tenant» forekommer ikke i bildets egen
+    # application.yaml i det hele tatt.
+    #
+    # `partitioning:` slår i seg selv på partisjonering. Uten en modus som
+    # tildeler partisjon feiler hver skriving med «HAPI-1319: No interceptor
+    # provided a value for pointcuts». De to hører sammen.
     partitioning:
+      request_tenant_partitioning_mode: true
       allow_references_across_partitions: false
       partitioning_include_in_search_hashes: false
       conditional_create_duplicate_identifiers_enabled: false

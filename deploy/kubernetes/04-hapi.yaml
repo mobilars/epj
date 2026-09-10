@@ -76,8 +76,20 @@ data:
         # --- Multitenancy -------------------------------------------------
         # Hver virksomhet har sin egen partisjon, og partisjonsnavnet inngår i
         # FHIR-URL-en: /fhir/<virksomhet>/Patient/123.
-        tenant_identification_strategy: URL_BASED
+        #
+        # Nøkkelen heter `request_tenant_partitioning_mode`, og ligger under
+        # `partitioning`. Den het noe annet i eldre utgaver, og
+        # `tenant_identification_strategy` - som står i mye dokumentasjon og i
+        # eldre oppsett - finnes ikke i v8.0.0 i det hele tatt: ordet «tenant»
+        # forekommer ikke én gang i bildets egen application.yaml. Feltnavnet er
+        # lest ut av AppProperties.Partitioning i hapi-fhir-jpaserver-starter.
+        #
+        # Merk at `partitioning:` i seg selv slår på partisjonering. Settes
+        # blokken uten en modus som tildeler partisjon, feiler hver eneste
+        # skriving med «HAPI-1319: No interceptor provided a value for
+        # pointcuts [STORAGE_PARTITION_IDENTIFY_CREATE]». De to hører sammen.
         partitioning:
+          request_tenant_partitioning_mode: true
           # Dette er det som gjør at en ressurs i én virksomhet ikke kan peke
           # inn i en annen - heller ikke ved en feil i vår egen kode.
           allow_references_across_partitions: false

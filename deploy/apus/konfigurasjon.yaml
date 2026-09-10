@@ -29,21 +29,6 @@ data:
   # slå den på.
   EPJ_PLATTFORM_VERTSNAVN: ''
 
-  # HAPI-partisjonering er slått av her, og journalen snakker med HAPI sin rot
-  # i stedet for /fhir/<virksomhet>/.
-  #
-  # Partisjoneringen lar seg ikke slå på i hapiproject/hapi:v8.0.0 med
-  # konfigurasjonen i 04-hapi.yaml: dialekten treffer, men
-  # `tenant_identification_strategy: URL_BASED` gjør det ikke, og
-  # /fhir/<virksomhet>/ svarer 404 «Unknown resource type». Se docs/todo.md.
-  #
-  # Det er forsvarlig her fordi installasjonen har én virksomhet: det finnes
-  # ingen andre partisjoner å holde fra hverandre. Skal flere virksomheter dele
-  # en HAPI, må partisjoneringen virke først - uten den ligger alle
-  # virksomheters kliniske data i samme rom, og skillet hviler utelukkende på at
-  # `tenant_id` filtreres riktig i vår egen kode.
-  EPJ_HAPI_MULTITENANT: 'false'
-
   # CloudNativePG signerer tjenersertifikatet med klyngens egen CA.
   EPJ_DB_SSL: 'true'
   NODE_EXTRA_CA_CERTS: /etc/epj/postgres-ca/ca.crt
