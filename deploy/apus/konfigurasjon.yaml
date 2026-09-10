@@ -40,9 +40,13 @@ data:
   # `epj-hemmeligheter`, never in git. `kid` is the RFC 7638 thumbprint of the
   # public key, and has been checked against the key itself.
   #
-  # This is a test client at NHN. Test sign-in stays on alongside it, so the
-  # demo users still work if HelseID is unavailable.
-  EPJ_HELSEID_ENABLED: 'true'
+  # Off until the public key is registered against the client in NHN
+  # Selvbetjening: the client id is recognised (a plain /connect/authorize call
+  # answers 'Pushed authorization is required', not 'Unknown client'), but the
+  # client assertion is rejected with invalid_client at both /connect/par and
+  # /connect/token, for every combination of alg, aud and kid. That is HelseID
+  # saying it holds a different public key for this client.
+  EPJ_HELSEID_ENABLED: 'false'
   EPJ_HELSEID_CLIENT_ID: 5179bc26-7699-4c36-8428-32cb7f06efe1
   EPJ_HELSEID_ISSUER: https://helseid-sts.test.nhn.no
   EPJ_HELSEID_KEY_ID: oUMPVNSLU4Xj5LiEJ_X1vzVZF5iLM5C1GqUYAMlEs9U
