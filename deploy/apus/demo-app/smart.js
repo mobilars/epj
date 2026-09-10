@@ -144,6 +144,8 @@ function client(tokens) {
 	return {
 		tokens,
 		patientId: tokens.patient ?? null,
+		/** Who is signed in, as a FHIR reference. The record requires it as author. */
+		fhirUser: tokens.fhirUser ?? null,
 		scopes: (tokens.scope ?? '').split(/\s+/).filter(Boolean),
 		read: (path) => request(path),
 		create: (resource) => request(resource.resourceType, { method: 'POST', body: JSON.stringify(resource) }),

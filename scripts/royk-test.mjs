@@ -34,6 +34,10 @@ try {
 	await page.goto(`${base}/logg-inn`, { waitUntil: 'domcontentloaded' });
 	check('påloggingssiden svarer', await page.getByRole('heading', { name: 'Logg inn' }).isVisible());
 
+	// The demo buttons need JavaScript: clicking before hydration does nothing,
+	// and the test then waits for a navigation that never comes.
+	await page.waitForSelector('html[data-hydrert="ja"]', { timeout: 30000 });
+
 	const demoButton = page.locator('.demobruker', { hasText: 'Dr. Ingrid Fastlege' });
 	check('demobrukeren er listet', (await demoButton.count()) > 0);
 	await demoButton.first().click();
@@ -88,10 +92,15 @@ try {
 					check('appen skrev notatet gjennom /fhir', false, (await frame.locator('body').innerText()).slice(0, 300))
 				);
 
-			// And the record shows what the app wrote.
+			// And the record shows what the app wrote. Waiting for the text rather
+			// than reading the body once: the page is still rendering otherwise.
 			await page.goto(`${base}${patientHref}/notater`, { waitUntil: 'domcontentloaded' });
-			const body = await page.locator('body').innerText();
-			check('journalen viser notatet appen skrev', body.includes(marker.slice(0, 24)));
+			await page
+				.getByText(marker.slice(0, 24), { exact: false })
+				.first()
+				.waitFor({ timeout: 15000 })
+				.then(() => check('journalen viser notatet appen skrev', true))
+				.catch(() => check('journalen viser notatet appen skrev', false));
 		}
 	}
 

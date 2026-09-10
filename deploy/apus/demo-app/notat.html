@@ -161,6 +161,9 @@
 					subject,
 					encounter: { reference: `Encounter/${encounter.body.id}` },
 					date: now,
+					// The record requires an author, and rightly: a note nobody signed
+					// is not a record entry. `fhirUser` in the token is who that is.
+					...(smart.fhirUser ? { author: [{ reference: smart.fhirUser }] } : {}),
 					title: 'Konsultasjon',
 					section: [
 						...(subjektivt ? [{ title: 'Subjektivt', text: div(subjektivt) }] : []),
