@@ -142,3 +142,29 @@ spec:
               app: epj-seed
       ports:
         - port: 8080
+---
+# cert-manager løser ACME HTTP-01 med en egen pod i dette navnerommet. Den
+# bærer ikke journalens merkelapper, så `standard-nekt` stenger den ute, og
+# utfordringen svarer aldri - fornyelse av sertifikatet stopper opp uten at noe
+# annet ser galt ut. Regelen her slipper inngangskontrolleren inn til den.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: acme-solver
+  namespace: epj
+spec:
+  podSelector:
+    matchLabels:
+      acme.cert-manager.io/http01-solver: 'true'
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cert-manager
