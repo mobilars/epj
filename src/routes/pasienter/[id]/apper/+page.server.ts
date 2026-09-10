@@ -8,12 +8,12 @@ import { log, actorFromContext } from '$srv/audit';
 import { fhirBaseFor, requireTenant } from '$srv/tenant/context';
 
 /**
- * SMART-apper startet fra journalen (EHR launch).
+ * SMART apps launched from the record (EHR launch).
  *
- * Klinikeren velger app, journalen oppretter en kortlivet launch-kontekst med
- * pasienten, og sender brukeren til appens launch-URL med `iss` og `launch`.
- * Appen henter selv oppsettet fra /.well-known/smart-configuration og starter
- * autorisasjonsflyten.
+ * The clinician picks an app, the record creates a short-lived launch context
+ * with the patient, and sends the user to the app's launch URL with `iss` and
+ * `launch`. The app fetches the configuration itself from
+ * /.well-known/smart-configuration and starts the authorisation flow.
  */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
@@ -60,8 +60,8 @@ export const actions: Actions = {
 		);
 
 		const url = new URL(client.launch_url);
-		// `iss` er virksomhetens eget FHIR-endepunkt. Appen henter oppsettet
-		// derfra, og sender det tilbake som `aud` i autorisasjonen.
+		// `iss` is the organisation's own FHIR endpoint. The app fetches the
+		// configuration from there, and sends it back as `aud` in the authorisation.
 		url.searchParams.set('iss', fhirBaseFor(requireTenant()));
 		url.searchParams.set('launch', launchId);
 		return { ok: true, url: url.toString(), launchId, appName: client.name };

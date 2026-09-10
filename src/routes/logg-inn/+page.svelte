@@ -2,8 +2,8 @@
 	import { page } from '$app/state';
 	let { data, form } = $props();
 
-	// Skjemaet fungerer uten JavaScript: engangskodefeltet står alltid der, og
-	// brukernavnet fylles ut på serversiden etter et mislykket forsøk.
+	// The form works without JavaScript: the one-time code field is always there,
+	// and the username is filled in server-side after a failed attempt.
 	const errorFromUrl = $derived(page.url.searchParams.get('feil'));
 </script>
 

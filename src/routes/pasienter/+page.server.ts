@@ -8,17 +8,17 @@ import { query } from '$srv/db';
 import { requireTenant } from '$srv/tenant/context';
 
 /**
- * Pasientsøk.
+ * Patient search.
  *
- * Søket går gjennom den samme voktereren som API-et og er dermed automatisk
- * avgrenset til pasienter brukeren har tjenstlig behov for. Selve søket
- * loggføres, med søkestrengen maskert.
+ * The search goes through the same guard as the API and is thereby
+ * automatically bounded to patients the user has a legitimate need for. The
+ * search itself is logged, with the search string masked.
  */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx) redirect(303, `/logg-inn?retur=${encodeURIComponent(event.url.pathname)}`);
-	// Roller uten klinisk lesetilgang, som systemansvarlig, skal ikke kunne åpne
-	// pasientlisten i det hele tatt - heller ikke for å se at den er tom.
+	// Roles without clinical read access, such as the system administrator, must
+	// not be able to open the patient list at all - not even to see that it is empty.
 	if (!ctx.permissions.has('journal:les')) {
 		error(403, 'Rollen din har ikke tilgang til pasientopplysninger.');
 	}

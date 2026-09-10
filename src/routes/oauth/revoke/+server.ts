@@ -3,7 +3,7 @@ import { authenticateClient } from '$srv/auth/clients';
 import { revokeToken } from '$srv/auth/tokens';
 import { log } from '$srv/audit';
 
-/** RFC 7009. Svarer alltid 200, også for ukjente tokens. */
+/** RFC 7009. Always answers 200, unknown tokens included. */
 export const POST: RequestHandler = async (event) => {
 	const form = new URLSearchParams(await event.request.text());
 	const auth = await authenticateClient(form, event.request.headers.get('authorization'));

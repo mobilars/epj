@@ -6,11 +6,11 @@ import { narrowIn } from '$srv/authz/scopes';
 import { log } from '$srv/audit';
 
 /**
- * Token-endepunktet (OAuth 2.1 / SMART App Launch).
+ * The token endpoint (OAuth 2.1 / SMART App Launch).
  *
- * Støtter `authorization_code` (SMART-apper), `refresh_token` med rotasjon, og
- * `client_credentials` for SMART Backend Services. Alle utfall - også de
- * mislykkede - skrives til sikkerhetsloggen.
+ * Supports `authorization_code` (SMART apps), `refresh_token` with rotation,
+ * and `client_credentials` for SMART Backend Services. Every outcome - the
+ * failed ones included - is written to the security log.
  */
 
 function error(code: string, description: string, status = 400): Response {
@@ -81,8 +81,8 @@ export const POST: RequestHandler = async (event) => {
 		}
 
 		case 'client_credentials': {
-			// SMART Backend Services. Krever asymmetrisk klientautentisering, og
-			// kan bare få `system/`-scopes - aldri pasientkontekst.
+			// SMART Backend Services. Requires asymmetric client authentication, and
+			// can only get `system/` scopes - never patient context.
 			if (auth.method !== 'private_key_jwt') {
 				return error('invalid_client', 'Backend-tjenester må autentisere med private_key_jwt');
 			}

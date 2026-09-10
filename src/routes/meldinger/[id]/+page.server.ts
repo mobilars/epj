@@ -4,7 +4,7 @@ import { getMessage } from '$srv/integrations/nhn/message-queue';
 import { readMsgHead } from '$srv/integrations/nhn/apprec';
 import { log, actorFromContext } from '$srv/audit';
 
-/** Detaljvisning av én melding, med lesbar sammenstilling av hodemeldingen. */
+/** Detail view of a single message, with a readable rendering of the MsgHead. */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx) redirect(303, `/logg-inn?retur=${encodeURIComponent(event.url.pathname)}`);

@@ -4,7 +4,7 @@ import { endFlow, fullforLogin } from '$srv/auth/helseid';
 import { createSession } from '$srv/auth/session';
 import { log } from '$srv/audit';
 
-/** Tilbakekall fra HelseID etter autentisering. */
+/** Callback from HelseID after authentication. */
 export const GET: RequestHandler = async (event) => {
 	const actor = {
 		userId: null,
@@ -58,6 +58,6 @@ export const GET: RequestHandler = async (event) => {
 		}
 	);
 
-	// Ny bruker uten roller har ingen tilgang før systemansvarlig har tildelt rolle.
+	// A new user without roles has no access until an administrator assigns one.
 	redirect(303, result.roles.length === 0 ? '/ingen-tilgang' : result.returnTo);
 };

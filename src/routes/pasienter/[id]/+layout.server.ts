@@ -11,12 +11,13 @@ import { canEmergencyAccess } from '$srv/authz/roles';
 import { fhirClient } from '$srv/fhir/client';
 
 /**
- * Rammen rundt én pasientjournal.
+ * The frame around a single patient record.
  *
- * Når brukeren mangler tjenstlig behov, vises ikke en vanlig feilside: brukeren
- * får se at pasienten finnes, og kan be om nødrettstilgang med begrunnelse.
- * Det er dette som gjør sperringen håndterbar i akutte situasjoner uten at
- * hovedregelen svekkes - forsøket logges uansett utfall.
+ * When the user lacks a legitimate need, no ordinary error page is shown: the
+ * user gets to see that the patient exists, and can ask for emergency access
+ * with a justification. This is what makes the restriction manageable in acute
+ * situations without weakening the main rule - the attempt is logged whatever
+ * the outcome.
  */
 export const load: LayoutServerLoad = async (event) => {
 	const ctx = event.locals.auth;
@@ -48,8 +49,8 @@ export const load: LayoutServerLoad = async (event) => {
 		)
 	]);
 
-	// Navnet vises i nødrettsdialogen selv uten tilgang til journalinnholdet,
-	// slik at brukeren kan kontrollere at hen ber om tilgang til riktig person.
+	// The name is shown in the emergency-access dialog even without access to the
+	// record content, so the user can check they are asking for the right person.
 	let minimaltName: string | null = null;
 	if (!patient && nektet) {
 		const raw = await fhirClient.read('Patient', patientId).catch(() => null);

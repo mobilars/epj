@@ -8,15 +8,15 @@ import { log } from '$srv/audit';
 import { rateLimit } from '$srv/http';
 
 /**
- * Pålogging.
+ * Sign-in.
  *
- * HelseID er hovedveien inn. Den lokale påloggingen med brukernavn, passord og
- * engangskode er en testmekanisme, og styres av `EPJ_TESTINNLOGGING`. I
- * produksjon med HelseID skal den være avslått.
+ * HelseID is the main way in. Local sign-in with username, password and
+ * one-time code is a test mechanism, governed by `EPJ_TESTINNLOGGING`. In
+ * production with HelseID it must be turned off.
  */
 
 function trygtReturnTo(returnTo: string | null): string {
-	// Kun interne stier, aldri absolutte URL-er: hindrer åpen omdirigering.
+	// Internal paths only, never absolute URLs: prevents open redirection.
 	if (!returnTo || !returnTo.startsWith('/') || returnTo.startsWith('//')) return '/';
 	return returnTo;
 }
@@ -71,7 +71,7 @@ export const actions: Actions = {
 			requestId: event.locals.requestId
 		};
 
-		// Egen teller per brukernavn, i tillegg til IP-grensen i hooks.
+		// A separate counter per username, on top of the IP limit in hooks.
 		const limit = await rateLimit(
 			`login:${username.toLowerCase()}`,
 			config.security.rateLimit.loginPerUser,
@@ -100,7 +100,7 @@ export const actions: Actions = {
 			case 'feil-passord':
 			case 'ukjent-bruker':
 				await log({ type: 'login', subtype: 'passord', action: 'E', outcome: '4', outcomeDescription: 'Feil brukernavn eller passord' }, actor);
-				// Samme melding uansett årsak - vi avslører ikke om brukeren finnes.
+				// The same message whatever the cause - we do not reveal whether the user exists.
 				return response(401, { error: 'Feil brukernavn, passord eller engangskode.', username });
 			case 'ok': {
 				await createSession(

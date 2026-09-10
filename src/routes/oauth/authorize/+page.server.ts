@@ -9,11 +9,11 @@ import { fhirClient } from '$srv/fhir/client';
 import type { FhirResource } from '$srv/fhir/types';
 
 /**
- * Autorisasjonsendepunktet med samtykkedialog.
+ * The authorisation endpoint with the consent dialog.
  *
- * Brukeren må være innlogget i journalen. Deretter vises nøyaktig hva appen ber
- * om tilgang til, oversatt til norsk, og hvilken pasient tilgangen gjelder.
- * Det brukeren godkjenner kan aldri overstige det rollen tillater.
+ * The user must be signed in to the record. Then exactly what the app asks
+ * access to is shown, translated into Norwegian, and which patient the access
+ * concerns. What the user approves can never exceed what the role permits.
  */
 
 function pasientnavn(p: FhirResource | null): string | null {
@@ -39,14 +39,14 @@ export const load: PageServerLoad = async (event) => {
 		error(400, { message: `${validation.error}: ${validation.description}`, code: validation.error });
 	}
 
-	// Krever innlogget bruker i journalen.
+	// Requires a signed-in user in the record.
 	if (!event.locals.auth || event.locals.auth.mate !== 'session') {
 		const returnTo = `${event.url.pathname}${event.url.search}`;
 		redirect(303, `/logg-inn?retur=${encodeURIComponent(returnTo)}`);
 	}
 	const ctx = event.locals.auth;
 
-	// Launch-kontekst fra journalen (EHR launch).
+	// Launch context from the record (EHR launch).
 	let launch = { patientId: null as string | null, encounterId: null as string | null, intent: null as string | null };
 	if (validation.request.launch) {
 		const forbrukt = await consumeLaunch(validation.request.launch, validation.client.client_id, ctx.userId as string);
@@ -56,8 +56,8 @@ export const load: PageServerLoad = async (event) => {
 		launch = { patientId: forbrukt.patientId ?? null, encounterId: forbrukt.encounterId ?? null, intent: forbrukt.intent ?? null };
 	}
 
-	// Standalone launch der appen ber om pasientkontekst uten EHR-launch:
-	// pasienten velges i neste steg av brukeren selv.
+	// Standalone launch where the app asks for patient context without an EHR
+	// launch: the patient is chosen by the user in the next step.
 	const scopeList = validation.request.scope.split(/\s+/).filter(Boolean);
 	const innsnevret = narrowIn(validation.request.scope, validation.client.allowed_scopes, scopesForRoles(ctx.roles));
 	const rejected = scopeList.filter((s) => !innsnevret.split(/\s+/).includes(s));
@@ -116,7 +116,7 @@ export const actions: Actions = {
 			return fail(400, { error: 'Ugyldig klient eller redirect_uri' });
 		}
 
-		// Snevres inn på nytt på serversiden: skjemaet er ikke å stole på.
+		// Narrowed again server-side: the form is not to be trusted.
 		const allowed = narrowIn(scope, client.allowed_scopes, scopesForRoles(ctx.roles));
 		if (!allowed) return fail(400, { error: 'Ingen av de forespurte tilgangene er tillatt for din rolle' });
 

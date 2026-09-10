@@ -15,8 +15,8 @@
 		requireIsOneTimeCode: boolean;
 	};
 
-	// Feil fra nødrettshandlingen kommer tilbake som spørringsparameter, siden
-	// handlingen ligger på en egen rute og ikke kan levere `form` til layouten.
+	// Errors from the emergency-access action come back as a query parameter,
+	// since the action lives on its own route and cannot deliver `form` to the layout.
 	const emergencyAccessError = $derived(page.url.searchParams.get('nodrettFeil'));
 
 	const faner = $derived([

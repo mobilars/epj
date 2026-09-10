@@ -2,7 +2,7 @@ import type { RequestHandler } from './$types';
 import { authenticateClient } from '$srv/auth/clients';
 import { introspiser } from '$srv/auth/tokens';
 
-/** RFC 7662. Kun autentiserte klienter kan slå opp tokens. */
+/** RFC 7662. Only authenticated clients may look up tokens. */
 export const POST: RequestHandler = async (event) => {
 	const form = new URLSearchParams(await event.request.text());
 	const auth = await authenticateClient(form, event.request.headers.get('authorization'));

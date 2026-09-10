@@ -4,7 +4,7 @@ import { patientRecord, resources } from '$srv/fhir/internal';
 import { formatsDate, klinisksStatus, codeText, codeValue } from '$srv/fhir/display';
 import type { FhirResource } from '$srv/fhir/types';
 
-/** Klinisk oversiktsbilde: diagnoser, legemidler, allergier, siste målinger og notater. */
+/** Clinical overview: diagnoses, medicines, allergies, latest measurements and notes. */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	const parent = await event.parent();

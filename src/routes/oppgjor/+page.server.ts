@@ -5,7 +5,7 @@ import { forhandsvis, generateSettlement, listSettlement, sendSettlement } from 
 import { listCard } from '$srv/integrations/helfo/billing';
 import { oreToKroner } from '$srv/integrations/helfo/tariffs';
 
-/** Oppgjør mot Helfo: forhåndsvisning, generering og innsending. */
+/** Settlement towards Helfo: preview, generation and submission. */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx) redirect(303, `/logg-inn?retur=${encodeURIComponent(event.url.pathname)}`);
