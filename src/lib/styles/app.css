@@ -239,6 +239,43 @@ tbody tr:hover { background: var(--flate-2); }
 .topplinje .hoyre-del { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem; }
 
 main { padding: 1.25rem; max-width: 1400px; width: 100%; margin: 0 auto; flex: 1; }
+/* The record is the working surface: wide tables, and a panel beside it. */
+main.bred { max-width: none; }
+
+/* Record content with the quick-task panel beside it. The panel drops below
+   the content on a narrow screen rather than squeezing both. */
+.journalflate { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr) 22rem; align-items: start; }
+.journalinnhold { min-width: 0; }
+.hurtigpanel { position: sticky; top: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+.hurtigpanel h2 { font-size: 1rem; margin-top: 0; }
+.hurtigpanel textarea { width: 100%; }
+.snarveier { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+@media (max-width: 1100px) {
+  .journalflate { grid-template-columns: minmax(0, 1fr); }
+  .hurtigpanel { position: static; }
+}
+
+/* App entries in the main menu are buttons, because starting one is a POST
+   that carries the patient context. They must not look different from the
+   links beside them. */
+.menyskjema { display: inline; }
+.topplinje .menylenke,
+.nedtrekk-panel .menylenke {
+  background: none; border: none; color: #fff; font: inherit; font-weight: 500;
+  padding: 0.3rem 0.5rem; border-radius: 4px; cursor: pointer;
+}
+.topplinje .menylenke:hover, .topplinje .menylenke[aria-expanded='true'] { background: rgb(255 255 255 / 15%); }
+.nedtrekk-panel .menylenke, .nedtrekk-panel a {
+  color: var(--tekst); text-align: left; width: 100%; text-decoration: none; padding: 0.4rem 0.55rem;
+}
+.nedtrekk-panel .menylenke:hover, .nedtrekk-panel a:hover { background: var(--flate-2); }
+.nedtrekk { position: relative; display: inline-block; }
+.nedtrekk-panel {
+  position: absolute; top: 100%; left: 0; z-index: 20; min-width: 14rem;
+  display: flex; flex-direction: column; gap: 0.15rem; padding: 0.35rem;
+  background: var(--flate); border: 1px solid var(--kant); border-radius: 6px;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 18%);
+}
 .smal { max-width: 460px; margin: 3rem auto; }
 
 .miljobanner {

@@ -12,6 +12,7 @@
 		blocked: boolean;
 		canBeAboutEmergencyAccess: boolean;
 		canUtlevere: boolean;
+		canSkrive: boolean;
 		requireIsOneTimeCode: boolean;
 	};
 
@@ -60,7 +61,52 @@
 		{/each}
 	</nav>
 
-	{@render children()}
+	<div class="journalflate">
+		<div class="journalinnhold">
+			{@render children()}
+		</div>
+
+		<!--
+			The panel follows the record on every tab. Writing the note is what a
+			consultation actually consists of, and having to leave the page you are
+			reading in order to write it is the wrong way round. The form posts to
+			the notes action, which is the same one the Journalnotater tab uses -
+			there is no second way into the record.
+		-->
+		<aside class="hurtigpanel" aria-label="Hurtighandlinger">
+			{#if data.canSkrive}
+				<section class="kort">
+					<h2>Nytt notat</h2>
+					<form method="POST" action="/pasienter/{data.patientId}/notater?/newValue">
+						<div class="felt">
+							<label for="hurtig-subjektivt">Subjektivt</label>
+							<textarea id="hurtig-subjektivt" name="subjektivt" rows="3"></textarea>
+						</div>
+						<div class="felt">
+							<label for="hurtig-objektivt">Objektivt</label>
+							<textarea id="hurtig-objektivt" name="objektivt" rows="3"></textarea>
+						</div>
+						<div class="felt">
+							<label for="hurtig-vurdering">Vurdering og plan</label>
+							<textarea id="hurtig-vurdering" name="vurdering" rows="3"></textarea>
+						</div>
+						<button type="submit" class="primar">Lagre notat</button>
+					</form>
+				</section>
+			{/if}
+
+			<section class="kort">
+				<h2>Snarveier</h2>
+				<ul class="snarveier">
+					<li><a href="/pasienter/{data.patientId}/notater">Alle journalnotater</a></li>
+					<li><a href="/pasienter/{data.patientId}/legemidler">Legemidler og resepter</a></li>
+					<li><a href="/pasienter/{data.patientId}/meldinger">Send melding eller henvisning</a></li>
+					<li><a href="/pasienter/{data.patientId}/oppgjor">Regningskort</a></li>
+					<li><a href="/pasienter/{data.patientId}/apper">Apper</a></li>
+				</ul>
+			</section>
+		</aside>
+	</div>
 {:else}
 	<h1>Ingen tilgang til journalen</h1>
 	<div class="varsel varsel-advarsel" role="alert">{data.nektet}</div>

@@ -26,12 +26,15 @@ export interface OAuthClient {
 	databehandleravtale: string | null;
 	/** URL the record sends the user to on EHR launch. */
 	launch_url: string | null;
+	/** Sits directly in the main menu rather than under the apps dropdown. */
+	in_main_menu: boolean;
 	status: string;
 	created_at: string;
 }
 
 const FIELD = `client_id, tenant_id, name, type, client_category, secret_hash, jwks, jwks_uri, redirect_uris,
-	allowed_scopes, grant_types, require_pkce, require_consent, logo_url, databehandleravtale, launch_url, status, created_at`;
+	allowed_scopes, grant_types, require_pkce, require_consent, logo_url, databehandleravtale, launch_url,
+	in_main_menu, status, created_at`;
 
 export async function getClient(clientId: string): Promise<OAuthClient | null> {
 	return one<OAuthClient>(`SELECT ${FIELD} FROM oauth_client WHERE client_id = $1 AND tenant_id = $2`, [
@@ -57,6 +60,7 @@ export interface NewClient {
 	logoUrl?: string;
 	databehandleravtale?: string;
 	launchUrl?: string;
+	inMainMenu?: boolean;
 	createdOf?: string;
 }
 
@@ -65,19 +69,28 @@ export async function registerClient(inValue: NewClient): Promise<{ client: OAut
 	const secret = inValue.type === 'confidential' && !inValue.jwks && !inValue.jwksUri ? newToken(32) : undefined;
 	await exec(
 		`INSERT INTO oauth_client (client_id, tenant_id, name, type, client_category, secret_hash, jwks, jwks_uri,
-			redirect_uris, allowed_scopes, grant_types, require_pkce, logo_url, databehandleravtale, launch_url, created_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+			redirect_uris, allowed_scopes, grant_types, require_pkce, logo_url, databehandleravtale, launch_url,
+			in_main_menu, created_by)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
 		[
 			clientId, requireTenant().id, inValue.name, inValue.type, inValue.category, secret ? hashPassword(secret) : null,
 			inValue.jwks ? JSON.stringify(inValue.jwks) : null, inValue.jwksUri ?? null,
 			JSON.stringify(inValue.redirectUris), JSON.stringify(inValue.scopes),
 			JSON.stringify(inValue.grantTypes ?? (inValue.category === 'backend' ? ['client_credentials'] : ['authorization_code', 'refresh_token'])),
-			inValue.type === 'public', inValue.logoUrl ?? null, inValue.databehandleravtale ?? null, inValue.launchUrl ?? null, inValue.createdOf ?? null
+			inValue.type === 'public', inValue.logoUrl ?? null, inValue.databehandleravtale ?? null, inValue.launchUrl ?? null,
+			inValue.inMainMenu ?? false, inValue.createdOf ?? null
 		]
 	);
 	const client = await getClient(clientId);
 	if (!client) throw new Error('Klarte ikke å registrere klienten');
 	return { client, secret };
+}
+
+/** Places an app in the main menu, or takes it out again. */
+export async function setInMainMenu(clientId: string, inMainMenu: boolean): Promise<void> {
+	await exec('UPDATE oauth_client SET in_main_menu = $2 WHERE client_id = $1 AND tenant_id = $3', [
+		clientId, inMainMenu, requireTenant().id
+	]);
 }
 
 export async function setKlientstatus(clientId: string, status: 'aktiv' | 'sperret'): Promise<void> {

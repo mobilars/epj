@@ -61,6 +61,10 @@
 		<div class="rad">
 			<div style="flex:1 1 18rem"><label for="launchUrl">Launch-URL (EHR launch)</label><input id="launchUrl" name="launchUrl" placeholder="https://app.example/launch" /></div>
 		</div>
+		<label class="avkryssing">
+			<input type="checkbox" name="iHovedmeny" value="ja" />
+			Vis appen i hovedmenyen (ellers under «Apper»)
+		</label>
 		<div class="felt"><label for="jwks">JWKS (JSON)</label><textarea id="jwks" name="jwks" placeholder={'{"keys":[...]}'}></textarea></div>
 		<button type="submit" class="primar">Registrer</button>
 	</form>
@@ -74,6 +78,7 @@
 				<span class="merke">{a.category}</span>
 				<span class="merke">{a.type}</span>
 				<span class="merke" class:merke-ok={a.status === 'aktiv'} class:merke-fare={a.status !== 'aktiv'}>{a.status}</span>
+				{#if a.inMainMenu}<span class="merke merke-info">I hovedmenyen</span>{/if}
 			</span>
 		</div>
 		<p class="mono svak">{a.clientId}</p>
@@ -94,6 +99,17 @@
 			<ul>{#each a.scopes as s (s.scope)}<li><span class="mono">{s.scope}</span> — {s.description}</li>{/each}</ul>
 		</details>
 		<div class="rad">
+			{#if a.launchUrl}
+				<!-- An app used in most consultations belongs in the main menu, where it
+				     starts in one press with the open patient already in context. -->
+				<form method="POST" action="?/hovedmeny">
+					<input type="hidden" name="clientId" value={a.clientId} />
+					<input type="hidden" name="iHovedmeny" value={a.inMainMenu ? 'nei' : 'ja'} />
+					<button type="submit" class="liten">
+						{a.inMainMenu ? 'Ta ut av hovedmenyen' : 'Vis i hovedmenyen'}
+					</button>
+				</form>
+			{/if}
 			<form method="POST" action="?/status">
 				<input type="hidden" name="clientId" value={a.clientId} />
 				<input type="hidden" name="status" value={a.status === 'aktiv' ? 'sperret' : 'aktiv'} />

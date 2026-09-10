@@ -68,6 +68,7 @@ export const load: LayoutServerLoad = async (event) => {
 		restrictions: restrictions.map((s) => ({ scope_extent: s.scope_extent, justification: s.justification, registered_at: s.registered_at })),
 		canBeAboutEmergencyAccess: canEmergencyAccess(ctx.roles),
 		canUtlevere: ctx.permissions.has('journal:utlever'),
+		canSkrive: ctx.permissions.has('journal:skriv'),
 		requireIsOneTimeCode: config.security.requireMfa && ctx.amr !== 'helseid'
 	};
 };
