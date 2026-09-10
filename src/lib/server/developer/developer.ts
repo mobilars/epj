@@ -75,6 +75,19 @@ export async function requestLoginCode(email: string, ip: string | null): Promis
 		);
 	});
 
+	/**
+	 * In a test environment the code also goes to the server log.
+	 *
+	 * Not in production, and never to the page: the whole point of the code is
+	 * that it reaches the address and nowhere else. But an installation where
+	 * demo passwords are already printed on the sign-in page is one where mail
+	 * may not be configured at all, and a portal nobody can sign in to is not
+	 * testable.
+	 */
+	if (config.testLogin.aktivert) {
+		console.log(`[utviklerportal] påloggingskode for ${address}: ${code}`);
+	}
+
 	await sendEmail({
 		to: address,
 		subject: `Påloggingskode ${code}`,

@@ -23,7 +23,8 @@
 		"build:verktoy": "vite build --config scripts/vite.verktoy.config.ts",
 		"seed:helseid": "vite-node -c scripts/vite.config.ts scripts/seed-helseid-test-users.ts",
 		"register:apper": "vite-node -c scripts/vite.config.ts scripts/register-demo-app.ts",
-		"royktest": "node scripts/royk-test.mjs"
+		"royktest": "node scripts/royk-test.mjs",
+		"test:epost": "vite-node -c scripts/vite.config.ts scripts/test-epost.ts"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.63.0",
