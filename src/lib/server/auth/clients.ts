@@ -30,13 +30,15 @@ export interface OAuthClient {
 	in_main_menu: boolean;
 	/** `ingen`, `hoved` (the wide surface) or `side` (the narrow panel). */
 	placement: string;
+	/** Route segment of the record tab this app answers for, or null. */
+	replaces_tab: string | null;
 	status: string;
 	created_at: string;
 }
 
 const FIELD = `client_id, tenant_id, name, type, client_category, secret_hash, jwks, jwks_uri, redirect_uris,
 	allowed_scopes, grant_types, require_pkce, require_consent, logo_url, databehandleravtale, launch_url,
-	in_main_menu, placement, status, created_at`;
+	in_main_menu, placement, replaces_tab, status, created_at`;
 
 export async function getClient(clientId: string): Promise<OAuthClient | null> {
 	return one<OAuthClient>(`SELECT ${FIELD} FROM oauth_client WHERE client_id = $1 AND tenant_id = $2`, [
@@ -135,6 +137,31 @@ export async function setPlacement(clientId: string, placement: Placement): Prom
 }
 
 /** The app holding a given place, if any. */
+/**
+ * Binds an app to one of the record's tabs, or frees it.
+ *
+ * One app per tab: two apps claiming the same tab is not a state that can be
+ * rendered, so taking a tab takes it from whoever had it.
+ */
+export async function setReplacesTab(clientId: string, tab: string | null): Promise<void> {
+	const tenantId = requireTenant().id;
+	await transaction(async () => {
+		if (tab) {
+			await exec('UPDATE oauth_client SET replaces_tab = NULL WHERE tenant_id = $1 AND replaces_tab = $2', [tenantId, tab]);
+		}
+		await exec('UPDATE oauth_client SET replaces_tab = $2 WHERE client_id = $1 AND tenant_id = $3', [clientId, tab, tenantId]);
+	});
+}
+
+/** The apps that have taken over a tab, by tab name. */
+export async function clientsByTab(): Promise<Map<string, OAuthClient>> {
+	const rows = await query<OAuthClient>(
+		`SELECT ${FIELD} FROM oauth_client WHERE tenant_id = $1 AND status = 'aktiv' AND replaces_tab IS NOT NULL`,
+		[requireTenant().id]
+	);
+	return new Map(rows.map((c) => [c.replaces_tab as string, c]));
+}
+
 export async function clientAtPlacement(placement: Placement): Promise<OAuthClient | null> {
 	if (placement === 'ingen') return null;
 	return one<OAuthClient>(

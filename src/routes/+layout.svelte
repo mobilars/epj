@@ -86,10 +86,7 @@
 
 			{#each mainMenuApps as app (app.clientId)}
 				{#if patientId}
-					<form method="POST" action="/pasienter/{patientId}/apper?/start" class="menyskjema">
-						<input type="hidden" name="clientId" value={app.clientId} />
-						<button type="submit" class="menylenke">{app.name}</button>
-					</form>
+					<a href="/pasienter/{patientId}/apper/{app.clientId}">{app.name}</a>
 				{:else}
 					<a href="/pasienter" title="Velg en pasient først">{app.name}</a>
 				{/if}

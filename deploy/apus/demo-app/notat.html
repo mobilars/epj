@@ -66,7 +66,7 @@
 				const name = patient?.body?.name?.[0];
 				const shown = [name?.given?.join(' '), name?.family].filter(Boolean).join(' ');
 				const earlier = smart.patientId
-					? smart.entries(await smart.read(`Composition?patient=${smart.patientId}&_count=3&_sort=-date`))
+					? smart.entries(await smart.read(`Composition?patient=${smart.patientId}&_count=8&_sort=-date`))
 					: [];
 
 				el(`
@@ -75,6 +75,7 @@
 						<span class="svak liten">${esc(shown)}</span>
 					</div>
 					${message}
+					<div class="bred">
 					<form id="skjema">
 						<label for="subjektivt">Subjektivt</label>
 						<textarea id="subjektivt" rows="3"></textarea>
@@ -89,17 +90,28 @@
 						<p style="margin-top:0.7rem"><button type="submit" id="lagre">Lagre notat</button></p>
 					</form>
 
+					<div>
 					<h2>Siste notater</h2>
 					${
 						earlier.length
 							? `<table><tbody>${earlier
 									.map(
-										(c) =>
-											`<tr><td>${esc(c.title ?? 'Notat')}</td><td class="svak">${esc((c.date ?? '').slice(0, 16).replace('T', ' '))}</td></tr>`
+										(c) => `<tr><td>
+											<strong>${esc(c.title ?? 'Notat')}</strong>
+											<div class="svak liten">${esc((c.date ?? '').slice(0, 16).replace('T', ' '))}</div>
+											<div class="bare-bred liten">${esc(
+												(c.section ?? [])
+													.map((k) => `${k.title}: ${(k.text?.div ?? '').replace(/<[^>]+>/g, '').trim()}`)
+													.join(' · ')
+													.slice(0, 220)
+											)}</div>
+										</td></tr>`
 									)
 									.join('')}</tbody></table>`
 							: '<p class="svak liten">Ingen notater ennå.</p>'
 					}
+					</div>
+					</div>
 				`);
 
 				document.getElementById('skjema').addEventListener('submit', save);

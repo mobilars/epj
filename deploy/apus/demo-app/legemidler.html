@@ -92,6 +92,8 @@
 							: ''
 					}
 
+					<div class="bred">
+					<div>
 					${
 						active.length
 							? `<table><tbody>${active
@@ -107,7 +109,9 @@
 									.join('')}</tbody></table>`
 							: '<p class="svak liten">Ingen legemidler i bruk.</p>'
 					}
+					</div>
 
+					<div>
 					<h2>Legg til</h2>
 					<form id="skjema">
 						<div class="rad">
@@ -123,6 +127,8 @@
 						</p>
 					</form>
 
+					</div>
+					</div>
 					${
 						ended.length
 							? `<h2>Avsluttet</h2>

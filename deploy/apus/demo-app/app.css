@@ -105,3 +105,25 @@ tr:first-child td { border-top: none; }
 
 pre { background: var(--flate-2); padding: 0.6rem; border-radius: 5px; overflow-x: auto; font-size: 0.78rem; margin: 0; }
 details summary { cursor: pointer; font-size: 0.86rem; color: var(--svak); }
+
+/*
+ * Wide and narrow are the same app.
+ *
+ * These pages are shown in two places: a panel about 22rem across beside the
+ * record, and the full width of a tab. Building two apps for that would mean
+ * two things to keep in step, so the layout answers to the width it is given.
+ * The frame reports its own width, so a media query here is about the panel,
+ * not the screen.
+ */
+@media (min-width: 46rem) {
+	body { padding: 1.1rem 1.4rem 1.6rem; }
+	h1 { font-size: 1.3rem; }
+	.bred { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.2rem; align-items: start; }
+	.bred > * { min-width: 0; }
+	.rad > * { flex: 1 1 12rem; }
+}
+
+/* Only in the panel: keep long lists from making the frame scroll for ever. */
+@media (max-width: 45.99rem) {
+	.bare-bred { display: none; }
+}

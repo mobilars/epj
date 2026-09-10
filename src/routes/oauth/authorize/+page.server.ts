@@ -5,6 +5,7 @@ import { errorRedirect, consumeLaunch, createAuthorisationCode, validateAuthoris
 import { describeScope, narrowIn } from '$srv/authz/scopes';
 import { scopesForRoles } from '$srv/authz/roles';
 import { log } from '$srv/audit';
+import { alreadyConsented, rememberConsent } from '$srv/auth/consent';
 import { fhirClient } from '$srv/fhir/client';
 import type { FhirResource } from '$srv/fhir/types';
 
@@ -61,6 +62,58 @@ export const load: PageServerLoad = async (event) => {
 	const scopeList = validation.request.scope.split(/\s+/).filter(Boolean);
 	const innsnevret = narrowIn(validation.request.scope, validation.client.allowed_scopes, scopesForRoles(ctx.roles));
 	const rejected = scopeList.filter((s) => !innsnevret.split(/\s+/).includes(s));
+
+	/**
+	 * Whether to ask at all.
+	 *
+	 * Two ways not to: the practice has granted on everyone's behalf for an app
+	 * it placed in the record itself, or this user has agreed to these scopes
+	 * before. Anything the user has not already granted brings the dialog back,
+	 * which is when there is something to read.
+	 */
+	const alreadyGranted =
+		!validation.client.require_consent ||
+		(await alreadyConsented(ctx.userId as string, validation.client.client_id, innsnevret));
+
+	if (alreadyGranted && innsnevret) {
+		const code = await createAuthorisationCode({
+			clientId: validation.client.client_id,
+			userId: ctx.userId as string,
+			redirectUri: validation.request.redirect_uri,
+			scope: innsnevret,
+			codeChallenge: validation.request.code_challenge ?? '',
+			codeChallengeMethod: validation.request.code_challenge_method ?? 'S256',
+			nonce: validation.request.nonce ?? null,
+			launch: { patientId: launch.patientId, encounterId: launch.encounterId }
+		});
+		await log(
+			{
+				type: 'login',
+				subtype: 'authorize',
+				action: 'E',
+				outcome: '0',
+				patientId: launch.patientId,
+				details: {
+					client_id: validation.client.client_id,
+					scope: innsnevret,
+					grunnlag: validation.client.require_consent ? 'tidligere samtykke' : 'godkjent av virksomheten'
+				}
+			},
+			{
+				userId: ctx.userId,
+				actorRef: ctx.actorRef,
+				name: ctx.name,
+				role: ctx.roles[0] ?? null,
+				clientId: validation.client.client_id,
+				ip: event.locals.clientIp,
+				requestId: event.locals.requestId
+			}
+		);
+		const url = new URL(validation.request.redirect_uri);
+		url.searchParams.set('code', code);
+		if (validation.request.state) url.searchParams.set('state', validation.request.state);
+		redirect(303, `/oauth/videresend?til=${encodeURIComponent(url.toString())}`);
+	}
 
 	let patient: FhirResource | null = null;
 	if (launch.patientId) {
@@ -130,6 +183,9 @@ export const actions: Actions = {
 			nonce,
 			launch: { patientId, encounterId }
 		});
+
+		// Remembered, so the same question is not asked on the next patient.
+		await rememberConsent(ctx.userId, clientId, allowed);
 
 		await log(
 			{ type: 'login', subtype: 'authorize', action: 'E', outcome: '0', patientId, details: { client_id: clientId, scope: allowed } },

@@ -15,7 +15,14 @@
 import { exec } from '../src/lib/server/db';
 import { getTenant } from '../src/lib/server/tenant/tenant';
 import { requireTenant, withTenant } from '../src/lib/server/tenant/context';
-import { listClients, registerClient, setPlacement, setRequireConsent, type Placement } from '../src/lib/server/auth/clients';
+import {
+	listClients,
+	registerClient,
+	setPlacement,
+	setReplacesTab,
+	setRequireConsent,
+	type Placement
+} from '../src/lib/server/auth/clients';
 
 const READ = 'openid fhirUser launch launch/patient online_access patient/Patient.rs';
 
@@ -25,6 +32,8 @@ interface App {
 	scopes: string[];
 	placement: Placement;
 	inMainMenu?: boolean;
+	/** Record tab this app answers for, by route segment. */
+	replacesTab?: string;
 	note: string;
 }
 
@@ -34,6 +43,8 @@ const APPS: App[] = [
 		host: 'https://notat.apps.apus.no',
 		scopes: `${READ} patient/Composition.rs patient/Composition.c patient/Encounter.c patient/Condition.c`.split(' '),
 		placement: 'side',
+		// Narrow in the panel, wide in the tab - one app, two shapes.
+		replacesTab: 'notater',
 		note: 'Journalens eget notatfelt, bygget som app.'
 	},
 	{
@@ -49,6 +60,7 @@ const APPS: App[] = [
 		scopes: `${READ} patient/MedicationRequest.rs patient/MedicationRequest.cu patient/AllergyIntolerance.rs`.split(' '),
 		placement: 'ingen',
 		inMainMenu: true,
+		replacesTab: 'legemidler',
 		note: 'Legemiddellisten. Forskrivning går fortsatt gjennom SFM i journalen.'
 	},
 	{
@@ -82,7 +94,8 @@ async function ensure(app: App): Promise<string> {
 		await setPlacement(clientId, app.placement);
 		// An app the practice has placed opens on every patient. A consent dialog
 		// on every patient is not a decision anyone makes.
-		await setRequireConsent(clientId, app.placement === 'ingen');
+		await setRequireConsent(clientId, app.placement === 'ingen' && !app.replacesTab);
+		await setReplacesTab(clientId, app.replacesTab ?? null);
 		return `oppdatert  ${clientId}`;
 	}
 
@@ -103,7 +116,8 @@ async function ensure(app: App): Promise<string> {
 		tenantId
 	]);
 	await setPlacement(client.client_id, app.placement);
-	await setRequireConsent(client.client_id, app.placement === 'ingen');
+	await setRequireConsent(client.client_id, app.placement === 'ingen' && !app.replacesTab);
+	await setReplacesTab(client.client_id, app.replacesTab ?? null);
 	return `registrert ${client.client_id}`;
 }
 

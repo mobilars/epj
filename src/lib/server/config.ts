@@ -153,6 +153,22 @@ export const config = {
 		showDemoUsers: bool('EPJ_SHOW_DEMO_USERS', process.env.NODE_ENV !== 'production')
 	},
 
+	/**
+	 * Outgoing email.
+	 *
+	 * Used for the developer portal's sign-in codes. The record itself sends no
+	 * email about patients - a message about a patient belongs in the message
+	 * exchange over Norsk helsenett, not in ordinary mail.
+	 */
+	email: {
+		host: env.EPJ_SMTP_HOST ?? '',
+		port: int('EPJ_SMTP_PORT', 587),
+		user: env.EPJ_SMTP_USER ?? '',
+		password: env.EPJ_SMTP_PASSWORD ?? '',
+		from: env.EPJ_SMTP_FROM ?? '',
+		fromName: env.EPJ_SMTP_FROM_NAME ?? 'EPJ utviklerportal'
+	},
+
 	audit: {
 		/** Health Personnel Act / patient records regulation: logs must be kept for at least 10 years. */
 		retentionYears: int('EPJ_AUDIT_RETENTION_YEARS', 10)

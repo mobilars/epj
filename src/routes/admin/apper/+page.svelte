@@ -79,6 +79,7 @@
 				<span class="merke">{a.type}</span>
 				<span class="merke" class:merke-ok={a.status === 'aktiv'} class:merke-fare={a.status !== 'aktiv'}>{a.status}</span>
 				{#if a.inMainMenu}<span class="merke merke-info">I hovedmenyen</span>{/if}
+				{#if !a.requireConsent}<span class="merke merke-ok">Godkjent av virksomheten</span>{/if}
 			</span>
 		</div>
 		<p class="mono svak">{a.clientId}</p>
@@ -100,6 +101,15 @@
 		</details>
 		<div class="rad">
 			{#if a.launchUrl}
+				<form method="POST" action="?/samtykke" class="rad">
+					<input type="hidden" name="clientId" value={a.clientId} />
+					<input type="hidden" name="krevSamtykke" value={a.requireConsent ? 'nei' : 'ja'} />
+					<button type="submit" class="liten">
+						{a.requireConsent
+							? 'Godkjenn på vegne av virksomheten'
+							: 'Krev at hver bruker godkjenner'}
+					</button>
+				</form>
 				<form method="POST" action="?/plassering" class="rad">
 					<input type="hidden" name="clientId" value={a.clientId} />
 					<select name="plassering" aria-label="Plassering i journalen">

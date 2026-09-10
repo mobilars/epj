@@ -9,7 +9,7 @@ import { fhirBaseFor, requireTenant } from '$srv/tenant/context';
 import { config } from '$srv/config';
 import { canEmergencyAccess } from '$srv/authz/roles';
 import { fhirClient } from '$srv/fhir/client';
-import { clientAtPlacement, listClients } from '$srv/auth/clients';
+import { clientAtPlacement, clientsByTab, listClients } from '$srv/auth/clients';
 import { createLaunch } from '$srv/auth/oauth';
 import { SETTING, getSetting } from '$srv/auth/settings';
 
@@ -71,6 +71,7 @@ export const load: LayoutServerLoad = async (event) => {
 	 * The launch context is minted here rather than in the frame, so the app
 	 * receives an opaque `launch` exactly as it would if started any other way.
 	 */
+	const tabApps = await clientsByTab();
 	const [sideDefault, wideApp] = await Promise.all([
 		clientAtPlacement('side'),
 		clientAtPlacement('hoved')
@@ -93,6 +94,9 @@ export const load: LayoutServerLoad = async (event) => {
 	return {
 		patientId,
 		patient,
+		// A tab an app has taken over links to the app instead of the record's own
+		// page. The record keeps its page for whichever tabs no app answers for.
+		tabApps: Object.fromEntries([...tabApps].map(([tab, c]) => [tab, { name: c.name, clientId: c.client_id }])),
 		sidePanel: sideApp && sideUrl ? { name: sideApp.name, clientId: sideApp.client_id, url: sideUrl } : null,
 		widePanel: wideApp && wideUrl ? { name: wideApp.name, clientId: wideApp.client_id, url: wideUrl } : null,
 		nektet,

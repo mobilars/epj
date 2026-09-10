@@ -15,6 +15,7 @@
 		canBeAboutEmergencyAccess: boolean;
 		canUtlevere: boolean;
 		canSkrive: boolean;
+		tabApps: Record<string, { name: string; clientId: string }>;
 		sidePanel: PanelApp | null;
 		widePanel: PanelApp | null;
 		requireIsOneTimeCode: boolean;
@@ -24,14 +25,31 @@
 	// since the action lives on its own route and cannot deliver `form` to the layout.
 	const emergencyAccessError = $derived(page.url.searchParams.get('nodrettFeil'));
 
+	/**
+	 * A tab points at the app that has taken it over, if one has.
+	 *
+	 * The record keeps its own page for every tab no app answers for, so
+	 * removing an app leaves a working record rather than a hole.
+	 */
+	const fane = (segment: string, text: string) => {
+		const app = data.tabApps?.[segment];
+		return {
+			href: app
+				? `/pasienter/${data.patientId}/apper/${app.clientId}`
+				: `/pasienter/${data.patientId}${segment ? `/${segment}` : ''}`,
+			text,
+			app: Boolean(app)
+		};
+	};
+
 	const faner = $derived([
-		{ href: `/pasienter/${data.patientId}`, text: 'Oversikt' },
-		{ href: `/pasienter/${data.patientId}/notater`, text: 'Journalnotater' },
-		{ href: `/pasienter/${data.patientId}/legemidler`, text: 'Legemidler' },
-		{ href: `/pasienter/${data.patientId}/meldinger`, text: 'Meldinger' },
-		{ href: `/pasienter/${data.patientId}/oppgjor`, text: 'Oppgjør' },
-		{ href: `/pasienter/${data.patientId}/logg`, text: 'Innsynslogg' },
-		...(data.canUtlevere ? [{ href: `/pasienter/${data.patientId}/utlevering`, text: 'Utlevering' }] : [])
+		fane('', 'Oversikt'),
+		fane('notater', 'Journalnotater'),
+		fane('legemidler', 'Legemidler'),
+		fane('meldinger', 'Meldinger'),
+		fane('oppgjor', 'Oppgjør'),
+		fane('logg', 'Innsynslogg'),
+		...(data.canUtlevere ? [fane('utlevering', 'Utlevering')] : [])
 	]);
 
 	// The apps come from the root layout, and start straight from the tab bar
@@ -65,7 +83,7 @@
 	{/if}
 
 	<nav class="faner" aria-label="Journalfaner">
-		{#each faner as f (f.href)}
+		{#each faner as f (f.text)}
 			<a href={f.href} aria-current={page.url.pathname === f.href ? 'page' : undefined}>{f.text}</a>
 		{/each}
 
