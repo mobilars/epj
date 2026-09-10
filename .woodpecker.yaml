@@ -5,32 +5,56 @@
 # navnerommet `woodpecker`, og arbeidsmappen er et volum som følger med gjennom
 # hele kjøringen.
 #
+# CI bygger *ikke* containerbildet. Klyngen har tre noder på under 4 GB, og de
+# kjører også det denne CI-en skal teste. Et kaniko-bygg av dette prosjektet
+# trenger rundt 3,5 GB alene, og et byggetrinn som spiser opp noden det kjører
+# på gjør mer skade enn den tiden det sparer. Bildet bygges og publiseres
+# manuelt med `deploy/apus/bygg.sh`, som kjører byggejobben ferdig og rydder
+# etter seg.
+#
 # Rekkefølgen er valgt slik at det som feiler oftest, feiler først: typene, så
-# enhetstestene, så nettleseren, og til slutt bildet.
+# enhetstestene, så nettleseren.
+#
+# Alle steg har tak på minne og CPU. Uten tak er det ingenting som hindrer et
+# byggetrinn i å ta ned noden - og med den resten av klyngen.
 # ---------------------------------------------------------------------------
 when:
   - event: [push, pull_request, manual]
 
 variables:
   - &node node:22-alpine
-  - &register registry.container-registry.svc.cluster.local:5000/epj
-  # Testene skriver til databasen. Én instans per kjøring, kastes etterpå.
-  - &postgres_env
-    POSTGRES_USER: epj
-    POSTGRES_PASSWORD: epj
-    POSTGRES_DB: epj
+  # Felles miljø for testkjøringene. Nøkkelen er en testnøkkel og skal være det.
+  - &test_env
+    EPJ_DATA_KEY: ci-nokkel-kun-for-testkjoring-000000000
+    EPJ_ORG_HER_ID: '8000001'
+    EPJ_ORG_ORGNR: '994598759'
+    EPJ_INTEGRASJON_MODUS: mock
+    # Nettleserne til Playwright lastes bare ned der de faktisk brukes.
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+  - &lite_tak
+    kubernetes:
+      resources:
+        requests: {cpu: 250m, memory: 512Mi}
+        limits: {cpu: '1', memory: 1536Mi}
 
 services:
   postgres:
     image: postgres:16-alpine
-    environment: *postgres_env
+    environment:
+      POSTGRES_USER: epj
+      POSTGRES_PASSWORD: epj
+      POSTGRES_DB: epj
+    backend_options:
+      kubernetes:
+        resources:
+          requests: {cpu: 100m, memory: 128Mi}
+          limits: {cpu: 500m, memory: 512Mi}
 
 steps:
   typekontroll:
     image: *node
-    environment:
-      # Nettleserne til Playwright trengs ikke for typekontroll og bygg.
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    environment: *test_env
+    backend_options: *lite_tak
     commands:
       - npm ci
       - npm run check
@@ -39,12 +63,9 @@ steps:
   enhetstester:
     image: *node
     environment:
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      EPJ_DATA_KEY: ci-nokkel-kun-for-testkjoring-000000000
-      EPJ_ORG_HER_ID: '8000001'
-      EPJ_ORG_ORGNR: '994598759'
-      EPJ_INTEGRASJON_MODUS: mock
+      <<: *test_env
       EPJ_TEST_DATABASE_URL: postgres://epj:epj@postgres:5432/postgres
+    backend_options: *lite_tak
     commands:
       - npm ci
       - until nc -z postgres 5432; do sleep 1; done
@@ -53,49 +74,19 @@ steps:
   ende-til-ende:
     image: mcr.microsoft.com/playwright:v1.63.0-noble
     environment:
-      EPJ_DATA_KEY: ci-nokkel-kun-for-testkjoring-000000000
+      <<: *test_env
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '0'
       EPJ_BASE_URL: http://127.0.0.1:4173
-      EPJ_ORG_HER_ID: '8000001'
-      EPJ_ORG_ORGNR: '994598759'
-      EPJ_INTEGRASJON_MODUS: mock
       E2E_DATABASE_URL: postgres://epj:epj@postgres:5432/epj_e2e
-    commands:
-      - npm ci
-      - npx playwright test
-
-  bygg-bilde:
-    image: gcr.io/kaniko-project/executor:v1.23.2-debug
-    commands:
-      # `--compressed-caching=false` og `--snapshot-mode=redo` holder minnebruken
-      # nede. Uten dem blir kaniko drept av kjernen på et node_modules av denne
-      # størrelsen, lenge før bildet er ferdig.
-      - >-
-        /kaniko/executor
-        --context="$CI_WORKSPACE"
-        --dockerfile="$CI_WORKSPACE/docker/Dockerfile"
-        --destination="registry.container-registry.svc.cluster.local:5000/epj:$CI_COMMIT_SHA"
-        --destination="registry.container-registry.svc.cluster.local:5000/epj:latest"
-        --insecure
-        --skip-tls-verify
-        --compressed-caching=false
-        --snapshot-mode=redo
-    when:
-      - event: [push, manual]
-        branch: [main, master]
-
-  rull-ut:
-    image: bitnami/kubectl:1.33
-    # Tjenestekontoen har bare lov til å bytte image i navnerommet `epj`.
-    # Se deploy/apus/ci-rbac.yaml.
     backend_options:
       kubernetes:
-        serviceAccountName: epj-deployer
+        resources:
+          requests: {cpu: 500m, memory: 1Gi}
+          limits: {cpu: '1', memory: 2Gi}
     commands:
-      - kubectl -n epj set image deployment/epj epj=localhost:32000/epj:$CI_COMMIT_SHA
-      - kubectl -n epj rollout status deployment/epj --timeout=10m
-    when:
-      - event: [push, manual]
-        branch: [main, master]
+      - npm ci
+      - until nc -z postgres 5432; do sleep 1; done
+      - npx playwright test
 
   varsle-e-post:
     image: drillster/drone-email

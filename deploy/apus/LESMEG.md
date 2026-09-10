@@ -73,26 +73,28 @@ kubectl -n epj logs -f job/epj-seed        # TOTP-hemmelighetene skrives hit
 
 ## Bygg og utrulling
 
-CI bygger bildet og ruller det ut; se [`.woodpecker.yaml`](../../.woodpecker.yaml)
-og `ci-rbac.yaml`. Manuelt bygg uten Docker-motor lokalt, med kaniko i klyngen:
+Bildet bygges **ikke** i CI. Klyngen har tre noder på under 4 GB, og de kjører
+også det CI-en skal teste; et kaniko-bygg av dette prosjektet trenger rundt
+3,5 GB alene. [`.woodpecker.yaml`](../../.woodpecker.yaml) kjører derfor bare
+typekontroll, enhetstester og ende-til-ende - hvert steg med tak på minne og CPU.
+
+Bygg og utrulling gjøres når noen ser på:
 
 ```bash
-# Kildekoden inn på et volum
-kubectl -n woodpecker apply -f - <<'YAML'
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata: {name: epj-bygg, namespace: woodpecker}
-spec:
-  accessModes: [ReadWriteOnce]
-  storageClassName: microk8s-hostpath
-  resources: {requests: {storage: 6Gi}}
-YAML
-
-# ... last opp kildekoden, og kjør kaniko som podens egen kommando.
-# Kaniko pakker ut basisbildet over containerens rotfilsystem, og kan derfor
-# ikke kjøres med `kubectl exec` inn i en pod som sover: den river bort
-# filsystemet under prosessen som holder poden i live.
+deploy/apus/bygg.sh              # bygger HEAD, merker med kortsha og latest
+deploy/apus/bygg.sh --rull-ut    # og bytter image på deploymenten
 ```
+
+Skriptet setter opp et volum i navnerommet `woodpecker`, overfører kildekoden
+dit, og kjører kaniko som en jobb. To detaljer det er verdt å vite hvorfor:
+
+* **Bygget kjører i `woodpecker`, ikke i `epj`.** `epj` håndhever Pod Security
+  Standard `restricted`, og kaniko må være root for å pakke ut basisbildet.
+* **Kaniko kan ikke kjøres med `kubectl exec` inn i en pod som sover.** Den
+  pakker ut basisbildet over containerens eget rotfilsystem, og river dermed
+  bort filsystemet under prosessen som holder poden i live. Jobben dør med
+  exit 137, som ser ut som tom for minne, men ikke er det. Kilden må ligge på
+  volumet før kaniko starter, og kaniko må være podens egen kommando.
 
 ## Feilsøking
 
