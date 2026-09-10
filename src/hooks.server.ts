@@ -128,9 +128,12 @@ async function handleIContext(
 	 * embedded app runs in. Treating it as an API response gave it
 	 * `default-src 'none'` and no framing, and the app never got past consent.
 	 */
+	// The pages under /oauth that a person actually looks at. Everything else
+	// there answers a machine.
+	const oauthPages = ['/oauth/authorize', '/oauth/videresend'];
 	const isFhirApi =
 		(path.startsWith('/fhir') || path.startsWith('/api') || path.startsWith('/oauth')) &&
-		!path.startsWith('/oauth/authorize');
+		!oauthPages.some((p) => path.startsWith(p));
 
 	// Platform administration is reached only on the platform's own hostname,
 	// and the organisation's pages are not reachable from there.
