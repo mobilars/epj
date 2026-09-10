@@ -8,6 +8,7 @@ import {
 	validEmail
 } from '$srv/developer/developer';
 import { rateLimit } from '$srv/http';
+import { VERSION, hasAcceptedCurrent, recordAcceptance } from '$srv/developer/terms';
 
 /**
  * Signing in to the developer portal.
@@ -22,7 +23,11 @@ import { rateLimit } from '$srv/http';
  */
 export const load: PageServerLoad = async (event) => {
 	if (await developerFromSession(event.cookies)) redirect(303, '/utvikler');
-	return { sent: event.url.searchParams.get('sendt') === 'ja', email: event.url.searchParams.get('e') ?? '' };
+	return {
+		sent: event.url.searchParams.get('sendt') === 'ja',
+		email: event.url.searchParams.get('e') ?? '',
+		termsVersion: VERSION
+	};
 };
 
 export const actions: Actions = {
@@ -30,6 +35,13 @@ export const actions: Actions = {
 		const form = await event.request.formData();
 		const email = String(form.get('epost') ?? '').trim();
 		if (!validEmail(email)) return fail(400, { error: 'Skriv inn en gyldig e-postadresse.', email });
+
+		// Asked before the code is sent, not after. Signing in creates the account
+		// on first use, so this is the only moment before there is one - and a
+		// consent collected after the fact is not a consent.
+		if (form.get('vilkar') !== 'godtatt') {
+			return fail(400, { error: 'Du må godta utviklervilkårene for å opprette konto.', email });
+		}
 
 		// Per address and per caller: this endpoint sends mail to whoever is
 		// named, so it has to be expensive to use as a way of sending mail.
@@ -62,6 +74,12 @@ export const actions: Actions = {
 			event.request.headers.get('user-agent')
 		);
 		if (!result.ok) return fail(400, { error: result.error, email, sent: true });
+
+		// The acceptance is recorded against the account the code just created or
+		// unlocked, with the version and the address it came from.
+		if (form.get('vilkar') === 'godtatt' && !(await hasAcceptedCurrent(result.developer.id))) {
+			await recordAcceptance(result.developer.id, event.locals.clientIp);
+		}
 		redirect(303, '/utvikler');
 	},
 

@@ -25,6 +25,7 @@
 			</p>
 			<form method="POST" action="?/bekreft">
 				<input type="hidden" name="epost" value={email} />
+				<input type="hidden" name="vilkar" value="godtatt" />
 				<div class="felt">
 					<label for="kode">Kode</label>
 					<input id="kode" name="kode" inputmode="numeric" autocomplete="one-time-code" required />
@@ -47,6 +48,22 @@
 					<label for="epost">E-post</label>
 					<input id="epost" name="epost" type="email" autocomplete="email" required value={email} />
 				</div>
+
+				<label class="avkryssing vilkarsvalg">
+					<input type="checkbox" name="vilkar" value="godtatt" required />
+					<span>
+						Jeg har lest og godtar
+						<a href="/utvikler/vilkar" target="_blank" rel="noopener">utviklervilkårene</a>
+						(versjon {data.termsVersion}).
+					</span>
+				</label>
+				<p class="svak liten">
+					Kort fortalt: opplysningene i en journal tilhører virksomheten og pasienten. Du er
+					databehandler og trenger databehandleravtale med hver virksomhet, du skal be om minst
+					mulig, ikke sammenstille data på tvers av virksomheter, og ikke bruke dem til noe
+					annet enn det appen er der for.
+				</p>
+
 				<button type="submit" class="primar">Send kode</button>
 			</form>
 		</div>

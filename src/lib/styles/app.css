@@ -385,3 +385,17 @@ main.bred { max-width: none; }
 .inngang:hover { border-color: var(--primar); background: var(--primar-svak); }
 .inngang strong { display: block; }
 .inngang .svak { font-size: 0.88rem; }
+
+/* --- Terms --------------------------------------------------------------
+   A document to be read from start to finish, so it gets a reading measure
+   rather than the width of the window. */
+.vilkar { max-width: 44rem; margin: 0 auto 3rem; }
+.vilkar h1 { margin-bottom: 0.2rem; }
+.vilkar .ingress { font-size: 1.05rem; margin: 1rem 0 1.5rem; }
+.vilkar section { margin-bottom: 1.5rem; }
+.vilkar h2 { font-size: 1.05rem; margin-bottom: 0.4rem; }
+.vilkar p { max-width: 40rem; }
+
+/* The acceptance sits with the field it belongs to, not below the button. */
+.vilkarsvalg { display: flex; gap: 0.5rem; align-items: flex-start; margin: 0.9rem 0 0.4rem; }
+.vilkarsvalg input { margin-top: 0.25rem; flex: 0 0 auto; width: auto; }
