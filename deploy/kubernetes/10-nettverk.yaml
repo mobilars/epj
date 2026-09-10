@@ -74,6 +74,9 @@ spec:
               - 169.254.0.0/16
       ports:
         - port: 443
+        # SMTP-innsending for utviklerportalens påloggingskoder. Klienten
+        # krever STARTTLS, så trafikken er beskyttet selv om porten er åpen.
+        - port: 587
 ---
 # HAPI tar bare imot fra `epj`, og snakker bare med databasen og DNS.
 # Ingen rute ut mot internett: det kliniske lageret har ingenting der å gjøre.

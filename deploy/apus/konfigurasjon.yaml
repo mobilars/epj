@@ -36,7 +36,9 @@ data:
   # Sign-in codes for the portal. The key lives in `epj-hemmeligheter`.
   EPJ_SMTP_HOST: smtp-relay.brevo.com
   EPJ_SMTP_PORT: '587'
-  EPJ_SMTP_USER: lars@roland.bz
+  # Brevo's SMTP login is a generated one, not the sender address. The sender
+  # below is the verified address the mail goes out as.
+  EPJ_SMTP_USER: ae59ac001@smtp-brevo.com
   EPJ_SMTP_FROM: lars@roland.bz
   EPJ_SMTP_FROM_NAME: EPJ utviklerportal
 
