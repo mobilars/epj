@@ -149,7 +149,7 @@ export async function authenticateClient(
 		const keys = await clientKeys(client);
 		if (keys.length === 0) return { ok: false, error: 'Klienten har ingen registrerte nøkler' };
 		try {
-			const payload = verifyJws(assertion as string, keys);
+			const payload = await verifyJws(assertion as string, keys);
 			if (payload.iss !== clientId || payload.sub !== clientId) return { ok: false, error: 'Ugyldig iss/sub i client_assertion' };
 			// The token endpoint belongs to the organisation. An assertion issued
 			// against one organisation must not work against another.

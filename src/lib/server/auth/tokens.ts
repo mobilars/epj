@@ -74,7 +74,7 @@ export async function issueTokens(inValue: UtstedelseIn): Promise<IssuedToken> {
 		...(inValue.launch.encounterId ? { encounter: inValue.launch.encounterId } : {}),
 		...(fhirUser ? { fhirUser } : {})
 	};
-	const accessToken = sign(payload, key.privatePem, key.kid, 'at+jwt');
+	const accessToken = await sign(payload, key.privatePem, key.kid, 'at+jwt');
 
 	await exec(
 		`INSERT INTO oauth_token (id, tenant_id, kind, token_hash, client_id, user_id, scope, launch_context, familie, expires_at)
@@ -101,7 +101,7 @@ export async function issueTokens(inValue: UtstedelseIn): Promise<IssuedToken> {
 	result.smart_style_url = `${issuerFor(tenant)}/smart-style.json`;
 
 	if (inValue.scope.split(/\s+/).includes('openid') && inValue.userId) {
-		result.id_token = sign(
+		result.id_token = await sign(
 			{
 				iss: issuerFor(tenant),
 				sub: inValue.userId,
@@ -207,7 +207,7 @@ export interface TokenValidation {
 export async function validateAccessToken(token: string): Promise<TokenValidation> {
 	let payload: Record<string, unknown>;
 	try {
-		payload = verify(token, (await jwks()).keys) as Record<string, unknown>;
+		payload = (await verify(token, (await jwks()).keys)) as Record<string, unknown>;
 	} catch (err) {
 		return { valid: false, error: (err as Error).message };
 	}

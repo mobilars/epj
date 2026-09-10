@@ -1,6 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { endFlow, fullforLogin } from '$srv/auth/helseid';
+import { completeLogin, endFlow } from '$srv/auth/helseid';
 import { createSession } from '$srv/auth/session';
 import { log } from '$srv/audit';
 
@@ -23,11 +23,12 @@ export const GET: RequestHandler = async (event) => {
 		redirect(303, `/logg-inn?feil=${encodeURIComponent('HelseID avbrøt påloggingen')}`);
 	}
 
-	const code = event.url.searchParams.get('code');
-	const state = event.url.searchParams.get('state');
-	if (!code || !state) redirect(303, '/logg-inn?feil=Mangler%20kode%20fra%20HelseID');
+	if (!event.url.searchParams.get('code')) {
+		endFlow(event.cookies);
+		redirect(303, '/logg-inn?feil=Mangler%20kode%20fra%20HelseID');
+	}
 
-	const result = await fullforLogin(event.cookies, code, state);
+	const result = await completeLogin(event.cookies, event.url);
 	if (!result.ok) {
 		await log({ type: 'login', subtype: 'helseid', action: 'E', outcome: '4', outcomeDescription: result.error }, actor);
 		redirect(303, `/logg-inn?feil=${encodeURIComponent(result.error)}`);
@@ -43,8 +44,8 @@ export const GET: RequestHandler = async (event) => {
 		{
 			type: 'login', subtype: 'helseid', action: 'E', outcome: '0',
 			details: {
-				hpr: result.requirement.hprNumber,
-				sikkerhetsniva: result.requirement.sikkerhetsniva,
+				hpr: result.claims.hprNumber,
+				sikkerhetsniva: result.claims.securityLevel,
 				newUser: result.newUser,
 				roles: result.roles.join(',')
 			}

@@ -3,7 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { config } from '$srv/config';
 import { logIn } from '$srv/auth/users';
 import { createSession } from '$srv/auth/session';
-import { isKonfigurert as healthIdKonfigurert } from '$srv/auth/helseid';
+import { isConfigured as healthIdConfigured } from '$srv/auth/helseid';
 import { log } from '$srv/audit';
 import { rateLimit } from '$srv/http';
 
@@ -26,7 +26,7 @@ export const load: PageServerLoad = async (event) => {
 		redirect(303, trygtReturnTo(event.url.searchParams.get('retur')));
 	}
 	return {
-		healthId: healthIdKonfigurert(),
+		healthId: healthIdConfigured(),
 		testLogin: config.testLogin.aktivert,
 		demoUsers: config.testLogin.showDemoUsers
 			? [

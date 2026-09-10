@@ -2,7 +2,7 @@ import { one, exec, query, transaction } from '../db';
 import { requireTenant } from '../tenant/context';
 import { config } from '../config';
 import { decrypt, encrypt } from '../util/crypto';
-import { generateNokkelpar, type Jwk } from './jws';
+import { generateKeyPair, type Jwk } from './jws';
 
 export interface ActiveKey {
 	kid: string;
@@ -33,8 +33,8 @@ interface KeyRow {
 const cached = new Map<string, { key: ActiveKey; to: number }>();
 const jwksCache = new Map<string, { keys: Jwk[]; to: number }>();
 
-function forOld(created_at: string): boolean {
-	return Date.now() - new Date(created_at).getTime() > config.oauth.signingKeyRotationDays * 24 * 3600 * 1000;
+function tooOld(createdAt: string): boolean {
+	return Date.now() - new Date(createdAt).getTime() > config.oauth.signingKeyRotationDays * 24 * 3600 * 1000;
 }
 
 export async function activeSigningKey(): Promise<ActiveKey> {
@@ -46,7 +46,7 @@ export async function activeSigningKey(): Promise<ActiveKey> {
 		'SELECT * FROM signing_key WHERE tenant_id = $1 AND active = true ORDER BY created_at DESC LIMIT 1',
 		[tenantId]
 	);
-	if (row && !forOld(row.created_at)) {
+	if (row && !tooOld(row.created_at)) {
 		const key = { kid: row.kid, privatePem: decrypt(row.private_enc) };
 		cached.set(tenantId, { key, to: Date.now() + 300_000 });
 		return key;
@@ -56,7 +56,7 @@ export async function activeSigningKey(): Promise<ActiveKey> {
 
 export async function rotateKey(): Promise<ActiveKey> {
 	const tenantId = requireTenant().id;
-	const { privatePkcs8, publicJwk, kid } = generateNokkelpar();
+	const { privatePkcs8, publicJwk, kid } = await generateKeyPair();
 	await transaction(async () => {
 		await exec(
 			"UPDATE signing_key SET active = false, phased_out_after = now() + ($1 || ' seconds')::interval WHERE tenant_id = $2 AND active = true",
@@ -94,7 +94,7 @@ export async function jwks(): Promise<{ keys: Jwk[] }> {
 }
 
 /** Maintenance. Deliberately across organisations: deletes only retired keys. */
-export async function removeUtdaterteKeys(): Promise<number> {
+export async function removeExpiredKeys(): Promise<number> {
 	jwksCache.clear();
 	return exec("DELETE FROM signing_key WHERE active = false AND phased_out_after IS NOT NULL AND phased_out_after < now() - interval '1 day'");
 }

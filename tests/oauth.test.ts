@@ -246,7 +246,7 @@ describeIf('OAuth 2.1 og SMART App Launch', () => {
 
 		it('avviser token som ikke finnes i databasen', async () => {
 			const { privatePkcs8, publicJwk } = await layerFremmedKey();
-			const falskt = sign({ iss: config.issuer, sub: 'bruker-1', jti: newId(), exp: Math.floor(Date.now() / 1000) + 600 }, privatePkcs8, publicJwk.kid as string);
+			const falskt = await sign({ iss: config.issuer, sub: 'bruker-1', jti: newId(), exp: Math.floor(Date.now() / 1000) + 600 }, privatePkcs8, publicJwk.kid as string);
 			expect((await validateAccessToken(falskt)).valid).toBe(false);
 		});
 
@@ -357,11 +357,11 @@ describeIf('OAuth 2.1 og SMART App Launch', () => {
 					client_assertion: assertion
 				});
 
-			const first = await authenticateClient(form(layerAssertion(jti)), null);
+			const first = await authenticateClient(form(await layerAssertion(jti)), null);
 			expect(first.ok).toBe(true);
 			if (first.ok) expect(first.method).toBe('private_key_jwt');
 
-			const reuse = await authenticateClient(form(layerAssertion(jti)), null);
+			const reuse = await authenticateClient(form(await layerAssertion(jti)), null);
 			expect(reuse.ok).toBe(false);
 			if (!reuse.ok) expect(reuse.error).toMatch(/jti/);
 		});
@@ -370,7 +370,7 @@ describeIf('OAuth 2.1 og SMART App Launch', () => {
 			const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
 			const jwk = { ...(publicKey.export({ format: 'jwk' }) as Jwk), kid: 'k2', alg: 'ES256' };
 			const reg = await registerClient({ name: 'Backend2', type: 'confidential', category: 'backend', redirectUris: [], scopes: [], jwks: { keys: [jwk] } });
-			const assertion = sign(
+			const assertion = await sign(
 				{ iss: reg.client.client_id, sub: reg.client.client_id, aud: 'https://feil.example', jti: newId(), exp: Math.floor(Date.now() / 1000) + 60 },
 				privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(),
 				'k2'
@@ -409,6 +409,6 @@ async function getClientRow(): Promise<OAuthClient> {
 }
 
 async function layerFremmedKey() {
-	const { generateNokkelpar } = await import('../src/lib/server/auth/jws');
-	return generateNokkelpar();
+	const { generateKeyPair } = await import('../src/lib/server/auth/jws');
+	return generateKeyPair();
 }

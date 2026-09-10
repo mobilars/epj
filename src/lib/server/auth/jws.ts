@@ -1,15 +1,32 @@
-import { constants, createHash, createPrivateKey, createPublicKey, createSign, createVerify, generateKeyPairSync, type KeyObject } from 'node:crypto';
+import {
+	SignJWT,
+	calculateJwkThumbprint,
+	decodeJwt,
+	decodeProtectedHeader,
+	errors as joseErrors,
+	exportJWK,
+	exportPKCS8,
+	generateKeyPair as joseGenerateKeyPair,
+	importJWK,
+	importPKCS8,
+	jwtVerify,
+	type JWK
+} from 'jose';
 
 /**
- * Compact JWS with ES256 (ECDSA P-256 + SHA-256), written directly against
- * node:crypto. Node signs ECDSA in DER form; JOSE wants raw R||S, so we convert
- * in both directions.
+ * Compact JWS, implemented with `jose`.
+ *
+ * The record signs its own access tokens and id_tokens, and verifies client
+ * assertions and HelseID's id_token. Signing and verification are deliberately
+ * left to a maintained JOSE library rather than being written against
+ * node:crypto: algorithm confusion, `alg: none` and the ECDSA DER/raw
+ * conversion are exactly the places a hand-rolled implementation goes wrong.
  */
 
-export type Algoritme = 'ES256' | 'RS256' | 'PS256';
+export type Algorithm = 'ES256' | 'RS256' | 'PS256';
 
 export interface JwtHeader {
-	alg: Algoritme;
+	alg: Algorithm;
 	typ?: string;
 	kid?: string;
 }
@@ -19,14 +36,7 @@ export interface JwtHeader {
  * supported because HelseID signs its id_token with RS256, and expects client
  * assertions signed with RS256 or PS256.
  */
-const ALLOWED_ALGORITMER: ReadonlySet<string> = new Set(['ES256', 'RS256', 'PS256']);
-
-function signeringsopsjoner(alg: Algoritme): { hash: string; padding?: number; saltLength?: number } {
-	if (alg === 'PS256') {
-		return { hash: 'SHA256', padding: constants.RSA_PKCS1_PSS_PADDING, saltLength: 32 };
-	}
-	return { hash: 'SHA256' };
-}
+const ALLOWED_ALGORITHMS: ReadonlySet<string> = new Set<Algorithm>(['ES256', 'RS256', 'PS256']);
 
 /** JWK with the fields JOSE uses. `JsonWebKey` in lib.dom lacks kid/alg/use. */
 export type Jwk = JsonWebKey & { kid?: string; alg?: string; use?: string };
@@ -41,120 +51,93 @@ export type JwtPayload = Record<string, unknown> & {
 	jti?: string;
 };
 
-const b64u = (b: Buffer | string): string => Buffer.from(b as never).toString('base64url');
-const fromB64u = (s: string): Buffer => Buffer.from(s, 'base64url');
-
 /**
- * Key id as JWK thumbprint (RFC 7638): SHA-256 over a canonical JSON holding
- * only the required fields, in lexicographic order. The id is then both unique
- * per key and reproducible from the public key alone.
+ * Key id as JWK thumbprint (RFC 7638). The id is then both unique per key and
+ * reproducible from the public key alone, and unaffected by extra fields such
+ * as `alg` and `use`.
  */
-export function jwkTommelavtrykk(jwk: Jwk): string {
-	const kanonisk =
-		jwk.kty === 'EC'
-			? JSON.stringify({ crv: jwk.crv, kty: jwk.kty, x: jwk.x, y: jwk.y })
-			: JSON.stringify({ e: jwk.e, kty: jwk.kty, n: jwk.n });
-	return createHash('sha256').update(kanonisk).digest('base64url');
+export async function jwkThumbprint(jwk: Jwk): Promise<string> {
+	return calculateJwkThumbprint(jwk as JWK, 'sha256');
 }
 
-export function generateNokkelpar(): { privatePkcs8: string; publicJwk: Jwk; kid: string } {
-	const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
-	const publicJwk = publicKey.export({ format: 'jwk' }) as Jwk;
-	const kid = jwkTommelavtrykk(publicJwk);
+export async function generateKeyPair(): Promise<{ privatePkcs8: string; publicJwk: Jwk; kid: string }> {
+	const { privateKey, publicKey } = await joseGenerateKeyPair('ES256', { extractable: true });
+	const publicJwk = (await exportJWK(publicKey)) as Jwk;
+	const kid = await jwkThumbprint(publicJwk);
 	return {
-		privatePkcs8: privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(),
+		privatePkcs8: await exportPKCS8(privateKey),
 		publicJwk: { ...publicJwk, kid, alg: 'ES256', use: 'sig' },
 		kid
 	};
 }
 
-/** DER (SEQUENCE of two INTEGERs) -> raw R||S over 64 bytes. */
-function derToRaw(der: Buffer): Buffer {
-	let offset = 2;
-	if (der[1] & 0x80) offset += der[1] & 0x7f;
-	const read = (): Buffer => {
-		if (der[offset] !== 0x02) throw new Error('Ugyldig DER-signatur');
-		const len = der[offset + 1];
-		const start = offset + 2;
-		offset = start + len;
-		let v = der.subarray(start, start + len);
-		while (v.length > 32 && v[0] === 0) v = v.subarray(1);
-		return Buffer.concat([Buffer.alloc(32 - v.length), v]);
-	};
-	return Buffer.concat([read(), read()]);
-}
-
-function rawToDer(raw: Buffer): Buffer {
-	const trim = (b: Buffer): Buffer => {
-		let i = 0;
-		while (i < b.length - 1 && b[i] === 0) i++;
-		let v = b.subarray(i);
-		if (v[0] & 0x80) v = Buffer.concat([Buffer.from([0]), v]);
-		return v;
-	};
-	const r = trim(raw.subarray(0, 32));
-	const s = trim(raw.subarray(32, 64));
-	const body = Buffer.concat([Buffer.from([0x02, r.length]), r, Buffer.from([0x02, s.length]), s]);
-	return Buffer.concat([Buffer.from([0x30, body.length]), body]);
-}
-
-export function sign(
+export async function sign(
 	payload: JwtPayload,
 	privatePem: string,
 	kid: string,
 	typ = 'JWT',
-	alg: Algoritme = 'ES256'
-): string {
-	const header: JwtHeader = { alg, typ, kid };
-	const signeringsinput = `${b64u(JSON.stringify(header))}.${b64u(JSON.stringify(payload))}`;
-	const key: KeyObject = createPrivateKey(privatePem);
-	const options = signeringsopsjoner(alg);
-	const signatur = createSign(options.hash).update(signeringsinput).sign(
-		alg === 'PS256' ? { key, padding: options.padding, saltLength: options.saltLength } : key
-	);
-	return `${signeringsinput}.${b64u(alg === 'ES256' ? derToRaw(signatur) : signatur)}`;
+	alg: Algorithm = 'ES256'
+): Promise<string> {
+	const key = await importPKCS8(privatePem, alg);
+	return new SignJWT(payload).setProtectedHeader({ alg, typ, kid }).sign(key);
 }
 
-export function verify(jwt: string, publicJwks: Jwk[], expectedAlg?: Algoritme): JwtPayload {
-	const parts = jwt.split('.');
-	if (parts.length !== 3) throw new Error('Ugyldig JWT-struktur');
-	const [h, p, s] = parts;
-	const header = JSON.parse(fromB64u(h).toString('utf8')) as JwtHeader;
+/**
+ * Translates jose's error classes into the messages the record's own error
+ * handling and security log use.
+ */
+function asError(err: unknown): Error {
+	if (err instanceof joseErrors.JWTExpired) return new Error('Token has expired');
+	if (err instanceof joseErrors.JWTClaimValidationFailed) {
+		return new Error(err.claim === 'nbf' ? 'Token is not valid yet' : `Invalid claim: ${err.claim}`);
+	}
+	if (err instanceof joseErrors.JWSSignatureVerificationFailed) return new Error('The signature is invalid');
+	if (err instanceof joseErrors.JWSInvalid || err instanceof joseErrors.JWTInvalid) {
+		return new Error('Invalid JWT structure');
+	}
+	return new Error('The signature is invalid');
+}
+
+export async function verify(jwt: string, publicJwks: Jwk[], expectedAlg?: Algorithm): Promise<JwtPayload> {
+	if (jwt.split('.').length !== 3) throw new Error('Invalid JWT structure');
+	let header: JwtHeader;
+	try {
+		header = decodeProtectedHeader(jwt) as JwtHeader;
+	} catch {
+		throw new Error('Invalid JWT structure');
+	}
 	// `alg` is read from the header but must be on the allowlist. "none", and
 	// switching to HMAC with the public key as the secret, are thereby ruled out.
-	if (!ALLOWED_ALGORITMER.has(header.alg)) throw new Error(`Algoritmen ${header.alg} er ikke tillatt`);
-	if (expectedAlg && header.alg !== expectedAlg) throw new Error(`Forventet ${expectedAlg}, fikk ${header.alg}`);
+	if (!ALLOWED_ALGORITHMS.has(header.alg)) throw new Error(`The algorithm ${header.alg} is not permitted`);
+	if (expectedAlg && header.alg !== expectedAlg) throw new Error(`Expected ${expectedAlg}, got ${header.alg}`);
+
 	const candidates = header.kid ? publicJwks.filter((k) => k.kid === header.kid) : publicJwks;
-	if (candidates.length === 0) throw new Error('Ukjent nøkkel-id (kid)');
-	const raw = fromB64u(s);
-	const signatur = header.alg === 'ES256' ? rawToDer(raw) : raw;
-	const options = signeringsopsjoner(header.alg);
-	const ok = candidates.some((jwk) => {
+	if (candidates.length === 0) throw new Error('Unknown key id (kid)');
+
+	let last: unknown;
+	for (const jwk of candidates) {
 		try {
-			const key = createPublicKey({ key: jwk as never, format: 'jwk' });
-			return createVerify(options.hash)
-				.update(`${h}.${p}`)
-				.verify(header.alg === 'PS256' ? { key, padding: options.padding, saltLength: options.saltLength } : key, signatur);
-		} catch {
-			return false;
+			const key = await importJWK({ ...jwk, alg: header.alg } as JWK, header.alg);
+			// A little slack on `nbf` absorbs clock skew between issuer and record.
+			// `exp` is checked strictly below - leniency there would extend the life
+			// of a token that has already run out.
+			const { payload } = await jwtVerify(jwt, key, { algorithms: [header.alg], clockTolerance: 60 });
+			if (typeof payload.exp === 'number' && payload.exp <= Math.floor(Date.now() / 1000)) {
+				throw new Error('Token has expired');
+			}
+			return payload as JwtPayload;
+		} catch (err) {
+			if (err instanceof Error && err.message === 'Token has expired') throw err;
+			last = err;
 		}
-	});
-	if (!ok) throw new Error('Signaturen er ugyldig');
-	const payload = JSON.parse(fromB64u(p).toString('utf8')) as JwtPayload;
-	const now = Math.floor(Date.now() / 1000);
-	if (typeof payload.exp === 'number' && payload.exp <= now) throw new Error('Token er utløpt');
-	if (typeof payload.nbf === 'number' && payload.nbf > now + 60) throw new Error('Token er ikke gyldig ennå');
-	return payload;
+	}
+	throw asError(last);
 }
 
 /** Reads the payload without verifying. For logging and debugging only. */
 export function decodeWithoutVerification(jwt: string): { header: JwtHeader; payload: JwtPayload } | null {
 	try {
-		const [h, p] = jwt.split('.');
-		return {
-			header: JSON.parse(fromB64u(h).toString('utf8')),
-			payload: JSON.parse(fromB64u(p).toString('utf8'))
-		};
+		return { header: decodeProtectedHeader(jwt) as JwtHeader, payload: decodeJwt(jwt) as JwtPayload };
 	} catch {
 		return null;
 	}

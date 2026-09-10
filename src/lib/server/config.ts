@@ -214,7 +214,7 @@ export const config = {
 			/** Private key (PEM, PKCS#8) for client assertions. */
 			privateKeyPem: env.EPJ_HELSEID_PRIVATE_KEY ?? '',
 			keyId: env.EPJ_HELSEID_KEY_ID ?? '',
-			signeringsalgoritme: (env.EPJ_HELSEID_ALG ?? 'RS256') as 'RS256' | 'PS256' | 'ES256',
+			signingAlgorithm: (env.EPJ_HELSEID_ALG ?? 'RS256') as 'RS256' | 'PS256' | 'ES256',
 			scopes: (env.EPJ_HELSEID_SCOPES ??
 				'openid profile helseid://scopes/identity/pid helseid://scopes/identity/security_level helseid://scopes/hpr/hpr_number')
 				.split(/\s+/).filter(Boolean),
