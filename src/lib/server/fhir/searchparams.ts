@@ -2,9 +2,9 @@ export type ParamKind = 'string' | 'token' | 'reference' | 'date' | 'number' | '
 
 export interface SearchParamDef {
 	kind: ParamKind;
-	/** Enkle punktseparerte stier inn i ressursen. Arrays traverseres automatisk. */
+	/** Simple dot-separated paths into the resource. Arrays are traversed automatically. */
 	paths: string[];
-	/** Ressurstyper en referanse kan peke på (brukes for kjedede søk). */
+	/** Resource types a reference may point at (used for chained searches). */
 	targets?: string[];
 	doc?: string;
 }
@@ -15,7 +15,7 @@ const p = (kind: ParamKind, paths: string | string[], extra: Partial<SearchParam
 	...extra
 });
 
-/** Søkeparametere som gjelder alle ressurstyper. */
+/** Search parameters that apply to every resource type. */
 export const SHARED_PARAMS: Record<string, SearchParamDef> = {
 	_id: p('token', 'id'),
 	_loadUpdated: p('date', 'meta.lastUpdated'),
@@ -355,14 +355,14 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		status: p('token', 'status'),
 		date: p('date', 'date')
 	},
-	// Group er med vilje ikke støttet gjennom /fhir, av samme grunn som Binary.
+	// Group is deliberately unsupported through /fhir, for the same reason as Binary.
 	//
-	// En Group kan ha `member.entity` som peker på pasienter - et kohortuttrekk
-	// er nettopp en liste over hvem som hører til, og for et fastlegekontor kan
-	// selve medlemskapet være den følsomme opplysningen. Typen har ingen
-	// `subject`, så tilgangen kan ikke vurderes per pasient. Den sto tidligere
-	// oppført som «ikke pasientnær», og slapp dermed forbi både tjenstlig behov
-	// og sperring.
+	// A Group can carry `member.entity` pointing at patients - a cohort extract is
+	// precisely a list of who belongs to it, and for a general practice the
+	// membership itself may be the sensitive fact. The type has no `subject`, so
+	// access cannot be judged per patient. It used to be listed as "not patient
+	// data", and thereby slipped past both legitimate need and restriction.
+	//
 	Location: {
 		name: p('string', 'name'),
 		identifier: p('token', 'identifier'),
@@ -384,16 +384,16 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		recorded: p('date', 'recorded'),
 		patient: p('reference', 'patient', { targets: ['Patient'] })
 	},
-	// Binary er med vilje ikke støttet gjennom /fhir.
+	// Binary is deliberately unsupported through /fhir.
 	//
-	// Ressursen bærer vedlegg - skannede dokumenter, prøvesvar, bilder - men har
-	// ingen `subject` eller `patient`. Tilgangskontrollen kan derfor ikke avgjøre
-	// hvilken pasient et vedlegg hører til, og verken tjenstlig behov eller
-	// sperring lar seg håndheve. Så lenge typen sto her, kunne et token med
-	// `Binary`-scope hente hvilket som helst vedlegg i virksomheten.
+	// The resource carries attachments - scanned documents, lab results, images -
+	// but has no `subject` or `patient`. Access control therefore cannot decide
+	// which patient an attachment belongs to, and neither legitimate need nor
+	// restriction can be enforced. While the type was listed here, a token with
+	// `Binary` scope could fetch any attachment in the organisation.
 	//
-	// Skal vedlegg eksponeres, må pasienten utledes fra den DocumentReference
-	// som peker på ressursen, og tilgangen vurderes mot den. Se docs/todo.md.
+	// To expose attachments, the patient must be derived from the
+	// DocumentReference pointing at the resource, and access judged against that.
 	Subscription: {
 		status: p('token', 'status'),
 		topic: p('uri', 'topic'),

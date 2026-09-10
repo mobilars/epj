@@ -217,7 +217,7 @@ export async function deleteDraft(id: string, actor: AuditActor): Promise<boolea
 	return true;
 }
 
-/** Kontrollerer at takstkodene på et kort fortsatt finnes i takstregisteret. */
+/** Checks that the tariff codes on a card still exist in the tariff register. */
 export function ukjenteTariffs(lines: BillingLine[]): string[] {
 	return lines.map((l) => l.tariff_code).filter((k) => !TARIFF_KART.has(k));
 }

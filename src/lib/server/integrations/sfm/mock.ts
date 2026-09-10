@@ -4,16 +4,16 @@ import { newId } from '../../util/ids';
 import type { MedicationList, MedicationEntry, SfmOperation, SfmResponse, PrescribingIn } from './index';
 
 /**
- * Lokal SFM-simulator.
+ * Local SFM simulator.
  *
- * Gjengir hovedtrekkene i SFM Basis så flyten kan kjøres ende-til-ende uten
- * oppkobling mot Norsk helsenett: forskrivning gir en reseptid, legemiddellisten
- * bygges opp av det som er forskrevet, seponering markerer oppføringen, og
- * interaksjons- og dobbeltforskrivningsvarsler simuleres.
+ * Reproduces the main features of SFM Basis so the flow can be run end to end
+ * without a connection to Norsk helsenett: prescribing yields a prescription
+ * id, the medication list is built from what has been prescribed, discontinuing
+ * marks the entry, and interaction and duplicate-prescription warnings are
+ * simulated.
  *
- * Tilstanden lagres i `sfm_synk`, slik at simulatoren overlever omstart.
+ * State is stored in `sfm_sync`, so the simulator survives a restart.
  */
-
 interface MockState {
 	medications: MedicationEntry[];
 	updated_at: string;
@@ -36,7 +36,7 @@ async function writeState(patientId: string, state: MockState): Promise<void> {
 	);
 }
 
-/** Et lite utvalg kjente interaksjoner, nok til å vise varslingsflyten. */
+/** A small selection of known interactions, enough to show the warning flow. */
 const INTERACTIONS: { atc: [string, string]; severity: 'alvorlig' | 'moderat'; text: string }[] = [
 	{ atc: ['B01AA03', 'M01AE01'], severity: 'alvorlig', text: 'Warfarin og ibuprofen: økt blødningsrisiko.' },
 	{ atc: ['C09AA05', 'C03DA01'], severity: 'moderat', text: 'ACE-hemmer og spironolakton: risiko for hyperkalemi.' },

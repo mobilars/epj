@@ -106,7 +106,7 @@ export interface NewTenant {
 	hostname?: string;
 	baseUrl: string;
 	note?: string;
-	/** Første administratorbruker i virksomheten. */
+	/** First administrator user in the organisation. */
 	adminUsername?: string;
 	adminName?: string;
 	createdOf?: string;

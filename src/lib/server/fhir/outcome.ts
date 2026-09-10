@@ -13,12 +13,12 @@ export function issue(
 	return { severity, code, diagnostics, ...(expression ? { expression } : {}) };
 }
 
-/** Feil som skal returneres til klienten med gitt HTTP-status og OperationOutcome. */
+/** Error to be returned to the client with a given HTTP status and OperationOutcome. */
 export class FhirError extends Error {
 	constructor(
 		readonly status: number,
 		readonly issues: OperationOutcomeIssue[],
-		/** Settes når feilen ikke skal avsløre om ressursen finnes (Normen: informasjonslekkasje). */
+		/** Set when the error must not reveal whether the resource exists (Normen: information leakage). */
 		readonly auditOutcome: '0' | '4' | '8' | '12' = status >= 500 ? '8' : '4'
 	) {
 		super(issues[0]?.diagnostics ?? 'FHIR-feil');

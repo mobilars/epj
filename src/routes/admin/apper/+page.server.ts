@@ -9,11 +9,11 @@ import { config } from '$srv/config';
 import { fhirBaseFor, requireTenant, issuerFor } from '$srv/tenant/context';
 
 /**
- * Register over SMART-apper og backend-tjenester.
+ * Register of SMART apps and backend services.
  *
- * Registrering er en administrativ handling: en app som ikke står her, kommer
- * ikke til journalen. Databehandleravtale registreres sammen med appen, slik at
- * samtykkedialogen kan varsle dersom den mangler.
+ * Registration is an administrative act: an app not listed here does not reach
+ * the record. The data processing agreement is recorded with the app, so the
+ * consent dialog can warn if it is missing.
  */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
@@ -106,7 +106,7 @@ export const actions: Actions = {
 		redirect(303, '/admin/apper');
 	},
 
-	/** Starter en app fra journalen (EHR launch), for å prøve integrasjonen. */
+	/** Launches an app from the record (EHR launch), to try the integration. */
 	testlaunch: async (event) => {
 		const ctx = event.locals.auth;
 		if (!ctx?.userId) return fail(403, { error: 'Ingen tilgang.' });

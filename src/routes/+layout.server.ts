@@ -2,7 +2,7 @@ import type { LayoutServerLoad } from './$types';
 import { config } from '$srv/config';
 import { ROLE_DEFINISJONER } from '$srv/authz/roles';
 
-/** Felles data for hele applikasjonen: hvem er pålogget, og i hvilket miljø. */
+/** Data shared by the whole application: who is signed in, and in which environment. */
 export const load: LayoutServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	return {

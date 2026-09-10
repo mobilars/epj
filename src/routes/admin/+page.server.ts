@@ -7,7 +7,7 @@ import { config } from '$srv/config';
 import { requireTenant } from '$srv/tenant/context';
 import { pendingKvitteringer } from '$srv/integrations/nhn/message-queue';
 
-/** Driftsoversikt: tilstand på avhengigheter, loggintegritet og saker til oppfølging. */
+/** Operations overview: dependency health, log integrity and cases to follow up. */
 export const load: PageServerLoad = async () => {
 	const tenant = requireTenant();
 	const tenantId = tenant.id;

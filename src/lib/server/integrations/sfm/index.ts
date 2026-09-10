@@ -10,17 +10,17 @@ import { log, type AuditActor } from '../../audit';
 import { mockSfm } from './mock';
 
 /**
- * Sentral forskrivningsmodul (SFM).
+ * Sentral forskrivningsmodul (SFM), the national prescribing module.
  *
- * SFM driftes av Norsk helsenett og er veien inn til e-resept og Pasientens
- * legemiddelliste (PLL). EPJ-leverandører kan enten bruke SFM sitt eget
- * brukergrensesnitt eller integrere mot SFM Basis-API-et. Denne journalen
- * bruker API-varianten: forskrivning skjer i journalens eget bilde, og SFM
- * håndterer kommunikasjonen mot Reseptformidleren.
+ * SFM is operated by Norsk helsenett and is the way into e-prescription and the
+ * patient's medication list (PLL). Record vendors can either use SFM's own user
+ * interface or integrate against the SFM Basis API. This record uses the API
+ * variant: prescribing happens in the record's own screen, and SFM handles the
+ * communication towards Reseptformidleren.
  *
- * Alle kall autentiseres med HelseID-maskintoken. I `mock`-modus svarer en
- * lokal simulator, slik at hele forskrivningsflyten kan kjøres og testes uten
- * oppkobling mot NHN sitt testmiljø.
+ * All calls are authenticated with a HelseID machine token. In `mock` mode a
+ * local simulator answers, so the whole prescribing flow can be run and tested
+ * without a connection to NHN's test environment.
  */
 
 export type SfmOperation =
@@ -41,10 +41,10 @@ export interface SfmResponse<T = unknown> {
 export interface MedicationList {
 	patientId: string;
 	updated_at: string;
-	/** Kilde: `sfm` (Pasientens legemiddelliste) eller `lokal` (kun i journal). */
+	/** Source: `sfm` (the patient's medication list) or `lokal` (record only). */
 	source: 'sfm' | 'lokal';
 	medications: MedicationEntry[];
-	/** Avvik mellom PLL og lokal legemiddelliste som må avstemmes av lege. */
+	/** Discrepancy between PLL and the local medication list, for a doctor to reconcile. */
 	deviation: string[];
 }
 
@@ -62,7 +62,7 @@ export interface MedicationEntry {
 	reimbursement?: { legalBasis: string; code: string } | null;
 	status: 'aktiv' | 'seponert' | 'utgatt' | 'utkast';
 	multidose?: boolean;
-	/** Sist utleverte pakning fra apotek, hvis rapportert. */
+	/** Last package dispensed by a pharmacy, if reported. */
 	lastDisclosure?: string;
 }
 
@@ -80,13 +80,13 @@ export interface PrescribingIn {
 	dosage: string;
 	quantity: string;
 	indication?: string;
-	/** ICPC-2- eller ICD-10-kode som begrunner eventuell refusjon. */
+	/** ICPC-2 or ICD-10 code justifying any reimbursement. */
 	reimbursementCode?: string;
 	reimbursementLegalBasis?: string;
 	reiterasjon?: number;
 	validityMnd?: number;
 	kommentarToApotek?: string;
-	/** A- og B-preparater krever ekstra bekreftelse fra forskriver. */
+	/** Class A and B products need extra confirmation from the prescriber. */
 	isVanedannende?: boolean;
 }
 
@@ -154,9 +154,9 @@ export async function getMedicationList(patientId: string, actor: AuditActor): P
 }
 
 /**
- * Forskriver et legemiddel. Ved suksess speiles resepten som FHIR
- * MedicationRequest i journalen, slik at den er søkbar via /fhir og synlig for
- * SMART-apper. SFM er kilden - journalen holder en kopi.
+ * Prescribes a medicine. On success the prescription is mirrored as a FHIR
+ * MedicationRequest in the record, so it is searchable via /fhir and visible to
+ * SMART apps. SFM is the source - the record keeps a copy.
  */
 export async function prescribe(inValue: PrescribingIn, actor: AuditActor): Promise<SfmResponse<{ prescriptionId: string }>> {
 	const response = await call<{ prescriptionId: string }>('forskriv', inValue, inValue.patientId, actor);

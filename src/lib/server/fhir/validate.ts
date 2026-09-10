@@ -7,9 +7,9 @@ import { getValues } from './fhirpath';
 const ID_MONSTER = /^[A-Za-z0-9\-.]{1,64}$/;
 
 /**
- * Strukturell validering pluss norske profilregler. Dette er ikke en fullstendig
- * StructureDefinition-validator: den dekker invariantene journalen selv er avhengig
- * av, samt identifikatorreglene fra HL7 Norway sine basisprofiler.
+ * Structural validation plus Norwegian profile rules. This is not a complete
+ * StructureDefinition validator: it covers the invariants the record itself
+ * depends on, and the identifier rules from HL7 Norway's base profiles.
  */
 export function validate(resource: unknown, expectedType?: string): OperationOutcomeIssue[] {
 	const findings: OperationOutcomeIssue[] = [];
@@ -69,7 +69,7 @@ function validateIdentifikatorer(r: FhirResource): OperationOutcomeIssue[] {
 	return findings;
 }
 
-/** Minimumskrav per ressurstype slik journalen bruker dem. */
+/** Minimum requirements per resource type, as the record uses them. */
 const REQUIRED: Record<string, string[]> = {
 	Patient: [],
 	Encounter: ['status', 'subject'],
@@ -144,7 +144,7 @@ function validateReferences(r: FhirResource, path = r.resourceType, dybde = 0): 
 	return findings;
 }
 
-/** Kaster hvis valideringen finner feil av alvorlighetsgrad error/fatal. */
+/** Throws if validation finds errors of severity error/fatal. */
 export function validateOrKast(resource: unknown, expectedType?: string): FhirResource {
 	const findings = validate(resource, expectedType);
 	const error = findings.filter((f) => f.severity === 'error' || f.severity === 'fatal');

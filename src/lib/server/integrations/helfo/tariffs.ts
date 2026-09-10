@@ -54,16 +54,16 @@ export const TARIFFS: Tariff[] = [
 	{ code: '2ak', text: 'E-konsultasjon hos allmennpraktiserende lege', group: 'konsultasjon', reimbursementOre: 19_600, copaymentOre: 24_500, utelukker: ['2ad', '2ae', '1ad', '1ak'], note: 'Skriftlig eller video, journalføres som e-konsultasjon', verified: false },
 	{ code: '2akd', text: 'E-konsultasjon hos spesialist i allmennmedisin', group: 'konsultasjon', reimbursementOre: 27_700, copaymentOre: 24_500, utelukker: ['2ad', '2ae', '2ak'], requiresSpesialist: true, verified: false },
 
-	// Enkel kontakt
+	// Simple contact
 	{ code: '1ad', text: 'Enkel pasientkontakt ved personlig frammøte eller bud', group: 'enkel-kontakt', reimbursementOre: 2_400, copaymentOre: 6_100, utelukker: ['2ad', '2ae', '2ak'], verified: false },
 	{ code: '1ak', text: 'Enkel pasientkontakt per telefon eller skriftlig', group: 'enkel-kontakt', reimbursementOre: 2_400, copaymentOre: 6_100, utelukker: ['2ad', '2ae', '2ak'], verified: false },
 	{ code: '1bd', text: 'Enkel pasientkontakt, forlenget', group: 'enkel-kontakt', reimbursementOre: 4_800, copaymentOre: 6_100, verified: false },
 
-	// Sykebesøk
+	// Home visit
 	{ code: '11ad', text: 'Sykebesøk ved allmennpraktiserende lege', group: 'sykebesok', reimbursementOre: 25_800, copaymentOre: 28_400, utelukker: ['2ad', '2ae', '2ak'], verified: false },
 	{ code: '11ak', text: 'Sykebesøk ved spesialist i allmennmedisin', group: 'sykebesok', reimbursementOre: 33_900, copaymentOre: 28_400, requiresSpesialist: true, verified: false },
 
-	// Tidstillegg
+	// Time supplement
 	{ code: '2cd', text: 'Tillegg for konsultasjon utover 20 minutter, per påbegynt 15 min', group: 'tidstillegg', reimbursementOre: 14_800, copaymentOre: 0, requires: ['2ad', '2ae', '2ak', '2akd', '11ad', '11ak'], repeterbar: true, maxCount: 6, verified: false },
 	{ code: '2dd', text: 'Samtaleterapi, per påbegynt 15 min utover første 20 min', group: 'samtaleterapi', reimbursementOre: 16_800, copaymentOre: 0, requires: ['2ad', '2ae'], repeterbar: true, maxCount: 6, verified: false },
 

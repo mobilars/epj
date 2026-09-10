@@ -6,13 +6,13 @@ import { fhirBaseFor, requireTenant, issuerFor } from '$srv/tenant/context';
 /**
  * SMART on FHIR discovery (`.well-known/smart-configuration`).
  *
- * Helsedirektoratets anbefaling HITR 1225 peker på SMART App Launch som
- * standard for tredjepartsapper mot journalsystemer. Dokumentet under
- * annonserer hvilke deler av SMART denne journalen støtter.
+ * The Directorate of Health's recommendation HITR 1225 points to SMART App
+ * Launch as the standard for third-party apps against record systems. The
+ * document below announces which parts of SMART this record supports.
  */
 export const GET: RequestHandler = () => {
-	// Metadataene er per virksomhet: hver virksomhet har sin egen `issuer` og sitt
-	// eget FHIR-endepunkt, og en app som er godkjent hos én er ikke godkjent hos
+	// The metadata is per organisation: each has its own `issuer` and its own FHIR
+	// endpoint, and an app approved at one is not approved at another.
 	// en annen.
 	const tenant = requireTenant();
 	const base = issuerFor(tenant);
@@ -60,7 +60,7 @@ export const GET: RequestHandler = () => {
 				'permission-v2',
 				'authorize-post'
 			],
-			// Journalen krever alltid PKCE, også for konfidensielle klienter.
+			// The record always requires PKCE, confidential clients included.
 			require_pkce: true
 		},
 		{ headers: { 'cache-control': 'public, max-age=300' } }

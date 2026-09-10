@@ -176,7 +176,7 @@ export function buildMsgHead(inValue: MsgHeadIn): string {
 	return document(root);
 }
 
-/** Standard avsenderpart for denne virksomheten. */
+/** Default sender party for this organisation. */
 export function ownPart(practitioner?: { name: string; hpr: string }): Part {
 	return {
 		name: config.organisation.name,

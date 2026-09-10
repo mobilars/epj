@@ -5,9 +5,9 @@ import type { AuthContext } from '../authz/context';
 import type { Bundle, FhirResource } from './types';
 
 /**
- * Journalens eget grensesnitt snakker med FHIR gjennom nøyaktig samme vokter
- * som eksterne apper. Det er ingen bakvei utenom tilgangskontroll og logging -
- * en feil i UI-koden kan ikke gi mer innsyn enn API-et gir.
+ * The record's own UI talks to FHIR through exactly the same guard as external
+ * apps. There is no back door around access control and logging - a mistake in
+ * the UI code cannot give more insight than the API gives.
  */
 
 export async function readResource(ctx: AuthContext, resourceType: string, id: string): Promise<FhirResource> {
@@ -73,7 +73,7 @@ export async function patientRecord(ctx: AuthContext, patientId: string, count =
 	return response.resource as Bundle;
 }
 
-/** Trekker ut ressursene fra en søke-Bundle. */
+/** Pulls the resources out of a search Bundle. */
 export function resources(bundle: Bundle): FhirResource[] {
 	return (bundle.entry ?? []).map((e) => e.resource).filter(Boolean) as FhirResource[];
 }

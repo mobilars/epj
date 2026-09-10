@@ -7,22 +7,21 @@ import { corsHeadere } from '$srv/http';
 import { listClients } from '$srv/auth/clients';
 
 /**
- * FHIR R5-endepunktet.
+ * The FHIR R5 endpoint.
  *
- * Dette er journalens eneste inngang til kliniske data - både for
- * SMART-apper, backend-tjenester og journalens eget grensesnitt. Kallet
- * autoriseres og logges i `fhir/gateway.ts` før det slippes videre til
- * HAPI FHIR.
+ * This is the record's only entrance to clinical data - for SMART apps, backend
+ * services and the record's own UI alike. The call is authorised and logged in
+ * `fhir/gateway.ts` before it is passed on to HAPI FHIR.
  */
 
 const FHIR_JSON = 'application/fhir+json; charset=utf-8';
 
 const opphavsCache = new Map<string, { value: string[]; to: number }>();
 
-/** Tillatte CORS-opphav utledes fra registrerte SMART-apper sine redirect-URI-er. */
+/** Permitted CORS origins are derived from registered SMART apps' redirect URIs. */
 async function allowedOpphav(): Promise<string[]> {
-	// Mellomlageret er per virksomhet: apper godkjent hos én virksomhet skal
-	// ikke gi CORS-tilgang hos en annen.
+	// The cache is per organisation: apps approved at one organisation must not
+	// grant CORS access at another.
 	const tenantId = requireTenant().id;
 	const cached = opphavsCache.get(tenantId);
 	if (cached && Date.now() < cached.to) return cached.value;
@@ -34,7 +33,7 @@ async function allowedOpphav(): Promise<string[]> {
 			try {
 				opphav.add(new URL(uri).origin);
 			} catch {
-				/* hopp over ugyldige URI-er */
+				/* skip invalid URIs */
 			}
 		}
 	}

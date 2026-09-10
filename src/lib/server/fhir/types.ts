@@ -1,4 +1,4 @@
-/** Løst typet FHIR R5-representasjon. Validering skjer i `validate.ts`. */
+/** Loosely typed FHIR R5 representation. Validation happens in `validate.ts`. */
 export interface FhirResource {
 	resourceType: string;
 	id?: string;

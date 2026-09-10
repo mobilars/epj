@@ -17,16 +17,16 @@
 
 	const has = (permission: string) => data.user?.permissions.includes(permission) ?? false;
 
-	// Påloggingssiden og samtykkedialogen har ingen navigasjon.
+	// The sign-in page and the consent dialog have no navigation.
 	const skjulNavigasjon = $derived(
 		page.url.pathname.startsWith('/logg-inn') || page.url.pathname.startsWith('/oauth/authorize')
 	);
 
 	const showMiljobanner = $derived(!data.miljo.produksjon || data.miljo.integrations === 'mock');
 
-	// Markerer at siden er hydrert. Grensesnittet virker uten JavaScript, men
-	// hydreringen skriver blant annet input-verdier på nytt. Markøren gjør det
-	// mulig for automatiserte tester - og for feilsøking - å vite når den er ferdig.
+	// Marks the page as hydrated. The UI works without JavaScript, but hydration
+	// rewrites input values among other things. The marker lets automated tests -
+	// and debugging - know when it has finished.
 	$effect(() => {
 		document.documentElement.dataset.hydrert = 'ja';
 	});

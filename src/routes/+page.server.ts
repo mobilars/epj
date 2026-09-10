@@ -7,12 +7,12 @@ import { listCard } from '$srv/integrations/helfo/billing';
 import { query } from '$srv/db';
 import { requireTenant } from '$srv/tenant/context';
 
-/** Arbeidsflaten: dagens timer, uleste meldinger og oppgjør som venter. */
+/** The work surface: today's appointments, unread messages and settlements waiting. */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx) redirect(303, `/logg-inn?retur=${encodeURIComponent(event.url.pathname)}`);
 	if (ctx.roles.length === 0) redirect(303, '/ingen-tilgang');
-	// Plattformadministratorer har ingen klinisk arbeidsflate å komme til.
+	// Platform administrators have no clinical work surface to arrive at.
 	if (ctx.permissions.has('plattform:administrer') && !ctx.permissions.has('journal:les')) {
 		redirect(303, '/systemadmin');
 	}

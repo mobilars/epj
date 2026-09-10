@@ -5,10 +5,10 @@ import { fhirClient } from '$srv/fhir/client';
 import { currentVersion } from '$srv/db/migrate';
 
 /**
- * Helsesjekk for lastbalanserer og overvåking.
+ * Health check for the load balancer and monitoring.
  *
- * Svarer aldri med detaljer om interne adresser eller versjoner av
- * tredjepartskomponenter - bare om avhengighetene svarer.
+ * Never answers with details of internal addresses or versions of third-party
+ * components - only whether the dependencies respond.
  */
 export const GET: RequestHandler = async () => {
 	const [database, fhir] = await Promise.all([

@@ -7,7 +7,7 @@ import { isRole, ROLE_DEFINISJONER, ROLES } from '$srv/authz/roles';
 import { log, actorFromContext } from '$srv/audit';
 import { newToken } from '$srv/util/ids';
 
-/** Brukeradministrasjon. Alle endringer i roller og status loggføres. */
+/** User administration. Every change to roles and status is logged. */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx?.permissions.has('admin:brukere')) error(403, 'Ingen tilgang.');

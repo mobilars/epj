@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { getLog, verifyLogChain } from '$srv/audit';
 
-/** Sikkerhetsloggen for hele virksomheten, med integritetskontroll. */
+/** The audit log for the whole organisation, with an integrity check. */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx?.permissions.has('admin:logg') && !ctx?.permissions.has('logg:innsyn')) error(403, 'Ingen tilgang.');
