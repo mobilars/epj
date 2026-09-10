@@ -408,8 +408,8 @@ export function paramDef(resourceType: string, name: string): SearchParamDef | u
 }
 
 /**
- * Ressurstyper som alltid gjelder én pasient. Brukes av tilgangskontrollen til å
- * avgjøre om et kall må avgrenses til pasienter brukeren har tjenstlig behov for.
+ * Resource types that always concern a single patient. Used by access control to
+ * decide whether a call must be bounded to patients the user has a legitimate need for.
  */
 export const PATIENTCOMPARTMENT: Record<string, string[]> = Object.fromEntries(
 	Object.entries(SEARCH_PARAMS)

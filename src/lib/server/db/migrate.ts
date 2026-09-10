@@ -10,10 +10,10 @@ function migrasjonskatalog(): string {
 			readdirSync(candidate);
 			return candidate;
 		} catch {
-			/* prøv neste */
+			/* try the next one */
 		}
 	}
-	throw new Error('Finner ikke migrasjonskatalogen');
+	throw new Error('Cannot find the migrations directory');
 }
 
 export interface Migration {

@@ -43,6 +43,7 @@ data:
   # Slås på når EPJ_HELSEID_CLIENT_ID er satt: uten klient-id feiler
   # klientassertion-en, og testinnlogging er da eneste vei inn.
   EPJ_HELSEID_ENABLED: 'false'
+  EPJ_HELSEID_CLIENT_ID: 5179bc26-7699-4c36-8428-32cb7f06efe1
   EPJ_HELSEID_ISSUER: https://helseid-sts.test.nhn.no
   EPJ_HELSEID_KEY_ID: oUMPVNSLU4Xj5LiEJ_X1vzVZF5iLM5C1GqUYAMlEs9U
   EPJ_HELSEID_ALG: PS256

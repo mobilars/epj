@@ -169,7 +169,7 @@ describeIf('utlevering av journal', () => {
 			expect(titler).toContain('Legemidler');
 			expect(titler).toContain('Allergier og overfølsomhet');
 			expect(titler).toContain('Journalnotater');
-			// Problemlisten skal ha den etablerte LOINC-koden.
+			// The problem list must carry the established LOINC code.
 			const problem = seksjoner.find((s) => s.title === 'Diagnoser og helseproblemer');
 			expect(problem?.code?.coding[0].code).toBe('11450-4');
 		});

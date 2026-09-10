@@ -105,7 +105,7 @@ export const config = {
 		/** Idle limit. Normen recommends automatic sign-out on inactivity. */
 		idleSeconds: int('EPJ_SESSION_IDLE_SECONDS', 30 * 60),
 		absoluteSeconds: int('EPJ_SESSION_ABSOLUTE_SECONDS', 12 * 60 * 60),
-		/** Hvor lenge en re-autentisering (step-up) er gyldig, f.eks. for nødrettstilgang. */
+		/** How long a re-authentication (step-up) is valid, e.g. for emergency access. */
 		elevationSeconds: int('EPJ_SESSION_ELEVATION_SECONDS', 15 * 60)
 	},
 
@@ -113,26 +113,26 @@ export const config = {
 		accessTokenTtl: int('EPJ_ACCESS_TOKEN_TTL', 10 * 60),
 		refreshTokenTtl: int('EPJ_REFRESH_TOKEN_TTL', 30 * 24 * 60 * 60),
 		authorizationCodeTtl: int('EPJ_AUTH_CODE_TTL', 60),
-		/** SMART-launch-kontekst er kortlivet og engangsbruk. */
+		/** SMART launch context is short-lived and single-use. */
 		launchTtl: int('EPJ_LAUNCH_TTL', 5 * 60),
-		/** Roterer refresh tokens ved bruk og oppdager gjenbruk av gamle tokens. */
+		/** Rotates refresh tokens on use and detects reuse of old tokens. */
 		rotateRefreshTokens: bool('EPJ_ROTATE_REFRESH_TOKENS', true),
 		signingKeyRotationDays: int('EPJ_KEY_ROTATION_DAYS', 90)
 	},
 
 	security: {
-		/** Antall mislykkede påloggingsforsøk før kontoen låses midlertidig. */
+		/** Number of failed sign-in attempts before the account is temporarily locked. */
 		maxFailedLogins: int('EPJ_MAX_FAILED_LOGINS', 5),
 		lockoutSeconds: int('EPJ_LOCKOUT_SECONDS', 15 * 60),
 		requireMfa: bool('EPJ_REQUIRE_MFA', true),
-		/** Betrodde proxy-hopp for utledning av klient-IP i audit-loggen. */
+		/** Trusted proxy hops for deriving the client IP in the audit log. */
 		trustedProxyHops: int('EPJ_TRUSTED_PROXY_HOPS', 1),
-		/** Slår på HSTS og Secure-flagg. Skal alltid være på utenfor lokal utvikling. */
+		/** Turns on HSTS and the Secure flag. Must always be on outside local development. */
 		httpsOnly: bool('EPJ_HTTPS_ONLY', process.env.NODE_ENV === 'production'),
 		/**
-		 * Ratebegrensning. Påloggingsendepunktene har egne, strengere grenser enn
-		 * resten, både per IP-adresse og per brukernavn, slik at én konto ikke kan
-		 * angripes fra mange adresser.
+		 * Rate limiting. The sign-in endpoints have their own, stricter limits than
+		 * the rest, both per IP address and per username, so a single account cannot
+		 * be attacked from many addresses.
 		 */
 		rateLimit: {
 			generellPerMinutt: int('EPJ_RATE_GENERELL', 600),
@@ -143,34 +143,34 @@ export const config = {
 	},
 
 	/**
-	 * Lokal innlogging med brukernavn/passord/engangskode. Beregnet på
-	 * utvikling, testmiljø og som reserveløsning hvis HelseID er utilgjengelig.
-	 * Skal være avslått i produksjon når HelseID er i bruk.
+	 * Local sign-in with username/password/one-time code. Intended for
+	 * development, test environments and as a fallback if HelseID is unavailable.
+	 * Must be turned off in production when HelseID is in use.
 	 */
 	testLogin: {
 		aktivert: bool('EPJ_TESTINNLOGGING', process.env.NODE_ENV !== 'production'),
-		/** Viser demobrukere med ferdig utfylt passord på påloggingssiden. */
+		/** Shows demo users with the password filled in on the sign-in page. */
 		showDemoUsers: bool('EPJ_VIS_DEMOBRUKERE', process.env.NODE_ENV !== 'production')
 	},
 
 	audit: {
-		/** Helsepersonelloven/pasientjournalforskriften: logg skal bevares i minst 10 år. */
+		/** Health Personnel Act / patient records regulation: logs must be kept for at least 10 years. */
 		retentionYears: int('EPJ_AUDIT_RETENTION_YEARS', 10)
 	},
 
 	/**
-	 * Standardvirksomhet og plattformadministrasjon.
+	 * Default organisation and platform administration.
 	 *
-	 * Virksomhetsopplysninger ligger i `tenant`-tabellen. Verdiene her brukes
-	 * bare til å opprette standardvirksomheten ved første oppstart, og som
-	 * reserve når en forespørsel ikke kan knyttes til en virksomhet.
+	 * Organisation details live in the `tenant` table. The values here are used
+	 * only to create the default organisation on first start-up, and as a
+	 * fallback when a request cannot be tied to an organisation.
 	 */
 	tenant: {
-		/** Virksomheten forespørsler faller tilbake på når vertsnavnet er ukjent. */
+		/** The organisation requests fall back on when the hostname is unknown. */
 		defaultValue: env.EPJ_DEFAULT_TENANT ?? 'standard',
-		/** Vertsnavnet plattformadministrasjonen nås på. */
+		/** The hostname platform administration is reached on. */
 		platformHostname: env.EPJ_PLATFORM_HOSTNAME ?? '',
-		/** Godta ukjent vertsnavn og bruk standardvirksomheten. Av i produksjon. */
+		/** Accept an unknown hostname and use the default organisation. Off in production. */
 		allowUnknownHostname: bool('EPJ_TILLAT_UKJENT_VERTSNAVN', process.env.NODE_ENV !== 'production')
 	},
 
@@ -182,12 +182,12 @@ export const config = {
 	},
 
 	integrations: {
-		/** `mock` kjører alt lokalt uten nettverk. `live` krever endepunkt + klientsertifikat. */
+		/** `mock` runs everything locally without network. `live` requires an endpoint + client certificate. */
 		modus: (env.EPJ_INTEGRATION_MODUS ?? 'mock') as 'mock' | 'live',
 		sfm: {
 			baseUrl: env.EPJ_SFM_BASE_URL ?? '',
 			clientId: env.EPJ_SFM_CLIENT_ID ?? '',
-			/** SFM autentiseres med HelseID (client_credentials + private_key_jwt). */
+			/** SFM authenticates with HelseID (client_credentials + private_key_jwt). */
 			healthIdTokenEndpoint: env.EPJ_HELSEID_TOKEN_ENDPOINT ?? '',
 			scope: env.EPJ_SFM_SCOPE ?? 'nhn:sfm/api'
 		},
@@ -197,21 +197,21 @@ export const config = {
 			addressRegistryUrl: env.EPJ_NHN_ADDRESSREGISTRY_URL ?? ''
 		},
 		helfo: {
-			/** Innsending av regningskort til KUHR (oppgjør). */
+			/** Submission of billing cards to KUHR (settlement). */
 			settlementUrl: env.EPJ_HELFO_SETTLEMENT_URL ?? '',
-			/** Oppslag mot frikort-/egenandelstjenesten. */
+			/** Lookups against the exemption-card/copayment service. */
 			copaymentUrl: env.EPJ_HELFO_COPAYMENT_URL ?? '',
 			avtaleId: env.EPJ_HELFO_AVTALE_ID ?? ''
 		},
 		/**
-		 * HelseID er den primære påloggingsmekanismen for helsepersonell.
-		 * Klienten autentiserer seg med private_key_jwt; ingen delt hemmelighet.
+		 * HelseID is the primary sign-in mechanism for health personnel. The
+		 * client authenticates with private_key_jwt; no shared secret.
 		 */
 		healthId: {
 			enabled: bool('EPJ_HELSEID_ENABLED', false),
 			issuer: (env.EPJ_HELSEID_ISSUER ?? 'https://helseid-sts.test.nhn.no').replace(/\/$/, ''),
 			clientId: env.EPJ_HELSEID_CLIENT_ID ?? '',
-			/** Privat nøkkel (PEM, PKCS#8) for klientassertions. */
+			/** Private key (PEM, PKCS#8) for client assertions. */
 			privateKeyPem: env.EPJ_HELSEID_PRIVATE_KEY ?? '',
 			keyId: env.EPJ_HELSEID_KEY_ID ?? '',
 			signeringsalgoritme: (env.EPJ_HELSEID_ALG ?? 'RS256') as 'RS256' | 'PS256' | 'ES256',

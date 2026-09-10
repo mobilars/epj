@@ -91,7 +91,7 @@ export function referenceId(ref: unknown): string | null {
 	return parts[parts.length - 1] ?? null;
 }
 
-/** Klinisk status på en Condition, oversatt. */
+/** Clinical status of a Condition, translated. */
 export function klinisksStatus(c: FhirResource): string {
 	const code = codeValue(c.clinicalStatus).code;
 	switch (code) {

@@ -13,7 +13,6 @@ import { fhirBaseFor, requireTenant, issuerFor } from '$srv/tenant/context';
 export const GET: RequestHandler = () => {
 	// The metadata is per organisation: each has its own `issuer` and its own FHIR
 	// endpoint, and an app approved at one is not approved at another.
-	// en annen.
 	const tenant = requireTenant();
 	const base = issuerFor(tenant);
 	return json(

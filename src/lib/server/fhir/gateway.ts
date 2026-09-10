@@ -234,7 +234,7 @@ async function deleteResource(f: Request, resourceType: string, id: string): Pro
 }
 
 // ---------------------------------------------------------------------------
-// Søk
+// Search
 // ---------------------------------------------------------------------------
 
 async function searchResources(f: Request, resourceType: string): Promise<GatewayResponse> {
@@ -415,7 +415,7 @@ async function metadata(f: Request): Promise<GatewayResponse> {
 	return { status: 200, resource: enrichCapabilityStatement(from), headers: {} };
 }
 
-/** Legger SMART on FHIR-utvidelsen på HAPI sin CapabilityStatement. */
+/** Adds the SMART on FHIR extension to HAPI's CapabilityStatement. */
 export function enrichCapabilityStatement(from: FhirResource): FhirResource {
 	const tenant = requireTenant();
 	const base = issuerFor(tenant);
