@@ -1,4 +1,5 @@
 import { en, exec, transaction } from '../db';
+import { fhirBaseFor, krevTenant } from '../tenant/kontekst';
 import { config } from '../config';
 import { tokenHash } from '../util/crypto';
 import { nyId, nyToken } from '../util/ids';
@@ -28,12 +29,12 @@ export async function opprettAutorisasjonskode(inn: KodeInn): Promise<string> {
 	const kode = nyToken(32);
 	await exec(
 		`INSERT INTO oauth_authorization_code
-		 (code_hash, client_id, user_id, redirect_uri, scope, code_challenge, code_challenge_method, nonce, launch_context, utloper)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now() + ($10 || ' seconds')::interval)`,
+		 (code_hash, tenant_id, client_id, user_id, redirect_uri, scope, code_challenge, code_challenge_method, nonce, launch_context, utloper)
+		 VALUES ($1,$11,$2,$3,$4,$5,$6,$7,$8,$9, now() + ($10 || ' seconds')::interval)`,
 		[
 			tokenHash(kode), inn.clientId, inn.userId, inn.redirectUri, inn.scope,
 			inn.codeChallenge, inn.codeChallengeMethod, inn.nonce ?? null,
-			JSON.stringify(inn.launch), String(config.oauth.authorizationCodeTtl)
+			JSON.stringify(inn.launch), String(config.oauth.authorizationCodeTtl), krevTenant().id
 		]
 	);
 	return kode;
@@ -54,14 +55,16 @@ export async function bytteInnKode(
 			code_hash: string; client_id: string; user_id: string; redirect_uri: string; scope: string;
 			code_challenge: string; code_challenge_method: string; nonce: string | null;
 			launch_context: LaunchKontekst; utloper: string; brukt: boolean;
-		}>('SELECT * FROM oauth_authorization_code WHERE code_hash = $1 FOR UPDATE', [tokenHash(kode)]);
+		}>('SELECT * FROM oauth_authorization_code WHERE code_hash = $1 AND tenant_id = $2 FOR UPDATE', [
+			tokenHash(kode), krevTenant().id
+		]);
 
 		if (!rad) return { ok: false as const, feil: 'invalid_grant', beskrivelse: 'Ukjent autorisasjonskode' };
 		if (rad.brukt) {
 			// Gjenbruk av kode: trekk tilbake alt som er utstedt til klienten for brukeren.
 			await exec(
-				"UPDATE oauth_token SET tilbakekalt = true, tilbakekalt_grunn = 'gjenbruk av autorisasjonskode' WHERE client_id = $1 AND user_id = $2",
-				[rad.client_id, rad.user_id]
+				"UPDATE oauth_token SET tilbakekalt = true, tilbakekalt_grunn = 'gjenbruk av autorisasjonskode' WHERE client_id = $1 AND user_id = $2 AND tenant_id = $3",
+				[rad.client_id, rad.user_id, krevTenant().id]
 			);
 			return { ok: false as const, feil: 'invalid_grant', beskrivelse: 'Autorisasjonskoden er allerede brukt' };
 		}
@@ -82,7 +85,7 @@ export async function bytteInnKode(
 			return { ok: false as const, feil: 'invalid_grant', beskrivelse: 'PKCE-verifisering feilet' };
 		}
 
-		await exec('UPDATE oauth_authorization_code SET brukt = true WHERE code_hash = $1', [rad.code_hash]);
+		await exec('UPDATE oauth_authorization_code SET brukt = true WHERE code_hash = $1 AND tenant_id = $2', [rad.code_hash, krevTenant().id]);
 
 		const scopes = rad.scope.split(/\s+/);
 		const tokens = await utstedTokens({
@@ -107,22 +110,22 @@ export async function opprettLaunch(inn: {
 }): Promise<string> {
 	const launchId = nyToken(24);
 	await exec(
-		`INSERT INTO smart_launch (launch_id, client_id, user_id, patient_id, encounter_id, intent, utloper)
-		 VALUES ($1,$2,$3,$4,$5,$6, now() + ($7 || ' seconds')::interval)`,
-		[launchId, inn.clientId, inn.userId, inn.patientId ?? null, inn.encounterId ?? null, inn.intent ?? null, String(config.oauth.launchTtl)]
+		`INSERT INTO smart_launch (launch_id, tenant_id, client_id, user_id, patient_id, encounter_id, intent, utloper)
+		 VALUES ($1,$8,$2,$3,$4,$5,$6, now() + ($7 || ' seconds')::interval)`,
+		[launchId, inn.clientId, inn.userId, inn.patientId ?? null, inn.encounterId ?? null, inn.intent ?? null, String(config.oauth.launchTtl), krevTenant().id]
 	);
 	return launchId;
 }
 
 export async function forbrukLaunch(launchId: string, clientId: string, userId: string): Promise<LaunchKontekst | null> {
 	const rad = await en<{ patient_id: string | null; encounter_id: string | null; intent: string | null; brukt: boolean; utloper: string; client_id: string; user_id: string }>(
-		'SELECT patient_id, encounter_id, intent, brukt, utloper, client_id, user_id FROM smart_launch WHERE launch_id = $1',
-		[launchId]
+		'SELECT patient_id, encounter_id, intent, brukt, utloper, client_id, user_id FROM smart_launch WHERE launch_id = $1 AND tenant_id = $2',
+		[launchId, krevTenant().id]
 	);
 	if (!rad || rad.brukt) return null;
 	if (rad.client_id !== clientId || rad.user_id !== userId) return null;
 	if (new Date(rad.utloper).getTime() <= Date.now()) return null;
-	await exec('UPDATE smart_launch SET brukt = true WHERE launch_id = $1', [launchId]);
+	await exec('UPDATE smart_launch SET brukt = true WHERE launch_id = $1 AND tenant_id = $2', [launchId, krevTenant().id]);
 	return { patientId: rad.patient_id, encounterId: rad.encounter_id, intent: rad.intent };
 }
 
@@ -182,8 +185,9 @@ export function validerAutorisasjonsforesporsel(
 	if (!f.code_challenge) return avvis('invalid_request', 'PKCE (code_challenge) er påkrevd');
 	if ((f.code_challenge_method ?? 'plain') !== 'S256') return avvis('invalid_request', 'code_challenge_method må være S256');
 	if (!klient.grant_types.includes('authorization_code')) return avvis('unauthorized_client', 'Klienten kan ikke bruke authorization_code');
-	if (f.aud && !f.aud.startsWith(config.fhirBaseUrl) && f.aud !== config.fhirBaseUrl) {
-		return avvis('invalid_request', `aud må være ${config.fhirBaseUrl}`);
+	const fhirBase = fhirBaseFor(krevTenant());
+	if (f.aud && !f.aud.startsWith(fhirBase) && f.aud !== fhirBase) {
+		return avvis('invalid_request', `aud må være ${fhirBase}`);
 	}
 	if (f.scope.split(/\s+/).includes('launch') && !f.launch) {
 		return avvis('invalid_request', 'scope «launch» krever parameteren launch');
@@ -200,6 +204,7 @@ export function feilOmdirigering(redirectUri: string, feil: string, beskrivelse:
 	return url.toString();
 }
 
+/** Vedlikehold. Går bevisst på tvers av virksomheter: sletter bare utløpte rader. */
 export async function ryddUtlopteKoder(): Promise<number> {
 	const a = await exec("DELETE FROM oauth_authorization_code WHERE utloper < now() - interval '1 day'");
 	const b = await exec("DELETE FROM smart_launch WHERE utloper < now() - interval '1 day'");

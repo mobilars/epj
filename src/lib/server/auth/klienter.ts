@@ -1,4 +1,5 @@
 import { en, exec, query } from '../db';
+import { krevTenant } from '../tenant/kontekst';
 import { hashPassord, likeStrenger, tokenHash, verifiserPassord } from '../util/crypto';
 import { nyId, nyToken } from '../util/ids';
 import { verifiser as verifiserJws, dekodUtenVerifisering, type Jwk } from './jws';
@@ -20,6 +21,7 @@ export interface OAuthKlient {
 	krev_pkce: boolean;
 	krev_samtykke: boolean;
 	logo_url: string | null;
+	tenant_id: string;
 	databehandleravtale: string | null;
 	/** URL journalen sender brukeren til ved EHR launch. */
 	launch_url: string | null;
@@ -27,15 +29,19 @@ export interface OAuthKlient {
 	opprettet: string;
 }
 
-const FELT = `client_id, navn, type, klient_kategori, secret_hash, jwks, jwks_uri, redirect_uris,
+const FELT = `client_id, tenant_id, navn, type, klient_kategori, secret_hash, jwks, jwks_uri, redirect_uris,
 	tillatte_scopes, grant_types, krev_pkce, krev_samtykke, logo_url, databehandleravtale, launch_url, status, opprettet`;
 
 export async function hentKlient(clientId: string): Promise<OAuthKlient | null> {
-	return en<OAuthKlient>(`SELECT ${FELT} FROM oauth_client WHERE client_id = $1`, [clientId]);
+	return en<OAuthKlient>(`SELECT ${FELT} FROM oauth_client WHERE client_id = $1 AND tenant_id = $2`, [
+		clientId, krevTenant().id
+	]);
 }
 
 export async function listKlienter(): Promise<OAuthKlient[]> {
-	return query<OAuthKlient>(`SELECT ${FELT} FROM oauth_client ORDER BY navn`);
+	return query<OAuthKlient>(`SELECT ${FELT} FROM oauth_client WHERE tenant_id = $1 ORDER BY navn`, [
+		krevTenant().id
+	]);
 }
 
 export interface NyKlient {
@@ -57,11 +63,11 @@ export async function registrerKlient(inn: NyKlient): Promise<{ klient: OAuthKli
 	const clientId = `epj-${nyId()}`;
 	const secret = inn.type === 'confidential' && !inn.jwks && !inn.jwksUri ? nyToken(32) : undefined;
 	await exec(
-		`INSERT INTO oauth_client (client_id, navn, type, klient_kategori, secret_hash, jwks, jwks_uri,
+		`INSERT INTO oauth_client (client_id, tenant_id, navn, type, klient_kategori, secret_hash, jwks, jwks_uri,
 			redirect_uris, tillatte_scopes, grant_types, krev_pkce, logo_url, databehandleravtale, launch_url, opprettet_av)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
 		[
-			clientId, inn.navn, inn.type, inn.kategori, secret ? hashPassord(secret) : null,
+			clientId, krevTenant().id, inn.navn, inn.type, inn.kategori, secret ? hashPassord(secret) : null,
 			inn.jwks ? JSON.stringify(inn.jwks) : null, inn.jwksUri ?? null,
 			JSON.stringify(inn.redirectUris), JSON.stringify(inn.scopes),
 			JSON.stringify(inn.grantTypes ?? (inn.kategori === 'backend' ? ['client_credentials'] : ['authorization_code', 'refresh_token'])),
@@ -74,9 +80,13 @@ export async function registrerKlient(inn: NyKlient): Promise<{ klient: OAuthKli
 }
 
 export async function settKlientstatus(clientId: string, status: 'aktiv' | 'sperret'): Promise<void> {
-	await exec('UPDATE oauth_client SET status = $2 WHERE client_id = $1', [clientId, status]);
+	const tenantId = krevTenant().id;
+	await exec('UPDATE oauth_client SET status = $2 WHERE client_id = $1 AND tenant_id = $3', [clientId, status, tenantId]);
 	if (status === 'sperret') {
-		await exec("UPDATE oauth_token SET tilbakekalt = true, tilbakekalt_grunn = 'klient sperret' WHERE client_id = $1", [clientId]);
+		await exec(
+			"UPDATE oauth_token SET tilbakekalt = true, tilbakekalt_grunn = 'klient sperret' WHERE client_id = $1 AND tenant_id = $2",
+			[clientId, tenantId]
+		);
 	}
 }
 
@@ -175,16 +185,16 @@ async function klientNokler(klient: OAuthKlient): Promise<Jwk[]> {
 // jti-er lagres kortvarig for å hindre gjenbruk av client_assertion.
 async function jtiBrukt(jti: string): Promise<boolean> {
 	const rad = await en<{ n: string }>(
-		"SELECT 1 AS n FROM oauth_token WHERE token_hash = $1 AND kind = 'jti' AND utloper > now()",
-		[tokenHash(jti)]
+		"SELECT 1 AS n FROM oauth_token WHERE token_hash = $1 AND kind = 'jti' AND tenant_id = $2 AND utloper > now()",
+		[tokenHash(jti), krevTenant().id]
 	);
 	return rad !== null;
 }
 
 async function lagreJti(jti: string, exp: number): Promise<void> {
 	await exec(
-		`INSERT INTO oauth_token (id, kind, token_hash, client_id, scope, familie, utloper)
-		 VALUES ($1,'jti',$2,'-','',$1,to_timestamp($3)) ON CONFLICT (token_hash) DO NOTHING`,
-		[nyId(), tokenHash(jti), exp]
+		`INSERT INTO oauth_token (id, tenant_id, kind, token_hash, client_id, scope, familie, utloper)
+		 VALUES ($1,$4,'jti',$2,'-','',$1,to_timestamp($3)) ON CONFLICT (token_hash) DO NOTHING`,
+		[nyId(), tokenHash(jti), exp, krevTenant().id]
 	);
 }

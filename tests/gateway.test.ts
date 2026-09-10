@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { exec, query } from '../src/lib/server/db/index';
-import { harTestdatabase, opprettTestdatabase, tomTabeller, type Testdatabase } from './fixtures/db';
+import { harTestdatabase, opprettTestdatabase, tomTabeller, type Testdatabase, settInn } from './fixtures/db';
 import { fhirForTest, type TestFhirServer } from './fixtures/fhir-testserver';
 import { appKontekst, kontekst } from './fixtures/kontekst';
 import { utfor } from '../src/lib/server/fhir/gateway';
@@ -39,8 +39,8 @@ beskriv('FHIR-vokteren', () => {
 	beforeEach(async () => {
 		await tomTabeller();
 		fhir.nullstill();
-		await exec('INSERT INTO user_account (id, brukernavn, navn) VALUES ($1,$2,$3)', ['bruker-1', 'lege', 'Dr. Ingrid Fastlege']);
-		await exec('INSERT INTO user_account (id, brukernavn, navn) VALUES ($1,$2,$3)', ['bruker-2', 'sykepleier', 'Kari Sykepleier']);
+		await settInn('INSERT INTO user_account (id, brukernavn, navn) VALUES ($1,$2,$3)', ['bruker-1', 'lege', 'Dr. Ingrid Fastlege']);
+		await settInn('INSERT INTO user_account (id, brukernavn, navn) VALUES ($1,$2,$3)', ['bruker-2', 'sykepleier', 'Kari Sykepleier']);
 
 		const p1 = await fhirKlient.opprett({
 			resourceType: 'Patient',
@@ -74,7 +74,7 @@ beskriv('FHIR-vokteren', () => {
 	});
 
 	const girRelasjon = (userId: string, patientId: string) =>
-		exec('INSERT INTO care_relationship (id, user_id, patient_id, grunnlag) VALUES ($1,$2,$3,$4)', [nyId(), userId, patientId, 'fastlege']);
+		settInn('INSERT INTO care_relationship (id, user_id, patient_id, grunnlag) VALUES ($1,$2,$3,$4)', [nyId(), userId, patientId, 'fastlege']);
 
 	const antallLogg = async (): Promise<number> =>
 		Number((await query<{ n: string }>('SELECT count(*)::int AS n FROM audit_event'))[0].n);
@@ -134,7 +134,7 @@ beskriv('FHIR-vokteren', () => {
 		it('filtrerer bort sperrede pasienter etter at serveren har svart', async () => {
 			await girRelasjon('bruker-1', pasient1);
 			await girRelasjon('bruker-1', pasient2);
-			await exec("INSERT INTO journal_sperring (id, patient_id, omfang, registrert_av) VALUES ($1,$2,'alle','bruker-1')", [nyId(), pasient2]);
+			await settInn("INSERT INTO journal_sperring (id, patient_id, omfang, registrert_av) VALUES ($1,$2,'alle','bruker-1')", [nyId(), pasient2]);
 
 			const svar = await utfor({ ctx: kontekst(), metode: 'POST', sti: 'Observation/_search', sok: new URLSearchParams(), kropp: new URLSearchParams() });
 			const bundle = svar.ressurs as Bundle;

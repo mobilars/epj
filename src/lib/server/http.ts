@@ -1,6 +1,7 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import { en, exec } from './db';
 import { config } from './config';
+import { gjeldendeTenant } from './tenant/kontekst';
 
 /** Utleder klient-IP fra betrodde proxy-headere. */
 export function klientIp(event: RequestEvent): string {
@@ -29,6 +30,9 @@ export async function rateLimit(
 	maks: number,
 	vinduSekunder: number
 ): Promise<{ tillatt: boolean; gjenstaende: number; nullstillesOm: number }> {
+	// Virksomheten inngår i nøkkelen, slik at én virksomhets trafikk ikke kan
+	// stenge ute en annen.
+	const nokkel = `${gjeldendeTenant()?.id ?? 'ukjent'}:${bucket}`;
 	const nå = Math.floor(Date.now() / 1000);
 	const vinduStart = nå - (nå % vinduSekunder);
 	const rad = await en<{ teller: number }>(
@@ -37,7 +41,7 @@ export async function rateLimit(
 		   teller = CASE WHEN rate_limit.vindu_start = $2 THEN rate_limit.teller + 1 ELSE 1 END,
 		   vindu_start = $2
 		 RETURNING teller`,
-		[bucket, vinduStart]
+		[nokkel, vinduStart]
 	);
 	const teller = rad?.teller ?? 1;
 	return {
@@ -47,6 +51,7 @@ export async function rateLimit(
 	};
 }
 
+/** Vedlikehold. Går bevisst på tvers av virksomheter: sletter bare gamle tellere. */
 export async function ryddRateLimit(): Promise<number> {
 	return exec('DELETE FROM rate_limit WHERE vindu_start < $1', [Math.floor(Date.now() / 1000) - 86400]);
 }

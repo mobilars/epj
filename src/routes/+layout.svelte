@@ -59,6 +59,9 @@
 			{#if har('admin:brukere') || har('admin:apper') || har('admin:logg')}
 				<a href="/admin" aria-current={page.url.pathname.startsWith('/admin') ? 'page' : undefined}>Administrasjon</a>
 			{/if}
+			{#if har('plattform:administrer')}
+				<a href="/systemadmin" aria-current={page.url.pathname.startsWith('/systemadmin') ? 'page' : undefined}>Plattform</a>
+			{/if}
 			<div class="hoyre-del">
 				<span>
 					{data.bruker.navn}

@@ -1,4 +1,5 @@
 import { en, exec, query, transaction } from '../../db';
+import { krevTenant } from '../../tenant/kontekst';
 import { config } from '../../config';
 import { dokument, el } from '../../util/xml';
 import { nyId } from '../../util/ids';
@@ -41,8 +42,8 @@ export interface ForhandsvisningsResultat {
 
 export async function forhandsvis(fra: string, til: string): Promise<ForhandsvisningsResultat> {
 	const kort = await query<Regningskort>(
-		"SELECT * FROM regningskort WHERE status = 'klar' AND dato >= $1 AND dato <= $2 ORDER BY dato",
-		[fra, til]
+		"SELECT * FROM regningskort WHERE tenant_id = $3 AND status = 'klar' AND dato >= $1 AND dato <= $2 ORDER BY dato",
+		[fra, til, krevTenant().id]
 	);
 	const advarsler: string[] = [];
 	if (kort.length === 0) advarsler.push('Ingen regningskort med status «klar» i perioden.');
@@ -64,9 +65,10 @@ export async function forhandsvis(fra: string, til: string): Promise<Forhandsvis
 
 /** Bygger oppgjørsfilen og markerer kortene som sendt. */
 export async function genererOppgjor(fra: string, til: string, aktor: AuditAktor): Promise<{ ok: boolean; id?: string; feil?: string }> {
+	const tenantId = krevTenant().id;
 	const kort = await query<Regningskort>(
-		"SELECT * FROM regningskort WHERE status = 'klar' AND dato >= $1 AND dato <= $2 ORDER BY dato",
-		[fra, til]
+		"SELECT * FROM regningskort WHERE tenant_id = $3 AND status = 'klar' AND dato >= $1 AND dato <= $2 ORDER BY dato",
+		[fra, til, tenantId]
 	);
 	if (kort.length === 0) return { ok: false, feil: 'Ingen regningskort å sende i perioden' };
 
@@ -82,13 +84,13 @@ export async function genererOppgjor(fra: string, til: string, aktor: AuditAktor
 
 	await transaction(async () => {
 		await exec(
-			`INSERT INTO oppgjor (id, periode_fra, periode_til, antall_kort, sum_refusjon_ore, sum_egenandel_ore, status, fil)
-			 VALUES ($1,$2,$3,$4,$5,$6,'generert',$7)`,
-			[id, fra, til, kort.length, sumRefusjon, sumEgenandel, fil]
+			`INSERT INTO oppgjor (id, tenant_id, periode_fra, periode_til, antall_kort, sum_refusjon_ore, sum_egenandel_ore, status, fil)
+			 VALUES ($1,$8,$2,$3,$4,$5,$6,'generert',$7)`,
+			[id, fra, til, kort.length, sumRefusjon, sumEgenandel, fil, tenantId]
 		);
 		await exec(
-			"UPDATE regningskort SET status = 'sendt', oppgjor_id = $1, oppdatert = now() WHERE id = ANY($2::text[])",
-			[id, kort.map((k) => k.id)]
+			"UPDATE regningskort SET status = 'sendt', oppgjor_id = $1, oppdatert = now() WHERE id = ANY($2::text[]) AND tenant_id = $3",
+			[id, kort.map((k) => k.id), tenantId]
 		);
 	});
 
@@ -104,7 +106,7 @@ export async function genererOppgjor(fra: string, til: string, aktor: AuditAktor
 }
 
 export async function sendOppgjor(id: string, aktor: AuditAktor): Promise<{ ok: boolean; feil?: string }> {
-	const oppgjor = await en<Oppgjor & { fil: string }>('SELECT * FROM oppgjor WHERE id = $1', [id]);
+	const oppgjor = await en<Oppgjor & { fil: string }>('SELECT * FROM oppgjor WHERE id = $1 AND tenant_id = $2', [id, krevTenant().id]);
 	if (!oppgjor) return { ok: false, feil: 'Ukjent oppgjør' };
 	if (oppgjor.status !== 'generert') return { ok: false, feil: `Oppgjøret har status ${oppgjor.status}` };
 
@@ -115,8 +117,8 @@ export async function sendOppgjor(id: string, aktor: AuditAktor): Promise<{ ok: 
 				: await sendTilHelfo(oppgjor.fil);
 
 		await exec(
-			"UPDATE oppgjor SET status = 'sendt', sendt = now(), sendt_av = $2, kvittering = $3 WHERE id = $1",
-			[id, aktor.userId, JSON.stringify(kvittering)]
+			"UPDATE oppgjor SET status = 'sendt', sendt = now(), sendt_av = $2, kvittering = $3 WHERE id = $1 AND tenant_id = $4",
+			[id, aktor.userId, JSON.stringify(kvittering), krevTenant().id]
 		);
 		await logg(
 			{ type: 'oppgjor', subtype: 'oppgjor:sendt', handling: 'E', utfall: '0', entityRef: `urn:oppgjor:${id}`, purposeOfUse: 'HPAYMT', detaljer: { referanse: kvittering.referanse } },
@@ -161,17 +163,18 @@ export async function registrerAvregning(
 ): Promise<{ godkjent: number; avvist: number }> {
 	let godkjent = 0;
 	let avvist = 0;
+	const tenantId = krevTenant().id;
 	await transaction(async () => {
 		for (const r of rapport) {
 			if (r.godkjent) {
-				await exec("UPDATE regningskort SET status = 'godkjent', avvisning = NULL, oppdatert = now() WHERE id = $1 AND oppgjor_id = $2", [r.kortId, oppgjorId]);
+				await exec("UPDATE regningskort SET status = 'godkjent', avvisning = NULL, oppdatert = now() WHERE id = $1 AND oppgjor_id = $2 AND tenant_id = $3", [r.kortId, oppgjorId, tenantId]);
 				godkjent++;
 			} else {
-				await exec("UPDATE regningskort SET status = 'avvist', avvisning = $3, oppdatert = now() WHERE id = $1 AND oppgjor_id = $2", [r.kortId, oppgjorId, r.arsak ?? 'Avvist av Helfo']);
+				await exec("UPDATE regningskort SET status = 'avvist', avvisning = $3, oppdatert = now() WHERE id = $1 AND oppgjor_id = $2 AND tenant_id = $4", [r.kortId, oppgjorId, r.arsak ?? 'Avvist av Helfo', tenantId]);
 				avvist++;
 			}
 		}
-		await exec("UPDATE oppgjor SET status = 'avregnet' WHERE id = $1", [oppgjorId]);
+		await exec("UPDATE oppgjor SET status = 'avregnet' WHERE id = $1 AND tenant_id = $2", [oppgjorId, tenantId]);
 	});
 	await logg(
 		{ type: 'oppgjor', subtype: 'oppgjor:avregnet', handling: 'U', utfall: avvist > 0 ? '4' : '0', entityRef: `urn:oppgjor:${oppgjorId}`, detaljer: { godkjent, avvist } },
@@ -198,9 +201,9 @@ export function byggOppgjorsfil(
 	const rot = el('Oppgjorskrav', [
 		el('Kravhode', [
 			el('KravId', id),
-			el('Konto', config.integrasjoner.helfo.avtaleId || config.organisasjon.organisasjonsnummer),
-			el('Organisasjonsnummer', config.organisasjon.organisasjonsnummer),
-			el('Virksomhet', config.organisasjon.navn),
+			el('Konto', config.integrasjoner.helfo.avtaleId || krevTenant().organisasjonsnummer),
+			el('Organisasjonsnummer', krevTenant().organisasjonsnummer),
+			el('Virksomhet', krevTenant().navn),
 			el('PeriodeFra', fra),
 			el('PeriodeTil', til),
 			el('Generert', new Date().toISOString()),
@@ -244,11 +247,12 @@ export function byggOppgjorsfil(
 
 export async function listOppgjor(grense = 50): Promise<Oppgjor[]> {
 	return query<Oppgjor>(
-		'SELECT id, periode_fra, periode_til, antall_kort, sum_refusjon_ore, sum_egenandel_ore, status, kvittering, opprettet, sendt, sendt_av FROM oppgjor ORDER BY opprettet DESC LIMIT $1',
-		[grense]
+		`SELECT id, periode_fra, periode_til, antall_kort, sum_refusjon_ore, sum_egenandel_ore, status, kvittering, opprettet, sendt, sendt_av
+		 FROM oppgjor WHERE tenant_id = $2 ORDER BY opprettet DESC LIMIT $1`,
+		[grense, krevTenant().id]
 	);
 }
 
 export async function hentOppgjor(id: string): Promise<(Oppgjor & { fil: string }) | null> {
-	return en<Oppgjor & { fil: string }>('SELECT * FROM oppgjor WHERE id = $1', [id]);
+	return en<Oppgjor & { fil: string }>('SELECT * FROM oppgjor WHERE id = $1 AND tenant_id = $2', [id, krevTenant().id]);
 }

@@ -4,6 +4,7 @@ import { valider } from './validate';
 import { PASIENTKOMPARTMENT, SEARCH_PARAMS } from './searchparams';
 import type { Bundle, FhirResource } from './types';
 import { config } from '../config';
+import { fhirBaseFor, krevTenant, utstederFor } from '../tenant/kontekst';
 import type { AuthContext } from '../authz/context';
 import { pasientIdFraRessurs, sperredePasienter, tillattePasienter, vurder } from '../authz/tilgang';
 import type { Operasjon } from '../authz/scopes';
@@ -166,7 +167,7 @@ async function opprettRessurs(f: Forespørsel, resourceType: string): Promise<Ga
 		status: svar.status,
 		ressurs: svar.ressurs,
 		headers: {
-			location: `${config.fhirBaseUrl}/${resourceType}/${svar.ressurs.id}`,
+			location: `${fhirBaseFor(krevTenant())}/${resourceType}/${svar.ressurs.id}`,
 			...(svar.etag ? { etag: svar.etag } : {})
 		}
 	};
@@ -406,6 +407,8 @@ async function metadata(f: Forespørsel): Promise<GatewaySvar> {
 
 /** Legger SMART on FHIR-utvidelsen på HAPI sin CapabilityStatement. */
 export function berikCapabilityStatement(fra: FhirResource): FhirResource {
+	const tenant = krevTenant();
+	const base = utstederFor(tenant);
 	const rest = Array.isArray(fra.rest) ? [...(fra.rest as Record<string, unknown>[])] : [{ mode: 'server' }];
 	rest[0] = {
 		...rest[0],
@@ -416,12 +419,12 @@ export function berikCapabilityStatement(fra: FhirResource): FhirResource {
 				{
 					url: 'http://fhir-registry.smarthealthit.org/StructureDefinition/oauth-uris',
 					extension: [
-						{ url: 'authorize', valueUri: `${config.baseUrl}/oauth/authorize` },
-						{ url: 'token', valueUri: `${config.baseUrl}/oauth/token` },
-						{ url: 'introspect', valueUri: `${config.baseUrl}/oauth/introspect` },
-						{ url: 'revoke', valueUri: `${config.baseUrl}/oauth/revoke` },
-						{ url: 'register', valueUri: `${config.baseUrl}/oauth/register` },
-						{ url: 'manage', valueUri: `${config.baseUrl}/admin/apper` }
+						{ url: 'authorize', valueUri: `${base}/oauth/authorize` },
+						{ url: 'token', valueUri: `${base}/oauth/token` },
+						{ url: 'introspect', valueUri: `${base}/oauth/introspect` },
+						{ url: 'revoke', valueUri: `${base}/oauth/revoke` },
+						{ url: 'register', valueUri: `${base}/oauth/register` },
+						{ url: 'manage', valueUri: `${base}/admin/apper` }
 					]
 				}
 			]
@@ -429,8 +432,8 @@ export function berikCapabilityStatement(fra: FhirResource): FhirResource {
 	};
 	return {
 		...fra,
-		publisher: config.organisasjon.navn,
-		implementation: { description: `EPJ for fastleger - ${config.organisasjon.navn}`, url: config.fhirBaseUrl },
+		publisher: tenant.navn,
+		implementation: { description: `EPJ for fastleger - ${tenant.navn}`, url: fhirBaseFor(tenant) },
 		rest
 	};
 }

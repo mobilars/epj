@@ -5,6 +5,7 @@ import { tilPasientVisning } from '$srv/fhir/visning';
 import { SYSTEM, gyldigNorskPersonnummer } from '$srv/fhir/kodeverk';
 import { logg, aktorFraKontekst } from '$srv/audit';
 import { query } from '$srv/db';
+import { krevTenant } from '$srv/tenant/kontekst';
 
 /**
  * Pasientsøk.
@@ -26,8 +27,9 @@ export const load: PageServerLoad = async (event) => {
 
 	const mine = await query<{ patient_id: string }>(
 		`SELECT DISTINCT patient_id FROM care_relationship
-		 WHERE user_id = $1 AND gyldig_fra <= now() AND (gyldig_til IS NULL OR gyldig_til > now()) LIMIT 500`,
-		[ctx.userId]
+		 WHERE tenant_id = $2 AND user_id = $1
+		   AND gyldig_fra <= now() AND (gyldig_til IS NULL OR gyldig_til > now()) LIMIT 500`,
+		[ctx.userId, krevTenant().id]
 	);
 
 	if (!sok) {

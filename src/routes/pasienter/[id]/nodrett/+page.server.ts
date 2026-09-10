@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { exec } from '$srv/db';
+import { krevTenant } from '$srv/tenant/kontekst';
 import { nyId } from '$srv/util/ids';
 import { logg, aktorFraKontekst } from '$srv/audit';
 import { bekreftTotp } from '$srv/auth/brukere';
@@ -48,9 +49,9 @@ export const actions: Actions = {
 
 		const varighetTimer = 4;
 		await exec(
-			`INSERT INTO break_glass (id, user_id, patient_id, begrunnelse, utloper)
-			 VALUES ($1,$2,$3,$4, now() + ($5 || ' hours')::interval)`,
-			[nyId(), ctx.userId, patientId, begrunnelse, String(varighetTimer)]
+			`INSERT INTO break_glass (id, tenant_id, user_id, patient_id, begrunnelse, utloper)
+			 VALUES ($1,$6,$2,$3,$4, now() + ($5 || ' hours')::interval)`,
+			[nyId(), ctx.userId, patientId, begrunnelse, String(varighetTimer), krevTenant().id]
 		);
 		await logg(
 			{
@@ -66,9 +67,10 @@ export const actions: Actions = {
 	avsluttNodrett: async (event) => {
 		const ctx = event.locals.auth;
 		if (!ctx?.userId) redirect(303, '/logg-inn');
-		await exec('UPDATE break_glass SET utloper = now() WHERE user_id = $1 AND patient_id = $2 AND utloper > now()', [
-			ctx.userId, event.params.id
-		]);
+		await exec(
+			'UPDATE break_glass SET utloper = now() WHERE user_id = $1 AND patient_id = $2 AND tenant_id = $3 AND utloper > now()',
+			[ctx.userId, event.params.id, krevTenant().id]
+		);
 		await logg(
 			{ type: 'emergency-override', subtype: 'break-glass-avsluttet', handling: 'E', utfall: '0', patientId: event.params.id },
 			aktorFraKontekst(ctx)

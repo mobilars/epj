@@ -1,4 +1,5 @@
 import { en, query } from '../db';
+import { krevTenant } from '../tenant/kontekst';
 import { PASIENTKOMPARTMENT } from '../fhir/searchparams';
 import { hentVerdier, parseReferanse } from '../fhir/fhirpath';
 import type { FhirResource } from '../fhir/types';
@@ -151,9 +152,10 @@ export async function harBehandlingsrelasjon(userId: string | null, patientId: s
 	if (!userId) return false;
 	const rad = await en<{ n: string }>(
 		`SELECT 1 AS n FROM care_relationship
-		 WHERE user_id = $1 AND patient_id = $2 AND gyldig_fra <= now() AND (gyldig_til IS NULL OR gyldig_til > now())
+		 WHERE tenant_id = $1 AND user_id = $2 AND patient_id = $3
+		   AND gyldig_fra <= now() AND (gyldig_til IS NULL OR gyldig_til > now())
 		 LIMIT 1`,
-		[userId, patientId]
+		[krevTenant().id, userId, patientId]
 	);
 	return rad !== null;
 }
@@ -161,8 +163,8 @@ export async function harBehandlingsrelasjon(userId: string | null, patientId: s
 export async function aktivNodrett(userId: string | null, patientId: string): Promise<boolean> {
 	if (!userId) return false;
 	const rad = await en<{ n: string }>(
-		'SELECT 1 AS n FROM break_glass WHERE user_id = $1 AND patient_id = $2 AND utloper > now() LIMIT 1',
-		[userId, patientId]
+		'SELECT 1 AS n FROM break_glass WHERE tenant_id = $1 AND user_id = $2 AND patient_id = $3 AND utloper > now() LIMIT 1',
+		[krevTenant().id, userId, patientId]
 	);
 	return rad !== null;
 }
@@ -175,8 +177,9 @@ export async function erSperret(
 ): Promise<boolean> {
 	const sperringer = await query<{ omfang: string; mal_user_id: string | null; mal_rolle: string | null; mal_ressurs: string | null }>(
 		`SELECT omfang, mal_user_id, mal_rolle, mal_ressurs FROM journal_sperring
-		 WHERE patient_id = $1 AND opphevet = false AND (gyldig_til IS NULL OR gyldig_til > now())`,
-		[patientId]
+		 WHERE tenant_id = $1 AND patient_id = $2 AND opphevet = false
+		   AND (gyldig_til IS NULL OR gyldig_til > now())`,
+		[krevTenant().id, patientId]
 	);
 	if (sperringer.length === 0) return false;
 	const ressursNokkel = ressurs ? `${ressurs.resourceType}/${ressurs.id}` : ressursId;
@@ -214,11 +217,12 @@ export async function tillattePasienter(ctx: AuthContext, maks = 2000): Promise<
 	}
 	const rader = await query<{ patient_id: string }>(
 		`SELECT DISTINCT patient_id FROM care_relationship
-		 WHERE user_id = $1 AND gyldig_fra <= now() AND (gyldig_til IS NULL OR gyldig_til > now())
+		 WHERE tenant_id = $1 AND user_id = $2 AND gyldig_fra <= now() AND (gyldig_til IS NULL OR gyldig_til > now())
 		 UNION
-		 SELECT DISTINCT patient_id FROM break_glass WHERE user_id = $1 AND utloper > now()
-		 LIMIT $2`,
-		[ctx.userId, maks]
+		 SELECT DISTINCT patient_id FROM break_glass
+		 WHERE tenant_id = $1 AND user_id = $2 AND utloper > now()
+		 LIMIT $3`,
+		[krevTenant().id, ctx.userId, maks]
 	);
 	return rader.map((r) => r.patient_id);
 }
@@ -227,7 +231,9 @@ export async function tillattePasienter(ctx: AuthContext, maks = 2000): Promise<
 export async function sperredePasienter(ctx: AuthContext): Promise<Set<string>> {
 	const rader = await query<{ patient_id: string; omfang: string; mal_user_id: string | null; mal_rolle: string | null }>(
 		`SELECT patient_id, omfang, mal_user_id, mal_rolle FROM journal_sperring
-		 WHERE opphevet = false AND (gyldig_til IS NULL OR gyldig_til > now()) AND omfang IN ('alle','bruker','rolle')`
+		 WHERE tenant_id = $1 AND opphevet = false AND (gyldig_til IS NULL OR gyldig_til > now())
+		   AND omfang IN ('alle','bruker','rolle')`,
+		[krevTenant().id]
 	);
 	const sperret = new Set<string>();
 	for (const s of rader) {
@@ -238,8 +244,8 @@ export async function sperredePasienter(ctx: AuthContext): Promise<Set<string>> 
 	if (sperret.size === 0 || !ctx.userId) return sperret;
 	// Nødrett opphever sperringen for de pasientene den gjelder.
 	const nodrett = await query<{ patient_id: string }>(
-		'SELECT patient_id FROM break_glass WHERE user_id = $1 AND utloper > now()',
-		[ctx.userId]
+		'SELECT patient_id FROM break_glass WHERE tenant_id = $1 AND user_id = $2 AND utloper > now()',
+		[krevTenant().id, ctx.userId]
 	);
 	for (const n of nodrett) sperret.delete(n.patient_id);
 	return sperret;

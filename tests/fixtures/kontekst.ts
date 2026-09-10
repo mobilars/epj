@@ -1,3 +1,4 @@
+import type { Tenant } from '../../src/lib/server/tenant/kontekst';
 import type { AuthContext } from '../../src/lib/server/authz/context';
 import { parseScopes } from '../../src/lib/server/authz/scopes';
 import { rettigheterForRoller, scopesForRoller, type Rolle } from '../../src/lib/server/authz/roles';
@@ -37,3 +38,35 @@ export function appKontekst(scope: string, patientId?: string, roller: Rolle[] =
 		roller
 	});
 }
+
+
+/**
+ * Virksomhetene testene kjører i.
+ *
+ * `TEST_TENANT` speiler standardvirksomheten migrasjon 003 legger inn. Den
+ * andre finnes for isolasjonstestene: alt som skrives i den ene skal være
+ * usynlig fra den andre.
+ */
+export const TEST_TENANT: Tenant = {
+	id: 'standard',
+	navn: 'Standardvirksomhet',
+	organisasjonsnummer: '999999999',
+	her_id: '8000001',
+	kommunenummer: null,
+	vertsnavn: null,
+	base_url: 'http://localhost:5173',
+	partisjon_id: 1,
+	status: 'aktiv',
+	merknad: null,
+	opprettet: new Date(0).toISOString()
+};
+
+export const ANNEN_TENANT: Tenant = {
+	...TEST_TENANT,
+	id: 'annen',
+	navn: 'Annen virksomhet',
+	organisasjonsnummer: '994598759',
+	her_id: '8000002',
+	base_url: 'http://annen.localhost:5173',
+	partisjon_id: 2
+};

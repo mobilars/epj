@@ -86,6 +86,12 @@ export const config = {
 		brukernavn: env.EPJ_HAPI_USER ?? '',
 		passord: env.EPJ_HAPI_PASSWORD ?? '',
 		timeoutMs: int('EPJ_HAPI_TIMEOUT_MS', 20_000),
+		/**
+		 * Partisjonering slått på. Da inngår virksomhetens partisjonsnavn i
+		 * FHIR-URL-en, og HAPI holder virksomhetenes kliniske data adskilt.
+		 * Kan slås av for enkeltvirksomhetsinstallasjoner.
+		 */
+		multitenant: bool('EPJ_HAPI_MULTITENANT', true),
 		/** Slår på $validate mot HAPI før skriving. */
 		validerVedSkriving: bool('EPJ_HAPI_VALIDATE', false)
 	},
@@ -151,6 +157,22 @@ export const config = {
 	audit: {
 		/** Helsepersonelloven/pasientjournalforskriften: logg skal bevares i minst 10 år. */
 		retentionYears: int('EPJ_AUDIT_RETENTION_YEARS', 10)
+	},
+
+	/**
+	 * Standardvirksomhet og plattformadministrasjon.
+	 *
+	 * Virksomhetsopplysninger ligger i `tenant`-tabellen. Verdiene her brukes
+	 * bare til å opprette standardvirksomheten ved første oppstart, og som
+	 * reserve når en forespørsel ikke kan knyttes til en virksomhet.
+	 */
+	tenant: {
+		/** Virksomheten forespørsler faller tilbake på når vertsnavnet er ukjent. */
+		standard: env.EPJ_STANDARD_TENANT ?? 'standard',
+		/** Vertsnavnet plattformadministrasjonen nås på. */
+		plattformVertsnavn: env.EPJ_PLATTFORM_VERTSNAVN ?? '',
+		/** Godta ukjent vertsnavn og bruk standardvirksomheten. Av i produksjon. */
+		tillatUkjentVertsnavn: bool('EPJ_TILLAT_UKJENT_VERTSNAVN', process.env.NODE_ENV !== 'production')
 	},
 
 	organisasjon: {

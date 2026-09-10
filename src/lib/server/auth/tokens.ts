@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { en, exec } from '../db';
+import { krevTenant, utstederFor, fhirBaseFor } from '../tenant/kontekst';
 import { config } from '../config';
 import { tokenHash } from '../util/crypto';
 import { nyId, nyToken } from '../util/ids';
@@ -44,6 +45,7 @@ export interface UtstedelseInn {
  * i Normen ved avslutning av arbeidsforhold.
  */
 export async function utstedTokens(inn: UtstedelseInn): Promise<UtstedtToken> {
+	const tenant = krevTenant();
 	const nokkel = await aktivSigneringsnokkel();
 	const nå = Math.floor(Date.now() / 1000);
 	const jti = nyId();
@@ -52,13 +54,16 @@ export async function utstedTokens(inn: UtstedelseInn): Promise<UtstedtToken> {
 	const roller = inn.userId ? await rollerFor(inn.userId) : [];
 	const bruker = inn.userId ? await hentBruker(inn.userId) : null;
 	const fhirUser = bruker?.practitioner_id
-		? `${config.fhirBaseUrl}/Practitioner/${bruker.practitioner_id}`
+		? `${fhirBaseFor(tenant)}/Practitioner/${bruker.practitioner_id}`
 		: undefined;
 
 	const payload = {
-		iss: config.issuer,
+		iss: utstederFor(tenant),
 		sub: inn.userId ?? inn.clientId,
-		aud: config.fhirBaseUrl,
+		aud: fhirBaseFor(tenant),
+		// Virksomheten tokenet gjelder. Kontrolleres ved validering, slik at et
+		// token fra én virksomhet ikke kan brukes mot en annen.
+		tenant: tenant.id,
 		client_id: inn.clientId,
 		scope: inn.scope,
 		jti,
@@ -72,9 +77,9 @@ export async function utstedTokens(inn: UtstedelseInn): Promise<UtstedtToken> {
 	const accessToken = signer(payload, nokkel.privatePem, nokkel.kid, 'at+jwt');
 
 	await exec(
-		`INSERT INTO oauth_token (id, kind, token_hash, client_id, user_id, scope, launch_context, familie, utloper)
-		 VALUES ($1,'access',$2,$3,$4,$5,$6,$7,to_timestamp($8))`,
-		[jti, tokenHash(accessToken), inn.clientId, inn.userId, inn.scope, JSON.stringify(inn.launch), familie, payload.exp]
+		`INSERT INTO oauth_token (id, tenant_id, kind, token_hash, client_id, user_id, scope, launch_context, familie, utloper)
+		 VALUES ($1,$9,'access',$2,$3,$4,$5,$6,$7,to_timestamp($8))`,
+		[jti, tokenHash(accessToken), inn.clientId, inn.userId, inn.scope, JSON.stringify(inn.launch), familie, payload.exp, tenant.id]
 	);
 
 	const resultat: UtstedtToken = {
@@ -93,14 +98,15 @@ export async function utstedTokens(inn: UtstedelseInn): Promise<UtstedtToken> {
 	if (inn.launch.encounterId) resultat.encounter = inn.launch.encounterId;
 	if (fhirUser) resultat.fhirUser = fhirUser;
 	resultat.need_patient_banner = !inn.launch.patientId;
-	resultat.smart_style_url = `${config.baseUrl}/smart-style.json`;
+	resultat.smart_style_url = `${utstederFor(tenant)}/smart-style.json`;
 
 	if (inn.scope.split(/\s+/).includes('openid') && inn.userId) {
 		resultat.id_token = signer(
 			{
-				iss: config.issuer,
+				iss: utstederFor(tenant),
 				sub: inn.userId,
 				aud: inn.clientId,
+				tenant: tenant.id,
 				iat: nå,
 				exp: nå + config.oauth.accessTokenTtl,
 				...(inn.nonce ? { nonce: inn.nonce } : {}),
@@ -119,9 +125,9 @@ export async function utstedTokens(inn: UtstedelseInn): Promise<UtstedtToken> {
 async function utstedRefreshToken(inn: UtstedelseInn, familie: string): Promise<string> {
 	const token = nyToken(48);
 	await exec(
-		`INSERT INTO oauth_token (id, kind, token_hash, client_id, user_id, scope, launch_context, familie, utloper)
-		 VALUES ($1,'refresh',$2,$3,$4,$5,$6,$7, now() + ($8 || ' seconds')::interval)`,
-		[nyId(), tokenHash(token), inn.clientId, inn.userId, inn.scope, JSON.stringify(inn.launch), familie, String(config.oauth.refreshTokenTtl)]
+		`INSERT INTO oauth_token (id, tenant_id, kind, token_hash, client_id, user_id, scope, launch_context, familie, utloper)
+		 VALUES ($1,$9,'refresh',$2,$3,$4,$5,$6,$7, now() + ($8 || ' seconds')::interval)`,
+		[nyId(), tokenHash(token), inn.clientId, inn.userId, inn.scope, JSON.stringify(inn.launch), familie, String(config.oauth.refreshTokenTtl), krevTenant().id]
 	);
 	return token;
 }
@@ -143,19 +149,22 @@ export async function fornyMedRefreshToken(refreshToken: string, clientId: strin
 		launch_context: LaunchKontekst; familie: string; tilbakekalt: boolean; utloper: string;
 	}>(
 		`SELECT id, client_id, user_id, scope, launch_context, familie, tilbakekalt, utloper
-		 FROM oauth_token WHERE token_hash = $1 AND kind = 'refresh'`,
-		[hash]
+		 FROM oauth_token WHERE token_hash = $1 AND kind = 'refresh' AND tenant_id = $2`,
+		[hash, krevTenant().id]
 	);
 	if (!rad) return { ok: false, feil: 'Ukjent refresh token' };
 	if (rad.client_id !== clientId) return { ok: false, feil: 'Tokenet tilhører en annen klient' };
 	if (rad.tilbakekalt) {
-		await exec("UPDATE oauth_token SET tilbakekalt = true, tilbakekalt_grunn = 'gjenbruk av refresh token' WHERE familie = $1", [rad.familie]);
+		await exec(
+			"UPDATE oauth_token SET tilbakekalt = true, tilbakekalt_grunn = 'gjenbruk av refresh token' WHERE familie = $1 AND tenant_id = $2",
+			[rad.familie, krevTenant().id]
+		);
 		return { ok: false, feil: 'Tokenet er allerede brukt - hele sesjonen er trukket tilbake' };
 	}
 	if (new Date(rad.utloper).getTime() <= Date.now()) return { ok: false, feil: 'Refresh token er utløpt' };
 
 	if (config.oauth.rotateRefreshTokens) {
-		await exec("UPDATE oauth_token SET tilbakekalt = true, tilbakekalt_grunn = 'rotert' WHERE id = $1", [rad.id]);
+		await exec("UPDATE oauth_token SET tilbakekalt = true, tilbakekalt_grunn = 'rotert' WHERE id = $1 AND tenant_id = $2", [rad.id, krevTenant().id]);
 	}
 
 	// Scope kan snevres inn, aldri utvides.
@@ -174,14 +183,17 @@ export async function fornyMedRefreshToken(refreshToken: string, clientId: strin
 
 export async function tilbakekallToken(token: string, clientId: string): Promise<boolean> {
 	const n = await exec(
-		"UPDATE oauth_token SET tilbakekalt = true, tilbakekalt_grunn = 'revocation endpoint' WHERE token_hash = $1 AND client_id = $2",
-		[tokenHash(token), clientId]
+		"UPDATE oauth_token SET tilbakekalt = true, tilbakekalt_grunn = 'revocation endpoint' WHERE token_hash = $1 AND client_id = $2 AND tenant_id = $3",
+		[tokenHash(token), clientId, krevTenant().id]
 	);
 	return n > 0;
 }
 
 export async function tilbakekallForBruker(userId: string, grunn: string): Promise<number> {
-	return exec('UPDATE oauth_token SET tilbakekalt = true, tilbakekalt_grunn = $2 WHERE user_id = $1 AND tilbakekalt = false', [userId, grunn]);
+	return exec(
+		'UPDATE oauth_token SET tilbakekalt = true, tilbakekalt_grunn = $2 WHERE user_id = $1 AND tenant_id = $3 AND tilbakekalt = false',
+		[userId, grunn, krevTenant().id]
+	);
 }
 
 export interface TokenValidering {
@@ -199,11 +211,16 @@ export async function validerAccessToken(token: string): Promise<TokenValidering
 	} catch (err) {
 		return { gyldig: false, feil: (err as Error).message };
 	}
-	if (payload.iss !== config.issuer) return { gyldig: false, feil: 'Ugyldig utsteder' };
+	const tenant = krevTenant();
+	if (payload.iss !== utstederFor(tenant)) return { gyldig: false, feil: 'Ugyldig utsteder' };
+	// Tokenet må være utstedt for virksomheten forespørselen gjelder.
+	if (payload.tenant && payload.tenant !== tenant.id) {
+		return { gyldig: false, feil: 'Tokenet er utstedt for en annen virksomhet' };
+	}
 
 	const rad = await en<{ tilbakekalt: boolean; user_id: string | null; launch_context: LaunchKontekst; client_id: string }>(
-		"SELECT tilbakekalt, user_id, launch_context, client_id FROM oauth_token WHERE token_hash = $1 AND kind = 'access'",
-		[tokenHash(token)]
+		"SELECT tilbakekalt, user_id, launch_context, client_id FROM oauth_token WHERE token_hash = $1 AND kind = 'access' AND tenant_id = $2",
+		[tokenHash(token), tenant.id]
 	);
 	if (!rad) return { gyldig: false, feil: 'Tokenet er ukjent' };
 	if (rad.tilbakekalt) return { gyldig: false, feil: 'Tokenet er trukket tilbake' };
@@ -262,6 +279,7 @@ export async function introspiser(token: string): Promise<Record<string, unknown
 	};
 }
 
+/** Vedlikehold. Går bevisst på tvers av virksomheter: sletter bare utløpte rader. */
 export async function ryddUtlopteTokens(): Promise<number> {
 	return exec("DELETE FROM oauth_token WHERE utloper < now() - interval '7 days'");
 }

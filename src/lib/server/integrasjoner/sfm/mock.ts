@@ -1,4 +1,5 @@
 import { en, exec } from '../../db';
+import { krevTenant } from '../../tenant/kontekst';
 import { nyId } from '../../util/ids';
 import type { Legemiddelliste, LegemiddelOppforing, SfmOperasjon, SfmSvar, ForskrivningInn } from './index';
 
@@ -22,16 +23,16 @@ const NOKKEL = 'mock-tilstand';
 
 async function lesTilstand(patientId: string): Promise<MockTilstand> {
 	const rad = await en<{ svar: MockTilstand }>(
-		"SELECT svar FROM sfm_synk WHERE patient_id = $1 AND operasjon = $2 ORDER BY oppdatert DESC LIMIT 1",
-		[patientId, NOKKEL]
+		'SELECT svar FROM sfm_synk WHERE tenant_id = $3 AND patient_id = $1 AND operasjon = $2 ORDER BY oppdatert DESC LIMIT 1',
+		[patientId, NOKKEL, krevTenant().id]
 	);
 	return rad?.svar ?? { legemidler: [], oppdatert: new Date().toISOString() };
 }
 
 async function skrivTilstand(patientId: string, tilstand: MockTilstand): Promise<void> {
 	await exec(
-		`INSERT INTO sfm_synk (id, patient_id, operasjon, status, svar) VALUES ($1,$2,$3,'ok',$4)`,
-		[nyId(), patientId, NOKKEL, JSON.stringify({ ...tilstand, oppdatert: new Date().toISOString() })]
+		`INSERT INTO sfm_synk (id, tenant_id, patient_id, operasjon, status, svar) VALUES ($1,$5,$2,$3,'ok',$4)`,
+		[nyId(), patientId, NOKKEL, JSON.stringify({ ...tilstand, oppdatert: new Date().toISOString() }), krevTenant().id]
 	);
 }
 

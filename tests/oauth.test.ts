@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createHash, generateKeyPairSync, randomBytes } from 'node:crypto';
 import { en, exec, query } from '../src/lib/server/db/index';
-import { harTestdatabase, opprettTestdatabase, tomTabeller, type Testdatabase } from './fixtures/db';
+import { harTestdatabase, opprettTestdatabase, tomTabeller, type Testdatabase, settInn } from './fixtures/db';
 import { autentiserKlient, gyldigRedirectUri, registrerKlient, settKlientstatus, type OAuthKlient } from '../src/lib/server/auth/klienter';
 import {
 	bytteInnKode,
@@ -36,7 +36,7 @@ beskriv('OAuth 2.1 og SMART App Launch', () => {
 	beforeEach(async () => {
 		await tomTabeller();
 		tomNokkelCache();
-		await exec('INSERT INTO user_account (id, brukernavn, navn, practitioner_id) VALUES ($1,$2,$3,$4)', ['bruker-1', 'lege', 'Dr. Ingrid Fastlege', 'prac-42']);
+		await settInn('INSERT INTO user_account (id, brukernavn, navn, practitioner_id) VALUES ($1,$2,$3,$4)', ['bruker-1', 'lege', 'Dr. Ingrid Fastlege', 'prac-42']);
 		await exec('INSERT INTO role_assignment (id, user_id, rolle) VALUES ($1,$2,$3)', [nyId(), 'bruker-1', 'lege']);
 		const reg = await registrerKlient({
 			navn: 'Testapp',

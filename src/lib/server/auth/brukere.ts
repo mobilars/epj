@@ -1,4 +1,5 @@
 import { en, exec, query, transaction } from '../db';
+import { krevTenant } from '../tenant/kontekst';
 import { config } from '../config';
 import { dekrypter, hashPassord, krypter, verifiserPassord } from '../util/crypto';
 import { nyId } from '../util/ids';
@@ -7,6 +8,7 @@ import { verifiserTotp } from './totp';
 
 export interface Bruker {
 	id: string;
+	tenant_id: string | null;
 	brukernavn: string;
 	navn: string;
 	epost: string | null;
@@ -20,21 +22,39 @@ export interface Bruker {
 	siste_innlogging: string | null;
 }
 
-const BRUKERFELT = `id, brukernavn, navn, epost, hpr_nummer, practitioner_id, mfa_aktivert, status,
-	ma_bytte_passord, feilede_forsok, laast_til, siste_innlogging`;
+const BRUKERFELT = `id, tenant_id, brukernavn, navn, epost, hpr_nummer, practitioner_id, mfa_aktivert,
+	status, ma_bytte_passord, feilede_forsok, laast_til, siste_innlogging`;
 
 export async function hentBruker(id: string): Promise<Bruker | null> {
+	return en<Bruker>(`SELECT ${BRUKERFELT} FROM user_account WHERE id = $1 AND tenant_id IS NOT DISTINCT FROM $2`, [
+		id, krevTenant().id
+	]);
+}
+
+/** Slår opp en bruker uten virksomhetsavgrensning. Kun for plattformpålogging. */
+export async function hentBrukerPaTversAvVirksomheter(id: string): Promise<Bruker | null> {
 	return en<Bruker>(`SELECT ${BRUKERFELT} FROM user_account WHERE id = $1`, [id]);
 }
 
 export async function hentBrukerVedBrukernavn(brukernavn: string): Promise<Bruker | null> {
-	return en<Bruker>(`SELECT ${BRUKERFELT} FROM user_account WHERE lower(brukernavn) = lower($1)`, [brukernavn]);
+	return en<Bruker>(
+		`SELECT ${BRUKERFELT} FROM user_account WHERE lower(brukernavn) = lower($1) AND tenant_id IS NOT DISTINCT FROM $2`,
+		[brukernavn, krevTenant().id]
+	);
 }
 
 export async function listBrukere(): Promise<(Bruker & { roller: Rolle[] })[]> {
-	const brukere = await query<Bruker>(`SELECT ${BRUKERFELT} FROM user_account ORDER BY navn`);
+	const tenantId = krevTenant().id;
+	const brukere = await query<Bruker>(
+		`SELECT ${BRUKERFELT} FROM user_account WHERE tenant_id IS NOT DISTINCT FROM $1 ORDER BY navn`,
+		[tenantId]
+	);
 	const roller = await query<{ user_id: string; rolle: string }>(
-		'SELECT user_id, rolle FROM role_assignment WHERE gyldig_fra <= now() AND (gyldig_til IS NULL OR gyldig_til > now())'
+		`SELECT r.user_id, r.rolle FROM role_assignment r
+		 JOIN user_account u ON u.id = r.user_id
+		 WHERE u.tenant_id IS NOT DISTINCT FROM $1
+		   AND r.gyldig_fra <= now() AND (r.gyldig_til IS NULL OR r.gyldig_til > now())`,
+		[tenantId]
 	);
 	const kart = new Map<string, Rolle[]>();
 	for (const r of roller) {
@@ -45,6 +65,7 @@ export async function listBrukere(): Promise<(Bruker & { roller: Rolle[] })[]> {
 }
 
 export async function rollerFor(userId: string): Promise<Rolle[]> {
+	// Rollen henger på brukeren, som allerede er virksomhetsavgrenset.
 	const rader = await query<{ rolle: string }>(
 		`SELECT rolle FROM role_assignment
 		 WHERE user_id = $1 AND gyldig_fra <= now() AND (gyldig_til IS NULL OR gyldig_til > now())`,
@@ -62,16 +83,19 @@ export interface NyBruker {
 	passord?: string;
 	roller: Rolle[];
 	opprettetAv?: string;
+	/** `null` gir en plattformadministrator uten virksomhet. */
+	tenantId?: string | null;
 }
 
 export async function opprettBruker(inn: NyBruker): Promise<Bruker> {
 	return transaction(async () => {
 		const id = nyId();
 		await exec(
-			`INSERT INTO user_account (id, brukernavn, navn, epost, hpr_nummer, practitioner_id, passord_hash, ma_bytte_passord)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+			`INSERT INTO user_account (id, tenant_id, brukernavn, navn, epost, hpr_nummer, practitioner_id, passord_hash, ma_bytte_passord)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
 			[
-				id, inn.brukernavn, inn.navn, inn.epost ?? null, inn.hprNummer ?? null,
+				id, inn.tenantId === undefined ? krevTenant().id : inn.tenantId,
+				inn.brukernavn, inn.navn, inn.epost ?? null, inn.hprNummer ?? null,
 				inn.practitionerId ?? null, inn.passord ? hashPassord(inn.passord) : null, inn.passord ? true : false
 			]
 		);
@@ -80,13 +104,14 @@ export async function opprettBruker(inn: NyBruker): Promise<Bruker> {
 				nyId(), id, rolle, inn.opprettetAv ?? null
 			]);
 		}
-		const bruker = await hentBruker(id);
+		const bruker = await hentBrukerPaTversAvVirksomheter(id);
 		if (!bruker) throw new Error('Klarte ikke å opprette bruker');
 		return bruker;
 	});
 }
 
 export async function settRoller(userId: string, roller: Rolle[], tildeltAv: string): Promise<void> {
+	await krevSammeVirksomhet(userId);
 	await transaction(async () => {
 		await exec('UPDATE role_assignment SET gyldig_til = now() WHERE user_id = $1 AND gyldig_til IS NULL', [userId]);
 		for (const rolle of roller) {
@@ -95,7 +120,17 @@ export async function settRoller(userId: string, roller: Rolle[], tildeltAv: str
 	});
 }
 
+/**
+ * Kontrollerer at brukeren tilhører virksomheten i konteksten. Kalles før
+ * endringer som tar en bruker-id utenfra.
+ */
+async function krevSammeVirksomhet(userId: string): Promise<void> {
+	const bruker = await hentBruker(userId);
+	if (!bruker) throw new Error('Brukeren finnes ikke i denne virksomheten');
+}
+
 export async function settStatus(userId: string, status: 'aktiv' | 'sperret' | 'avsluttet'): Promise<void> {
+	await krevSammeVirksomhet(userId);
 	await exec('UPDATE user_account SET status = $2, oppdatert = now() WHERE id = $1', [userId, status]);
 	if (status !== 'aktiv') {
 		await exec('UPDATE user_session SET avsluttet = true WHERE user_id = $1', [userId]);
@@ -104,6 +139,7 @@ export async function settStatus(userId: string, status: 'aktiv' | 'sperret' | '
 }
 
 export async function settPassord(userId: string, passord: string, maByttes = false): Promise<void> {
+	await krevSammeVirksomhet(userId);
 	await exec('UPDATE user_account SET passord_hash = $2, ma_bytte_passord = $3, oppdatert = now() WHERE id = $1', [
 		userId, hashPassord(passord), maByttes
 	]);
@@ -126,8 +162,9 @@ export type Innloggingsresultat =
  */
 export async function loggInn(brukernavn: string, passord: string, totp?: string): Promise<Innloggingsresultat> {
 	const rad = await en<Bruker & { passord_hash: string | null; totp_secret_enc: string | null }>(
-		`SELECT ${BRUKERFELT}, passord_hash, totp_secret_enc FROM user_account WHERE lower(brukernavn) = lower($1)`,
-		[brukernavn]
+		`SELECT ${BRUKERFELT}, passord_hash, totp_secret_enc FROM user_account
+		 WHERE lower(brukernavn) = lower($1) AND tenant_id IS NOT DISTINCT FROM $2`,
+		[brukernavn, krevTenant().id]
 	);
 	if (!rad || !rad.passord_hash) {
 		// Bruk samme arbeidsmengde som ved gyldig bruker, for å ikke avsløre
@@ -164,6 +201,7 @@ export async function loggInn(brukernavn: string, passord: string, totp?: string
 }
 
 export async function aktiverMfa(userId: string, hemmelighet: string, kode: string): Promise<boolean> {
+	await krevSammeVirksomhet(userId);
 	if (!verifiserTotp(hemmelighet, kode)) return false;
 	await exec('UPDATE user_account SET totp_secret_enc = $2, mfa_aktivert = true, oppdatert = now() WHERE id = $1', [
 		userId, krypter(hemmelighet)
@@ -172,13 +210,19 @@ export async function aktiverMfa(userId: string, hemmelighet: string, kode: stri
 }
 
 export async function harMfa(userId: string): Promise<boolean> {
-	const rad = await en<{ mfa_aktivert: boolean }>('SELECT mfa_aktivert FROM user_account WHERE id = $1', [userId]);
+	const rad = await en<{ mfa_aktivert: boolean }>(
+		'SELECT mfa_aktivert FROM user_account WHERE id = $1 AND tenant_id IS NOT DISTINCT FROM $2',
+		[userId, krevTenant().id]
+	);
 	return rad?.mfa_aktivert ?? false;
 }
 
 /** Verifiserer engangskode på nytt, f.eks. før nødrettstilgang. */
 export async function bekreftTotp(userId: string, kode: string): Promise<boolean> {
-	const rad = await en<{ totp_secret_enc: string | null }>('SELECT totp_secret_enc FROM user_account WHERE id = $1', [userId]);
+	const rad = await en<{ totp_secret_enc: string | null }>(
+		'SELECT totp_secret_enc FROM user_account WHERE id = $1 AND tenant_id IS NOT DISTINCT FROM $2',
+		[userId, krevTenant().id]
+	);
 	if (!rad?.totp_secret_enc) return false;
 	return verifiserTotp(dekrypter(rad.totp_secret_enc), kode);
 }

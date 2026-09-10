@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { en, exec, query } from '../src/lib/server/db/index';
-import { harTestdatabase, opprettTestdatabase, tomTabeller, type Testdatabase } from './fixtures/db';
+import { harTestdatabase, opprettTestdatabase, tomTabeller, type Testdatabase, settInn } from './fixtures/db';
 import { fhirForTest, type TestFhirServer } from './fixtures/fhir-testserver';
 import { forskriv, hentLegemiddelliste, fornye, seponer, synkHistorikk } from '../src/lib/server/integrasjoner/sfm/index';
 import { hentMottaker, kanMotta, sokMottakere, tilPart } from '../src/lib/server/integrasjoner/nhn/adresseregister';
@@ -41,7 +41,7 @@ beskriv('integrasjoner', () => {
 	beforeEach(async () => {
 		await tomTabeller();
 		fhir.nullstill();
-		await exec('INSERT INTO user_account (id, brukernavn, navn) VALUES ($1,$2,$3)', ['bruker-1', 'lege', 'Dr. Ingrid Fastlege']);
+		await settInn('INSERT INTO user_account (id, brukernavn, navn) VALUES ($1,$2,$3)', ['bruker-1', 'lege', 'Dr. Ingrid Fastlege']);
 		const p = await fhirKlient.opprett({
 			resourceType: 'Patient',
 			identifier: [{ system: SYSTEM.FNR, value: pasientPart.fnr }],

@@ -1,5 +1,6 @@
 import type { RequestEvent, RequestHandler } from './$types';
 import { config } from '$srv/config';
+import { krevTenant, utstederFor } from '$srv/tenant/kontekst';
 import { FhirError, operationOutcome, issue } from '$srv/fhir/outcome';
 import { utfor } from '$srv/fhir/gateway';
 import { corsHeadere } from '$srv/http';
@@ -16,13 +17,17 @@ import { listKlienter } from '$srv/auth/klienter';
 
 const FHIR_JSON = 'application/fhir+json; charset=utf-8';
 
-let opphavsCache: { verdi: string[]; til: number } = { verdi: [], til: 0 };
+const opphavsCache = new Map<string, { verdi: string[]; til: number }>();
 
 /** Tillatte CORS-opphav utledes fra registrerte SMART-apper sine redirect-URI-er. */
 async function tillatteOpphav(): Promise<string[]> {
-	if (Date.now() < opphavsCache.til) return opphavsCache.verdi;
+	// Mellomlageret er per virksomhet: apper godkjent hos én virksomhet skal
+	// ikke gi CORS-tilgang hos en annen.
+	const tenantId = krevTenant().id;
+	const cachet = opphavsCache.get(tenantId);
+	if (cachet && Date.now() < cachet.til) return cachet.verdi;
 	const klienter = await listKlienter();
-	const opphav = new Set<string>([new URL(config.baseUrl).origin]);
+	const opphav = new Set<string>([new URL(utstederFor(krevTenant())).origin]);
 	for (const k of klienter) {
 		if (k.status !== 'aktiv') continue;
 		for (const uri of k.redirect_uris) {
@@ -33,8 +38,9 @@ async function tillatteOpphav(): Promise<string[]> {
 			}
 		}
 	}
-	opphavsCache = { verdi: [...opphav], til: Date.now() + 60_000 };
-	return opphavsCache.verdi;
+	const verdi = [...opphav];
+	opphavsCache.set(tenantId, { verdi, til: Date.now() + 60_000 });
+	return verdi;
 }
 
 async function lesKropp(event: RequestEvent): Promise<unknown> {
@@ -61,7 +67,7 @@ async function håndter(event: RequestEvent): Promise<Response> {
 			status: 401,
 			headers: {
 				'content-type': FHIR_JSON,
-				'www-authenticate': `Bearer realm="${config.issuer}"`,
+				'www-authenticate': `Bearer realm="${utstederFor(krevTenant())}"`,
 				...cors
 			}
 		});
@@ -87,7 +93,7 @@ async function håndter(event: RequestEvent): Promise<Response> {
 				status: err.status,
 				headers: {
 					'content-type': FHIR_JSON,
-					...(err.status === 401 ? { 'www-authenticate': `Bearer realm="${config.issuer}", error="invalid_token"` } : {}),
+					...(err.status === 401 ? { 'www-authenticate': `Bearer realm="${utstederFor(krevTenant())}", error="invalid_token"` } : {}),
 					...cors
 				}
 			});

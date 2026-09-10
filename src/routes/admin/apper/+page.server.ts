@@ -6,6 +6,7 @@ import { beskrivScope } from '$srv/authz/scopes';
 import { logg, aktorFraKontekst } from '$srv/audit';
 import { query } from '$srv/db';
 import { config } from '$srv/config';
+import { fhirBaseFor, krevTenant, utstederFor } from '$srv/tenant/kontekst';
 
 /**
  * Register over SMART-apper og backend-tjenester.
@@ -19,13 +20,16 @@ export const load: PageServerLoad = async (event) => {
 	if (!ctx?.rettigheter.has('admin:apper')) error(403, 'Ingen tilgang.');
 
 	const aktiveTokens = await query<{ client_id: string; n: number }>(
-		"SELECT client_id, count(*)::int AS n FROM oauth_token WHERE kind = 'access' AND tilbakekalt = false AND utloper > now() GROUP BY client_id"
+		`SELECT client_id, count(*)::int AS n FROM oauth_token
+		 WHERE tenant_id = $1 AND kind = 'access' AND tilbakekalt = false AND utloper > now()
+		 GROUP BY client_id`,
+		[krevTenant().id]
 	);
 	const tokenKart = new Map(aktiveTokens.map((t) => [t.client_id, t.n]));
 
 	return {
-		fhirBaseUrl: config.fhirBaseUrl,
-		wellKnown: `${config.baseUrl}/.well-known/smart-configuration`,
+		fhirBaseUrl: fhirBaseFor(krevTenant()),
+		wellKnown: `${utstederFor(krevTenant())}/.well-known/smart-configuration`,
 		apper: (await listKlienter()).map((k) => ({
 			clientId: k.client_id,
 			navn: k.navn,

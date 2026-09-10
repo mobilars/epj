@@ -5,6 +5,7 @@ import { dekrypter, krypter } from '../util/crypto';
 import { nyId } from '../util/ids';
 import { signer, verifiser, type Algoritme, type Jwk } from './jws';
 import { en, exec, transaction } from '../db';
+import { krevTenant, utstederFor } from '../tenant/kontekst';
 import { opprettBruker, hentBruker, rollerFor, type Bruker } from './brukere';
 import type { Rolle } from '../authz/roles';
 
@@ -24,6 +25,9 @@ import type { Rolle } from '../authz/roles';
  *
  * Brukere provisjoneres ved første pålogging, men får ingen roller automatisk:
  * rolletildeling er en administrativ handling som skal etterlate spor.
+ *
+ * Koblingen er per virksomhet. Samme lege kan arbeide ved flere legekontorer,
+ * og skal da ha én brukerkonto i hver - med hver sine roller og relasjoner.
  */
 
 export const CLAIM = {
@@ -107,7 +111,9 @@ export async function startPalogging(cookies: Cookies, retur: string): Promise<s
 }
 
 export function redirectUri(): string {
-	return config.integrasjoner.helseId.redirectUri || `${config.baseUrl}/logg-inn/helseid/tilbake`;
+	// Tilbakekallsadressen må ligge på virksomhetens eget vertsnavn, siden
+	// sesjonen opprettes der.
+	return config.integrasjoner.helseId.redirectUri || `${utstederFor(krevTenant())}/logg-inn/helseid/tilbake`;
 }
 
 function lesTilstand(cookies: Cookies): Flyttilstand | null {
@@ -230,10 +236,17 @@ export async function koblePaLokalBruker(
 	krav: HelseIdKrav
 ): Promise<{ bruker: Bruker; roller: Rolle[]; nyBruker: boolean }> {
 	return transaction(async () => {
-		let rad = await en<{ id: string }>('SELECT id FROM user_account WHERE helseid_sub = $1', [krav.sub]);
+		const tenantId = krevTenant().id;
+		let rad = await en<{ id: string }>(
+			'SELECT id FROM user_account WHERE helseid_sub = $1 AND tenant_id = $2',
+			[krav.sub, tenantId]
+		);
 
 		if (!rad && krav.hprNummer) {
-			rad = await en<{ id: string }>('SELECT id FROM user_account WHERE hpr_nummer = $1 AND helseid_sub IS NULL', [krav.hprNummer]);
+			rad = await en<{ id: string }>(
+				'SELECT id FROM user_account WHERE hpr_nummer = $1 AND tenant_id = $2 AND helseid_sub IS NULL',
+				[krav.hprNummer, tenantId]
+			);
 			if (rad) {
 				await exec('UPDATE user_account SET helseid_sub = $2, navn = $3, oppdatert = now() WHERE id = $1', [rad.id, krav.sub, krav.navn]);
 			}

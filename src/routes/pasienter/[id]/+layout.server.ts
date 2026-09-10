@@ -5,6 +5,7 @@ import { FhirError } from '$srv/fhir/outcome';
 import { tilPasientVisning } from '$srv/fhir/visning';
 import { aktivNodrett, harBehandlingsrelasjon } from '$srv/authz/tilgang';
 import { query } from '$srv/db';
+import { krevTenant } from '$srv/tenant/kontekst';
 import { config } from '$srv/config';
 import { kanNodrett } from '$srv/authz/roles';
 import { fhirKlient } from '$srv/fhir/client';
@@ -42,8 +43,8 @@ export const load: LayoutServerLoad = async (event) => {
 		aktivNodrett(ctx.userId, patientId),
 		harBehandlingsrelasjon(ctx.userId, patientId),
 		query<{ omfang: string; begrunnelse: string | null; registrert: string }>(
-			'SELECT omfang, begrunnelse, registrert FROM journal_sperring WHERE patient_id = $1 AND opphevet = false',
-			[patientId]
+			'SELECT omfang, begrunnelse, registrert FROM journal_sperring WHERE patient_id = $1 AND tenant_id = $2 AND opphevet = false',
+			[patientId, krevTenant().id]
 		)
 	]);
 

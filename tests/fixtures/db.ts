@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { setPool, lukkPool, exec } from '../../src/lib/server/db/index';
+import { tid } from '../../src/lib/server/tenant/kontekst';
 import { migrer } from '../../src/lib/server/db/migrate';
 
 /**
@@ -46,6 +47,21 @@ export async function opprettTestdatabase(prefiks = 'epjtest'): Promise<Testdata
 			await a.end();
 		}
 	};
+}
+
+/**
+ * `INSERT` for testdata, med `tenant_id` fylt ut automatisk.
+ *
+ * Produksjonskoden setter kolonnen eksplisitt overalt - det er nettopp den
+ * disiplinen isolasjonen hviler på. Testene bygger derimot opp tilstand med rå
+ * SQL, og skal slippe å gjenta virksomheten i hver eneste setning.
+ */
+export async function settInn(sql: string, params: unknown[] = []): Promise<number> {
+	const neste = params.length + 1;
+	const medKolonne = sql.replace(/\)\s*VALUES\s*\(/i, ', tenant_id) VALUES (');
+	const medVerdi = medKolonne.replace(/\)\s*$/, `, $${neste})`);
+	if (medVerdi === sql) throw new Error(`settInn forstod ikke setningen: ${sql}`);
+	return exec(medVerdi, [...params, tid()]);
 }
 
 /** Tømmer alle tabeller mellom tester, uten å kjøre migrasjonene på nytt. */

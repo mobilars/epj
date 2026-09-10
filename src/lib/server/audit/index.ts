@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { en, exec, query, transaction } from '../db';
+import { gjeldendeTenant, krevTenant, PLATTFORM_TENANT } from '../tenant/kontekst';
 import type { AuthContext } from '../authz/context';
 import type { FhirResource } from '../fhir/types';
 
@@ -13,6 +14,10 @@ import type { FhirResource } from '../fhir/types';
  * verifiseringen (`verifiserLoggkjede`).
  *
  * Databasen har i tillegg en trigger som avviser UPDATE og DELETE på tabellen.
+ *
+ * Loggen er delt per virksomhet, og hash-kjeden lenkes innenfor virksomheten.
+ * Da kan hver virksomhet verifisere sin egen kjede uten å se de andres, og en
+ * virksomhet kan ikke bryte en annens kjede ved å skrive et innslag.
  */
 
 export type Handling = 'C' | 'R' | 'U' | 'D' | 'E';
@@ -138,11 +143,20 @@ function beregnHash(forrigeHash: string, kanonisk: string): string {
  * integrasjonshendelse. Feiler aldri stille: klarer vi ikke å logge, skal
  * operasjonen avvises av kalleren.
  */
-export async function logg(innslag: AuditInnslag, aktor: AuditAktor): Promise<{ seq: number; hash: string }> {
+export async function logg(
+	innslag: AuditInnslag,
+	aktor: AuditAktor,
+	/** Virksomhet innslaget hører til. Utledes fra konteksten når den ikke oppgis. */
+	tenantId?: string
+): Promise<{ seq: number; hash: string }> {
+	const tenant = tenantId ?? gjeldendeTenant()?.id ?? PLATTFORM_TENANT;
 	return transaction(async () => {
 		// Lås tabellen kort for å garantere at kjeden bygges sekvensielt.
 		await exec('LOCK TABLE audit_event IN EXCLUSIVE MODE');
-		const forrige = await en<{ hash: string }>('SELECT hash FROM audit_event ORDER BY seq DESC LIMIT 1');
+		const forrige = await en<{ hash: string }>(
+			'SELECT hash FROM audit_event WHERE tenant_id = $1 ORDER BY seq DESC LIMIT 1',
+			[tenant]
+		);
 		const forrigeHash = forrige?.hash ?? 'genesis';
 		const tidspunkt = new Date().toISOString();
 		const event = byggAuditEvent(innslag, aktor, tidspunkt);
@@ -151,11 +165,11 @@ export async function logg(innslag: AuditInnslag, aktor: AuditAktor): Promise<{ 
 
 		const rad = await en<{ seq: number }>(
 			`INSERT INTO audit_event
-			 (recorded, type_code, subtype, action, outcome, outcome_desc, actor_user_id, actor_ref, actor_navn,
+			 (tenant_id, recorded, type_code, subtype, action, outcome, outcome_desc, actor_user_id, actor_ref, actor_navn,
 			  actor_rolle, client_id, source_ip, patient_id, entity_ref, purpose_of_use, request_id, content, prev_hash, hash)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING seq`,
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING seq`,
 			[
-				tidspunkt, innslag.type, innslag.subtype ?? null, innslag.handling, innslag.utfall,
+				tenant, tidspunkt, innslag.type, innslag.subtype ?? null, innslag.handling, innslag.utfall,
 				innslag.utfallBeskrivelse ?? null, aktor.userId, aktor.actorRef, aktor.navn, aktor.rolle,
 				aktor.clientId, aktor.ip, innslag.patientId ?? null, innslag.entityRef ?? null,
 				innslag.purposeOfUse ?? null, aktor.requestId, JSON.stringify(event), forrigeHash, hash
@@ -195,8 +209,8 @@ export interface LoggRad {
 }
 
 export async function hentLogg(filter: LoggFilter): Promise<{ rader: LoggRad[]; total: number }> {
-	const vilkar: string[] = ['true'];
-	const params: unknown[] = [];
+	const vilkar: string[] = ['tenant_id = $1'];
+	const params: unknown[] = [krevTenant().id];
 	const legg = (sql: string, verdi: unknown) => {
 		params.push(verdi);
 		vilkar.push(sql.replace('?', `$${params.length}`));
@@ -222,7 +236,10 @@ export async function hentLogg(filter: LoggFilter): Promise<{ rader: LoggRad[]; 
 }
 
 export async function hentAuditEvent(seq: number): Promise<FhirResource | null> {
-	const rad = await en<{ content: FhirResource; seq: number }>('SELECT seq, content FROM audit_event WHERE seq = $1', [seq]);
+	const rad = await en<{ content: FhirResource; seq: number }>(
+		'SELECT seq, content FROM audit_event WHERE seq = $1 AND tenant_id = $2',
+		[seq, krevTenant().id]
+	);
 	if (!rad) return null;
 	return { ...rad.content, id: String(rad.seq) };
 }
@@ -239,8 +256,8 @@ export interface KjedeResultat {
  */
 export async function verifiserLoggkjede(fraSeq = 0, maks = 100_000): Promise<KjedeResultat> {
 	const rader = await query<{ seq: number; content: FhirResource; prev_hash: string; hash: string }>(
-		'SELECT seq, content, prev_hash, hash FROM audit_event WHERE seq > $1 ORDER BY seq ASC LIMIT $2',
-		[fraSeq, maks]
+		'SELECT seq, content, prev_hash, hash FROM audit_event WHERE tenant_id = $1 AND seq > $2 ORDER BY seq ASC LIMIT $3',
+		[krevTenant().id, fraSeq, maks]
 	);
 	let forrige: string | null = null;
 	for (const rad of rader) {
@@ -262,10 +279,12 @@ export async function ugjennomgattNodrett(): Promise<LoggRad[]> {
 		`SELECT a.seq, a.recorded, a.type_code, a.subtype, a.action, a.outcome, a.actor_navn, a.actor_rolle,
 		        a.actor_user_id, a.client_id, a.source_ip, a.patient_id, a.entity_ref, a.purpose_of_use, a.request_id
 		 FROM audit_event a
-		 WHERE a.purpose_of_use = 'ETREAT'
+		 WHERE a.tenant_id = $1 AND a.purpose_of_use = 'ETREAT'
 		   AND NOT EXISTS (
 		     SELECT 1 FROM break_glass b
-		     WHERE b.user_id = a.actor_user_id AND b.patient_id = a.patient_id AND b.gjennomgatt_tid IS NOT NULL)
-		 ORDER BY a.recorded DESC LIMIT 200`
+		     WHERE b.tenant_id = a.tenant_id AND b.user_id = a.actor_user_id
+		       AND b.patient_id = a.patient_id AND b.gjennomgatt_tid IS NOT NULL)
+		 ORDER BY a.recorded DESC LIMIT 200`,
+		[krevTenant().id]
 	);
 }

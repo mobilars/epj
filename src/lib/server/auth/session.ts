@@ -1,5 +1,6 @@
 import type { Cookies } from '@sveltejs/kit';
 import { en, exec } from '../db';
+import { krevTenant } from '../tenant/kontekst';
 import { config } from '../config';
 import { nyId, nyToken } from '../util/ids';
 import { tokenHash } from '../util/crypto';
@@ -54,10 +55,14 @@ export async function hentSesjon(cookies: Cookies): Promise<Sesjon | null> {
 	const id = rå.slice(0, skille);
 	const token = rå.slice(skille + 1);
 
+	// Sesjonen må tilhøre en bruker i virksomheten forespørselen gjelder. En
+	// gyldig sesjonscookie fra ett legekontor skal ikke virke hos et annet.
 	const rad = await en<Sesjon & { token_hash: string }>(
-		`SELECT id, user_id, opprettet, sist_aktiv, utloper, amr, elevert_til, ip, token_hash
-		 FROM user_session WHERE id = $1 AND avsluttet = false`,
-		[id]
+		`SELECT s.id, s.user_id, s.opprettet, s.sist_aktiv, s.utloper, s.amr, s.elevert_til, s.ip, s.token_hash
+		 FROM user_session s
+		 JOIN user_account u ON u.id = s.user_id
+		 WHERE s.id = $1 AND s.avsluttet = false AND u.tenant_id IS NOT DISTINCT FROM $2`,
+		[id, krevTenant().id]
 	);
 	if (!rad) return null;
 	if (rad.token_hash !== tokenHash(token)) {
@@ -98,6 +103,7 @@ export async function avsluttAlleSesjoner(userId: string): Promise<number> {
 	return exec('UPDATE user_session SET avsluttet = true WHERE user_id = $1 AND avsluttet = false', [userId]);
 }
 
+/** Vedlikehold. Går bevisst på tvers av virksomheter: sletter bare utløpte rader. */
 export async function ryddUtlopteSesjoner(): Promise<number> {
 	return exec("DELETE FROM user_session WHERE utloper < now() - interval '30 days'");
 }

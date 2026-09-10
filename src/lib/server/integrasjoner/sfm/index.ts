@@ -1,4 +1,5 @@
 import { en, exec, query } from '../../db';
+import { krevTenant } from '../../tenant/kontekst';
 import { config } from '../../config';
 import { nyId } from '../../util/ids';
 import { hentMaskinToken } from '../helseid-maskin';
@@ -92,8 +93,8 @@ export interface ForskrivningInn {
 async function kall<T>(operasjon: SfmOperasjon, kropp: unknown, patientId: string, aktor: AuditAktor): Promise<SfmSvar<T>> {
 	const id = nyId();
 	await exec(
-		`INSERT INTO sfm_synk (id, patient_id, operasjon, status, foresporsel, utfort_av) VALUES ($1,$2,$3,'kø',$4,$5)`,
-		[id, patientId, operasjon, JSON.stringify(kropp), aktor.userId]
+		`INSERT INTO sfm_synk (id, tenant_id, patient_id, operasjon, status, foresporsel, utfort_av) VALUES ($1,$6,$2,$3,'kø',$4,$5)`,
+		[id, patientId, operasjon, JSON.stringify(kropp), aktor.userId, krevTenant().id]
 	);
 
 	try {
@@ -103,8 +104,9 @@ async function kall<T>(operasjon: SfmOperasjon, kropp: unknown, patientId: strin
 				: await kallLive<T>(operasjon, kropp);
 
 		await exec(
-			`UPDATE sfm_synk SET status = $2, svar = $3, feilmelding = $4, reseptid = $5, oppdatert = now() WHERE id = $1`,
-			[id, svar.ok ? 'ok' : 'feilet', JSON.stringify(svar.data ?? null), svar.feil ?? null, svar.reseptId ?? null]
+			`UPDATE sfm_synk SET status = $2, svar = $3, feilmelding = $4, reseptid = $5, oppdatert = now()
+			 WHERE id = $1 AND tenant_id = $6`,
+			[id, svar.ok ? 'ok' : 'feilet', JSON.stringify(svar.data ?? null), svar.feil ?? null, svar.reseptId ?? null, krevTenant().id]
 		);
 		await logg(
 			{
@@ -117,7 +119,7 @@ async function kall<T>(operasjon: SfmOperasjon, kropp: unknown, patientId: strin
 		return svar;
 	} catch (err) {
 		const melding = (err as Error).message;
-		await exec("UPDATE sfm_synk SET status = 'feilet', feilmelding = $2, oppdatert = now() WHERE id = $1", [id, melding]);
+		await exec("UPDATE sfm_synk SET status = 'feilet', feilmelding = $2, oppdatert = now() WHERE id = $1 AND tenant_id = $3", [id, melding, krevTenant().id]);
 		await logg(
 			{ type: 'integrasjon', subtype: `sfm:${operasjon}`, handling: 'E', utfall: '8', utfallBeskrivelse: melding, patientId },
 			aktor
@@ -242,14 +244,17 @@ export interface SynkLogg {
 
 export async function synkHistorikk(patientId: string, grense = 50): Promise<SynkLogg[]> {
 	return query<SynkLogg>(
-		'SELECT id, operasjon, status, feilmelding, reseptid, opprettet FROM sfm_synk WHERE patient_id = $1 ORDER BY opprettet DESC LIMIT $2',
-		[patientId, grense]
+		`SELECT id, operasjon, status, feilmelding, reseptid, opprettet FROM sfm_synk
+		 WHERE tenant_id = $3 AND patient_id = $1 ORDER BY opprettet DESC LIMIT $2`,
+		[patientId, grense, krevTenant().id]
 	);
 }
 
 export async function sisteSynk(patientId: string): Promise<SynkLogg | null> {
 	return en<SynkLogg>(
-		"SELECT id, operasjon, status, feilmelding, reseptid, opprettet FROM sfm_synk WHERE patient_id = $1 AND operasjon = 'hentLegemiddelliste' AND status = 'ok' ORDER BY opprettet DESC LIMIT 1",
-		[patientId]
+		`SELECT id, operasjon, status, feilmelding, reseptid, opprettet FROM sfm_synk
+		 WHERE tenant_id = $2 AND patient_id = $1 AND operasjon = 'hentLegemiddelliste' AND status = 'ok'
+		 ORDER BY opprettet DESC LIMIT 1`,
+		[patientId, krevTenant().id]
 	);
 }

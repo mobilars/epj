@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { en, exec, query } from '../src/lib/server/db/index';
+import { tid } from '../src/lib/server/tenant/kontekst';
 import { harTestdatabase, opprettTestdatabase, tomTabeller, type Testdatabase } from './fixtures/db';
 import {
 	aktiverMfa, bekreftTotp, hentBruker, hentBrukerVedBrukernavn, listBrukere,
@@ -286,7 +287,8 @@ beskriv('brukere, pålogging og sesjoner', () => {
 		it('nullstiller når vinduet skifter', async () => {
 			await rateLimit('test:c', 1, 60);
 			expect((await rateLimit('test:c', 1, 60)).tillatt).toBe(false);
-			await exec('UPDATE rate_limit SET vindu_start = vindu_start - 600 WHERE bucket = $1', ['test:c']);
+			// Virksomheten inngår i nøkkelen, slik at legekontorene ikke deler kvote.
+			await exec('UPDATE rate_limit SET vindu_start = vindu_start - 600 WHERE bucket = $1', [`${tid()}:test:c`]);
 			expect((await rateLimit('test:c', 1, 60)).tillatt).toBe(true);
 		});
 	});

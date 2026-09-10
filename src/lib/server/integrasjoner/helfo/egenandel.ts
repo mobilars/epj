@@ -1,4 +1,5 @@
 import { en, exec } from '../../db';
+import { krevTenant } from '../../tenant/kontekst';
 import { config } from '../../config';
 import { nyId } from '../../util/ids';
 import { logg, type AuditAktor } from '../../audit';
@@ -38,9 +39,9 @@ export async function hentEgenandelstatus(
 	if (!tvingOppfrisking) {
 		const cachet = await en<{ har_frikort: boolean; frikort_til: string | null; opptjent_ore: number; utfort: string }>(
 			`SELECT har_frikort, frikort_til, opptjent_ore, utfort FROM egenandel_oppslag
-			 WHERE patient_id = $1 AND utfort > now() - ($2 || ' minutes')::interval
+			 WHERE tenant_id = $3 AND patient_id = $1 AND utfort > now() - ($2 || ' minutes')::interval
 			 ORDER BY utfort DESC LIMIT 1`,
-			[patientId, String(CACHE_MINUTTER)]
+			[patientId, String(CACHE_MINUTTER), krevTenant().id]
 		);
 		if (cachet) {
 			return {
@@ -58,9 +59,9 @@ export async function hentEgenandelstatus(
 	const svar = config.integrasjoner.modus === 'mock' ? mockStatus(fnr) : await hentFraHelfo(fnr);
 
 	await exec(
-		`INSERT INTO egenandel_oppslag (id, patient_id, utfort_av, har_frikort, frikort_til, opptjent_ore, kilde)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-		[nyId(), patientId, aktor.userId ?? 'system', svar.harFrikort, svar.frikortGyldigTil, svar.opptjentOre, svar.kilde]
+		`INSERT INTO egenandel_oppslag (id, tenant_id, patient_id, utfort_av, har_frikort, frikort_til, opptjent_ore, kilde)
+		 VALUES ($1,$8,$2,$3,$4,$5,$6,$7)`,
+		[nyId(), patientId, aktor.userId ?? 'system', svar.harFrikort, svar.frikortGyldigTil, svar.opptjentOre, svar.kilde, krevTenant().id]
 	);
 	await logg(
 		{

@@ -8,6 +8,8 @@
  */
 import { exec, lukkPool, query } from '../src/lib/server/db/index';
 import { migrer } from '../src/lib/server/db/migrate';
+import { medTenant, PLATTFORM_TENANT, type Tenant } from '../src/lib/server/tenant/kontekst';
+import { hentTenant } from '../src/lib/server/tenant/tenant';
 import { opprettBruker, settRoller } from '../src/lib/server/auth/brukere';
 import { registrerKlient } from '../src/lib/server/auth/klienter';
 import { fhirKlient } from '../src/lib/server/fhir/client';
@@ -88,7 +90,40 @@ async function pasientRessurs(p: DemoPasient): Promise<FhirResource> {
 async function main(): Promise<void> {
 	await migrer();
 
-	const finnes = await query<{ n: number }>('SELECT count(*)::int AS n FROM user_account');
+	// Demodata legges i standardvirksomheten. Alt under kjøres i dens kontekst,
+	// slik at spørringene avgrenses på samme måte som i applikasjonen.
+	const tenantId = process.env.EPJ_SEED_TENANT ?? 'standard';
+	const tenant = await hentTenant(tenantId);
+	if (!tenant) throw new Error(`Virksomheten «${tenantId}» finnes ikke. Kjør migrasjonene først.`);
+	await medTenant(tenant, () => seed(tenant));
+
+	// Plattformadministratoren hører hjemme i systemvirksomheten, ikke hos noen
+	// av legekontorene. Rollen `systemeier` har ingen kliniske scopes.
+	const plattform = await hentTenant(PLATTFORM_TENANT);
+	if (plattform) await medTenant(plattform, () => seedPlattform(plattform));
+}
+
+async function seedPlattform(plattform: Tenant): Promise<void> {
+	const finnes = await query<{ n: number }>('SELECT count(*)::int AS n FROM user_account WHERE tenant_id = $1', [
+		plattform.id
+	]);
+	if ((finnes[0]?.n ?? 0) > 0) return;
+
+	const bruker = await opprettBruker({
+		brukernavn: 'systemeier',
+		navn: 'Plattformadministrator',
+		passord: PASSORD,
+		roller: ['systemeier']
+	});
+	await exec(
+		'UPDATE user_account SET totp_secret_enc = $2, mfa_aktivert = true, ma_bytte_passord = false WHERE id = $1',
+		[bruker.id, krypter(DEMO_TOTP)]
+	);
+	console.log(`Opprettet plattformbruker «systemeier» (passord: ${PASSORD}).`);
+}
+
+async function seed(tenant: Tenant): Promise<void> {
+	const finnes = await query<{ n: number }>('SELECT count(*)::int AS n FROM user_account WHERE tenant_id = $1', [tenant.id]);
 	if ((finnes[0]?.n ?? 0) > 0) {
 		console.log('Databasen har allerede brukere. Avbryter for ikke å overskrive data.');
 		return;
@@ -226,11 +261,13 @@ async function main(): Promise<void> {
 
 		// Behandlingsrelasjoner: legen for alle, sykepleier for de to første,
 		// helsesekretær administrativt for alle.
-		await exec('INSERT INTO care_relationship (id, user_id, patient_id, grunnlag) VALUES ($1,$2,$3,$4)', [nyId(), legeId, patientId, 'fastlege']);
-		if (PASIENTER.indexOf(p) < 2) {
-			await exec('INSERT INTO care_relationship (id, user_id, patient_id, grunnlag) VALUES ($1,$2,$3,$4)', [nyId(), sykepleierId, patientId, 'konsultasjon']);
-		}
-		await exec('INSERT INTO care_relationship (id, user_id, patient_id, grunnlag) VALUES ($1,$2,$3,$4)', [nyId(), sekretaerId, patientId, 'administrativ']);
+		const relasjon = (userId: string, grunnlag: string) =>
+			exec('INSERT INTO care_relationship (id, tenant_id, user_id, patient_id, grunnlag) VALUES ($1,$2,$3,$4,$5)', [
+				nyId(), tenant.id, userId, patientId, grunnlag
+			]);
+		await relasjon(legeId, 'fastlege');
+		if (PASIENTER.indexOf(p) < 2) await relasjon(sykepleierId, 'konsultasjon');
+		await relasjon(sekretaerId, 'administrativ');
 
 		console.log(`Pasient ${p.fornavn} ${p.etternavn} (${patientId}) opprettet.`);
 	}
@@ -240,9 +277,9 @@ async function main(): Promise<void> {
 	const sperretId = sperretPasient.entry?.[0]?.resource?.id as string | undefined;
 	if (sperretId) {
 		await exec(
-			`INSERT INTO journal_sperring (id, patient_id, omfang, mal_user_id, begrunnelse, registrert_av)
-			 VALUES ($1,$2,'bruker',$3,$4,$5)`,
-			[nyId(), sperretId, sykepleierId, 'Pasienten ønsker ikke at sykepleier ser journalen.', legeId]
+			`INSERT INTO journal_sperring (id, tenant_id, patient_id, omfang, mal_user_id, begrunnelse, registrert_av)
+			 VALUES ($1,$6,$2,'bruker',$3,$4,$5)`,
+			[nyId(), sperretId, sykepleierId, 'Pasienten ønsker ikke at sykepleier ser journalen.', legeId, tenant.id]
 		);
 		console.log(`Sperring registrert på pasient ${sperretId} for sykepleier.`);
 	}
@@ -262,7 +299,8 @@ async function main(): Promise<void> {
 	});
 	console.log(`SMART-app registrert: ${klient.client_id}${secret ? ` (hemmelighet: ${secret})` : ''}`);
 
-	console.log('\nFerdig. Logg inn på /logg-inn med brukernavn «lege» og passord «' + PASSORD + '».');
+	console.log(`\nFerdig i virksomheten «${tenant.navn}» (${tenant.id}).`);
+	console.log('Logg inn på /logg-inn med brukernavn «lege» og passord «' + PASSORD + '».');
 	console.log(`TOTP-hemmelighet for demobrukerne: ${DEMO_TOTP}`);
 }
 

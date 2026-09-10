@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { en, exec, query } from '../src/lib/server/db/index';
-import { harTestdatabase, opprettTestdatabase, tomTabeller, type Testdatabase } from './fixtures/db';
+import { harTestdatabase, opprettTestdatabase, tomTabeller, type Testdatabase, settInn } from './fixtures/db';
 import { hentAuditEvent, hentLogg, logg, ugjennomgattNodrett, verifiserLoggkjede, type AuditAktor } from '../src/lib/server/audit';
 import { nyId } from '../src/lib/server/util/ids';
 
@@ -108,11 +108,11 @@ beskriv('sikkerhetslogg', () => {
 	});
 
 	it('lister nødrettsoppslag som ikke er gjennomgått', async () => {
-		await exec('INSERT INTO user_account (id, brukernavn, navn) VALUES ($1,$2,$3)', ['bruker-1', 'lege', 'Lege']);
+		await settInn('INSERT INTO user_account (id, brukernavn, navn) VALUES ($1,$2,$3)', ['bruker-1', 'lege', 'Lege']);
 		await logg({ type: 'emergency-override', handling: 'R', utfall: '0', patientId: 'p9', purposeOfUse: 'ETREAT' }, aktor);
 		expect(await ugjennomgattNodrett()).toHaveLength(1);
 
-		await exec(
+		await settInn(
 			'INSERT INTO break_glass (id, user_id, patient_id, begrunnelse, utloper, gjennomgatt_tid) VALUES ($1,$2,$3,$4, now(), now())',
 			[nyId(), 'bruker-1', 'p9', 'gjennomgått i ettertid']
 		);

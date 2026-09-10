@@ -5,12 +5,17 @@ import { tilPasientVisning } from '$srv/fhir/visning';
 import { listMeldinger, ventendeKvitteringer } from '$srv/integrasjoner/nhn/meldingsko';
 import { listKort } from '$srv/integrasjoner/helfo/regningskort';
 import { query } from '$srv/db';
+import { krevTenant } from '$srv/tenant/kontekst';
 
 /** Arbeidsflaten: dagens timer, uleste meldinger og oppgjør som venter. */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx) redirect(303, `/logg-inn?retur=${encodeURIComponent(event.url.pathname)}`);
 	if (ctx.roller.length === 0) redirect(303, '/ingen-tilgang');
+	// Plattformadministratorer har ingen klinisk arbeidsflate å komme til.
+	if (ctx.rettigheter.has('plattform:administrer') && !ctx.rettigheter.has('journal:les')) {
+		redirect(303, '/systemadmin');
+	}
 
 	const idag = new Date().toISOString().slice(0, 10);
 	const kanLese = ctx.rettigheter.has('journal:les');
@@ -24,8 +29,8 @@ export const load: PageServerLoad = async (event) => {
 		kanMelding ? listMeldinger({ retning: 'inn', status: 'mottatt', grense: 15 }) : Promise.resolve([]),
 		kanOppgjor ? listKort({ status: 'klar', grense: 500 }) : Promise.resolve([]),
 		query<{ patient_id: string; utloper: string; begrunnelse: string }>(
-			'SELECT patient_id, utloper, begrunnelse FROM break_glass WHERE user_id = $1 AND utloper > now() ORDER BY utloper',
-			[ctx.userId]
+			'SELECT patient_id, utloper, begrunnelse FROM break_glass WHERE user_id = $1 AND tenant_id = $2 AND utloper > now() ORDER BY utloper',
+			[ctx.userId, krevTenant().id]
 		),
 		kanMelding ? ventendeKvitteringer(60) : Promise.resolve([])
 	]);

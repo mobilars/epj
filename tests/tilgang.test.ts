@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { exec } from '../src/lib/server/db/index';
-import { harTestdatabase, opprettTestdatabase, tomTabeller, type Testdatabase } from './fixtures/db';
+import { harTestdatabase, opprettTestdatabase, tomTabeller, type Testdatabase, settInn } from './fixtures/db';
 import { appKontekst, kontekst } from './fixtures/kontekst';
 import {
 	aktivNodrett,
@@ -18,11 +18,11 @@ const PASIENT = 'pas-1';
 const ANNEN_PASIENT = 'pas-2';
 
 async function lagBruker(id: string, brukernavn: string): Promise<void> {
-	await exec('INSERT INTO user_account (id, brukernavn, navn) VALUES ($1,$2,$3)', [id, brukernavn, brukernavn]);
+	await settInn('INSERT INTO user_account (id, brukernavn, navn) VALUES ($1,$2,$3)', [id, brukernavn, brukernavn]);
 }
 
 async function girRelasjon(userId: string, patientId: string, grunnlag = 'fastlege'): Promise<void> {
-	await exec('INSERT INTO care_relationship (id, user_id, patient_id, grunnlag) VALUES ($1,$2,$3,$4)', [nyId(), userId, patientId, grunnlag]);
+	await settInn('INSERT INTO care_relationship (id, user_id, patient_id, grunnlag) VALUES ($1,$2,$3,$4)', [nyId(), userId, patientId, grunnlag]);
 }
 
 const observasjon = (patientId: string) => ({
@@ -66,7 +66,7 @@ beskriv('tilgangsbeslutning', () => {
 		});
 
 		it('ser bort fra utløpt relasjon', async () => {
-			await exec(
+			await settInn(
 				"INSERT INTO care_relationship (id, user_id, patient_id, grunnlag, gyldig_fra, gyldig_til) VALUES ($1,$2,$3,'vikar', now() - interval '30 days', now() - interval '1 day')",
 				[nyId(), 'bruker-1', PASIENT]
 			);
@@ -87,7 +87,7 @@ beskriv('tilgangsbeslutning', () => {
 		});
 
 		it('sperrer for en navngitt bruker', async () => {
-			await exec(
+			await settInn(
 				"INSERT INTO journal_sperring (id, patient_id, omfang, mal_user_id, registrert_av) VALUES ($1,$2,'bruker',$3,'bruker-1')",
 				[nyId(), PASIENT, 'bruker-2']
 			);
@@ -101,7 +101,7 @@ beskriv('tilgangsbeslutning', () => {
 		});
 
 		it('sperrer for en hel rolle', async () => {
-			await exec(
+			await settInn(
 				"INSERT INTO journal_sperring (id, patient_id, omfang, mal_rolle, registrert_av) VALUES ($1,$2,'rolle','sykepleier','bruker-1')",
 				[nyId(), PASIENT]
 			);
@@ -110,7 +110,7 @@ beskriv('tilgangsbeslutning', () => {
 		});
 
 		it('sperrer et enkeltdokument', async () => {
-			await exec(
+			await settInn(
 				"INSERT INTO journal_sperring (id, patient_id, omfang, mal_ressurs, registrert_av) VALUES ($1,$2,'dokument','Observation/obs-1','bruker-1')",
 				[nyId(), PASIENT]
 			);
@@ -122,7 +122,7 @@ beskriv('tilgangsbeslutning', () => {
 		});
 
 		it('ser bort fra opphevet sperring', async () => {
-			await exec(
+			await settInn(
 				"INSERT INTO journal_sperring (id, patient_id, omfang, registrert_av, opphevet) VALUES ($1,$2,'alle','bruker-1',true)",
 				[nyId(), PASIENT]
 			);
@@ -132,7 +132,7 @@ beskriv('tilgangsbeslutning', () => {
 
 	describe('nødrett', () => {
 		it('gir tilgang uten behandlingsrelasjon, og merker formålet ETREAT', async () => {
-			await exec(
+			await settInn(
 				"INSERT INTO break_glass (id, user_id, patient_id, begrunnelse, utloper) VALUES ($1,$2,$3,$4, now() + interval '4 hours')",
 				[nyId(), 'bruker-1', PASIENT, 'Akutt situasjon på legevakt']
 			);
@@ -144,8 +144,8 @@ beskriv('tilgangsbeslutning', () => {
 		});
 
 		it('overstyrer sperring', async () => {
-			await exec("INSERT INTO journal_sperring (id, patient_id, omfang, registrert_av) VALUES ($1,$2,'alle','bruker-1')", [nyId(), PASIENT]);
-			await exec(
+			await settInn("INSERT INTO journal_sperring (id, patient_id, omfang, registrert_av) VALUES ($1,$2,'alle','bruker-1')", [nyId(), PASIENT]);
+			await settInn(
 				"INSERT INTO break_glass (id, user_id, patient_id, begrunnelse, utloper) VALUES ($1,$2,$3,'Nødsituasjon', now() + interval '1 hour')",
 				[nyId(), 'bruker-1', PASIENT]
 			);
@@ -153,7 +153,7 @@ beskriv('tilgangsbeslutning', () => {
 		});
 
 		it('utløper', async () => {
-			await exec(
+			await settInn(
 				"INSERT INTO break_glass (id, user_id, patient_id, begrunnelse, startet, utloper) VALUES ($1,$2,$3,'Gammel', now() - interval '5 hours', now() - interval '1 hour')",
 				[nyId(), 'bruker-1', PASIENT]
 			);
@@ -161,7 +161,7 @@ beskriv('tilgangsbeslutning', () => {
 		});
 
 		it('overstyrer aldri manglende scope', async () => {
-			await exec(
+			await settInn(
 				"INSERT INTO break_glass (id, user_id, patient_id, begrunnelse, utloper) VALUES ($1,$2,$3,'Nød', now() + interval '1 hour')",
 				[nyId(), 'bruker-1', PASIENT]
 			);
@@ -218,7 +218,7 @@ beskriv('tilgangsbeslutning', () => {
 		});
 
 		it('tar med pasienter det er nødrett på', async () => {
-			await exec(
+			await settInn(
 				"INSERT INTO break_glass (id, user_id, patient_id, begrunnelse, utloper) VALUES ($1,$2,$3,'Nød', now() + interval '1 hour')",
 				[nyId(), 'bruker-1', 'pas-9']
 			);
@@ -236,14 +236,14 @@ beskriv('tilgangsbeslutning', () => {
 		});
 
 		it('lister sperrede pasienter som skal filtreres bort', async () => {
-			await exec("INSERT INTO journal_sperring (id, patient_id, omfang, registrert_av) VALUES ($1,$2,'alle','bruker-1')", [nyId(), ANNEN_PASIENT]);
+			await settInn("INSERT INTO journal_sperring (id, patient_id, omfang, registrert_av) VALUES ($1,$2,'alle','bruker-1')", [nyId(), ANNEN_PASIENT]);
 			const sperret = await sperredePasienter(kontekst());
 			expect(sperret.has(ANNEN_PASIENT)).toBe(true);
 		});
 
 		it('fjerner sperring fra listen når det finnes nødrett', async () => {
-			await exec("INSERT INTO journal_sperring (id, patient_id, omfang, registrert_av) VALUES ($1,$2,'alle','bruker-1')", [nyId(), ANNEN_PASIENT]);
-			await exec(
+			await settInn("INSERT INTO journal_sperring (id, patient_id, omfang, registrert_av) VALUES ($1,$2,'alle','bruker-1')", [nyId(), ANNEN_PASIENT]);
+			await settInn(
 				"INSERT INTO break_glass (id, user_id, patient_id, begrunnelse, utloper) VALUES ($1,$2,$3,'Nød', now() + interval '1 hour')",
 				[nyId(), 'bruker-1', ANNEN_PASIENT]
 			);

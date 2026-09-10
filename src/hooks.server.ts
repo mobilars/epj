@@ -10,6 +10,8 @@ import { rettigheterForRoller, scopesForRoller } from '$srv/authz/roles';
 import type { AuthContext } from '$srv/authz/context';
 import { migrer } from '$srv/db/migrate';
 import { logg } from '$srv/audit';
+import { medTenant, PLATTFORM_TENANT, type Tenant } from '$srv/tenant/kontekst';
+import { hentTenant, hentTenantPaVertsnavn } from '$srv/tenant/tenant';
 
 let migrertOk: Promise<unknown> | null = null;
 
@@ -60,9 +62,56 @@ async function kontekstFraBearer(authorization: string, event: Parameters<Handle
 	return { ...resultat.ctx, ip: klientIp(event), requestId };
 }
 
+/**
+ * Finner hvilken virksomhet forespørselen gjelder.
+ *
+ * Utledes av vertsnavnet, aldri av noe klienten kan velge. Ukjent vertsnavn
+ * avvises i produksjon; i utvikling faller vi tilbake på standardvirksomheten,
+ * slik at localhost virker uten oppsett.
+ */
+async function losTenant(vertsnavn: string): Promise<{ tenant: Tenant; erPlattform: boolean } | { feil: string; status: number }> {
+	if (config.tenant.plattformVertsnavn && vertsnavn === config.tenant.plattformVertsnavn) {
+		const plattform = await hentTenant(PLATTFORM_TENANT);
+		if (!plattform) return { feil: 'Plattformvirksomheten mangler', status: 500 };
+		return { tenant: plattform, erPlattform: true };
+	}
+
+	const funnet = await hentTenantPaVertsnavn(vertsnavn);
+	if (funnet) {
+		if (funnet.status !== 'aktiv') {
+			return { feil: `Virksomheten er ${funnet.status}. Kontakt leverandøren.`, status: 503 };
+		}
+		return { tenant: funnet, erPlattform: false };
+	}
+
+	if (!config.tenant.tillatUkjentVertsnavn) {
+		return { feil: `Ukjent vertsnavn: ${vertsnavn}`, status: 404 };
+	}
+	const standard = await hentTenant(config.tenant.standard);
+	if (!standard) return { feil: 'Standardvirksomheten mangler. Kjør migrasjonene.', status: 500 };
+	return { tenant: standard, erPlattform: false };
+}
+
 export const handle: Handle = async ({ event, resolve }) => {
 	await sikreSkjema();
 
+	const losning = await losTenant(event.url.hostname);
+	if ('feil' in losning) {
+		return new Response(losning.feil, { status: losning.status, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+	}
+	event.locals.tenant = losning.tenant;
+	event.locals.erPlattform = losning.erPlattform;
+
+	// Resten av forespørselen kjører i virksomhetens kontekst. Spørringer som
+	// glemmer avgrensningen feiler dermed høylytt i stedet for å hente andres data.
+	return medTenant(losning.tenant, () => handterIKontekst(event, resolve, losning.erPlattform));
+};
+
+async function handterIKontekst(
+	event: Parameters<Handle>[0]['event'],
+	resolve: Parameters<Handle>[0]['resolve'],
+	erPlattform: boolean
+): Promise<Response> {
 	const requestId = event.request.headers.get('x-request-id') ?? randomUUID();
 	event.locals.requestId = requestId;
 	event.locals.clientIp = klientIp(event);
@@ -70,6 +119,17 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	const sti = event.url.pathname;
 	const erFhirApi = sti.startsWith('/fhir') || sti.startsWith('/api') || sti.startsWith('/oauth');
+
+	// Plattformadministrasjonen nås bare på plattformens eget vertsnavn, og
+	// virksomhetens sider nås ikke derfra.
+	if (config.tenant.plattformVertsnavn) {
+		if (sti.startsWith('/systemadmin') && !erPlattform) {
+			return new Response('Plattformadministrasjon nås på et eget vertsnavn.', { status: 404 });
+		}
+		if (erPlattform && !sti.startsWith('/systemadmin') && !sti.startsWith('/logg-inn') && !sti.startsWith('/logg-ut') && sti !== '/') {
+			return new Response('Denne adressen er forbeholdt plattformadministrasjon.', { status: 404 });
+		}
+	}
 
 	// Ratebegrensning. Autentiseringsendepunktene er strengere enn resten.
 	const strengt = sti.startsWith('/oauth/token') || sti === '/logg-inn';
@@ -99,7 +159,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 					status: 401,
 					headers: {
 						'content-type': 'application/fhir+json',
-						'www-authenticate': `Bearer realm="${config.issuer}", error="invalid_token"`
+						'www-authenticate': `Bearer realm="${event.locals.tenant.base_url}", error="invalid_token"`
 					}
 				}
 			);
@@ -115,7 +175,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 	svar.headers.set('x-request-id', requestId);
 	return svar;
-};
+}
 
 export const handleError: HandleServerError = ({ error, event }) => {
 	const requestId = event.locals?.requestId ?? 'ukjent';

@@ -19,7 +19,9 @@ export const ROLLER = [
 	'systemansvarlig',
 	'personvernombud',
 	'regnskap',
-	'pasient'
+	'pasient',
+	// Plattformnivå: tilhører ingen virksomhet, og har aldri klinisk tilgang.
+	'systemeier'
 ] as const;
 
 export type Rolle = (typeof ROLLER)[number];
@@ -57,7 +59,8 @@ export const RETTIGHETER = [
 	'admin:apper',
 	'admin:logg',
 	'admin:system',
-	'logg:innsyn'
+	'logg:innsyn',
+	'plattform:administrer'
 ] as const;
 
 export type Rettighet = (typeof RETTIGHETER)[number];
@@ -164,6 +167,15 @@ export const ROLLE_DEFINISJONER: Record<Rolle, RolleDefinisjon> = {
 		beskrivelse: 'Fører oppgjør mot Helfo og pasientfakturering.',
 		scopes: ['user/Claim.rs', 'user/ClaimResponse.rs', 'user/Invoice.cruds', 'user/Coverage.rs', 'user/Patient.rs'],
 		rettigheter: ['oppgjor:registrer', 'oppgjor:send'],
+		kanNodrett: false,
+		kanSeAllePasienter: false
+	},
+	systemeier: {
+		navn: 'Systemeier',
+		beskrivelse:
+			'Plattformadministrator. Oppretter og administrerer virksomheter. Har ingen tilgang til journaler i noen virksomhet.',
+		scopes: [],
+		rettigheter: ['plattform:administrer'],
 		kanNodrett: false,
 		kanSeAllePasienter: false
 	},

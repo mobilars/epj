@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { config } from '$srv/config';
+import { fhirBaseFor, krevTenant, utstederFor } from '$srv/tenant/kontekst';
 
 /**
  * SMART on FHIR discovery (`.well-known/smart-configuration`).
@@ -10,16 +11,22 @@ import { config } from '$srv/config';
  * annonserer hvilke deler av SMART denne journalen støtter.
  */
 export const GET: RequestHandler = () => {
+	// Metadataene er per virksomhet: hver virksomhet har sin egen `issuer` og sitt
+	// eget FHIR-endepunkt, og en app som er godkjent hos én er ikke godkjent hos
+	// en annen.
+	const tenant = krevTenant();
+	const base = utstederFor(tenant);
 	return json(
 		{
-			issuer: config.issuer,
-			jwks_uri: `${config.baseUrl}/oauth/jwks`,
-			authorization_endpoint: `${config.baseUrl}/oauth/authorize`,
-			token_endpoint: `${config.baseUrl}/oauth/token`,
-			introspection_endpoint: `${config.baseUrl}/oauth/introspect`,
-			revocation_endpoint: `${config.baseUrl}/oauth/revoke`,
-			registration_endpoint: `${config.baseUrl}/oauth/register`,
-			management_endpoint: `${config.baseUrl}/admin/apper`,
+			issuer: base,
+			fhir_endpoint: fhirBaseFor(tenant),
+			jwks_uri: `${base}/oauth/jwks`,
+			authorization_endpoint: `${base}/oauth/authorize`,
+			token_endpoint: `${base}/oauth/token`,
+			introspection_endpoint: `${base}/oauth/introspect`,
+			revocation_endpoint: `${base}/oauth/revoke`,
+			registration_endpoint: `${base}/oauth/register`,
+			management_endpoint: `${base}/admin/apper`,
 			token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'private_key_jwt'],
 			token_endpoint_auth_signing_alg_values_supported: ['ES256'],
 			grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials'],

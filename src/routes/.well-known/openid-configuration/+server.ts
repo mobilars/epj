@@ -1,18 +1,19 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { config } from '$srv/config';
+import { krevTenant, utstederFor } from '$srv/tenant/kontekst';
 
 /** OpenID Connect discovery, brukt av apper som logger inn med `openid`-scope. */
-export const GET: RequestHandler = () =>
-	json(
+export const GET: RequestHandler = () => {
+	const base = utstederFor(krevTenant());
+	return json(
 		{
-			issuer: config.issuer,
-			authorization_endpoint: `${config.baseUrl}/oauth/authorize`,
-			token_endpoint: `${config.baseUrl}/oauth/token`,
-			jwks_uri: `${config.baseUrl}/oauth/jwks`,
-			introspection_endpoint: `${config.baseUrl}/oauth/introspect`,
-			revocation_endpoint: `${config.baseUrl}/oauth/revoke`,
-			userinfo_endpoint: `${config.baseUrl}/oauth/userinfo`,
+			issuer: base,
+			authorization_endpoint: `${base}/oauth/authorize`,
+			token_endpoint: `${base}/oauth/token`,
+			jwks_uri: `${base}/oauth/jwks`,
+			introspection_endpoint: `${base}/oauth/introspect`,
+			revocation_endpoint: `${base}/oauth/revoke`,
+			userinfo_endpoint: `${base}/oauth/userinfo`,
 			response_types_supported: ['code'],
 			grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials'],
 			subject_types_supported: ['public'],
@@ -24,3 +25,4 @@ export const GET: RequestHandler = () =>
 		},
 		{ headers: { 'cache-control': 'public, max-age=300' } }
 	);
+};

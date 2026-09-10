@@ -1,4 +1,5 @@
 import { en, exec, query, transaction } from '../../db';
+import { krevTenant } from '../../tenant/kontekst';
 import { nyId } from '../../util/ids';
 import { logg, type AuditAktor } from '../../audit';
 import { fhirKlient } from '../../fhir/client';
@@ -88,14 +89,14 @@ export async function opprettRegningskort(inn: NyttKortInn, aktor: AuditAktor): 
 	const id = nyId();
 	await transaction(async () => {
 		await exec(
-			`INSERT INTO regningskort (id, patient_id, encounter_id, behandler_id, hpr_nummer, dato, kontakttype,
+			`INSERT INTO regningskort (id, tenant_id, patient_id, encounter_id, behandler_id, hpr_nummer, dato, kontakttype,
 				diagnose_kode, diagnose_system, refusjon_ore, egenandel_ore, frikort, fritak_grunn, status)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'klar')`,
+			 VALUES ($1,$14,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'klar')`,
 			[
 				id, inn.patientId, inn.encounterId ?? null, inn.behandlerId, inn.hprNummer ?? null, inn.dato,
 				inn.kontakttype, inn.diagnoseKode ?? null, inn.diagnoseSystem ?? SYSTEM.ICPC2,
 				beregning.sumRefusjonOre, beregning.kreverEgenandelOre,
-				beregning.fritak === 'frikort', beregning.fritak
+				beregning.fritak === 'frikort', beregning.fritak, krevTenant().id
 			]
 		);
 		for (const linje of beregning.linjer) {
@@ -109,7 +110,7 @@ export async function opprettRegningskort(inn: NyttKortInn, aktor: AuditAktor): 
 	});
 
 	const claimId = await speilSomClaim(id, inn, beregning);
-	if (claimId) await exec('UPDATE regningskort SET claim_id = $2 WHERE id = $1', [id, claimId]);
+	if (claimId) await exec('UPDATE regningskort SET claim_id = $2 WHERE id = $1 AND tenant_id = $3', [id, claimId, krevTenant().id]);
 
 	await logg(
 		{
@@ -181,15 +182,16 @@ async function speilSomClaim(
 }
 
 export async function hentKort(id: string): Promise<{ kort: Regningskort; linjer: Regningslinje[] } | null> {
-	const kort = await en<Regningskort>('SELECT * FROM regningskort WHERE id = $1', [id]);
+	const kort = await en<Regningskort>('SELECT * FROM regningskort WHERE id = $1 AND tenant_id = $2', [id, krevTenant().id]);
 	if (!kort) return null;
+	// Linjene arver virksomhet gjennom kortet, som allerede er avgrenset.
 	const linjer = await query<Regningslinje>('SELECT * FROM regningslinje WHERE regningskort_id = $1 ORDER BY takstkode', [id]);
 	return { kort, linjer };
 }
 
 export async function listKort(filter: { status?: Kortstatus; patientId?: string; fra?: string; til?: string; grense?: number }): Promise<Regningskort[]> {
-	const vilkar = ['true'];
-	const params: unknown[] = [];
+	const vilkar = ['tenant_id = $1'];
+	const params: unknown[] = [krevTenant().id];
 	if (filter.status) { params.push(filter.status); vilkar.push(`status = $${params.length}`); }
 	if (filter.patientId) { params.push(filter.patientId); vilkar.push(`patient_id = $${params.length}`); }
 	if (filter.fra) { params.push(filter.fra); vilkar.push(`dato >= $${params.length}`); }
@@ -202,9 +204,12 @@ export async function listKort(filter: { status?: Kortstatus; patientId?: string
 }
 
 export async function slettKladd(id: string, aktor: AuditAktor): Promise<boolean> {
-	const kort = await en<Regningskort>("SELECT * FROM regningskort WHERE id = $1 AND status IN ('kladd','klar')", [id]);
+	const kort = await en<Regningskort>(
+		"SELECT * FROM regningskort WHERE id = $1 AND tenant_id = $2 AND status IN ('kladd','klar')",
+		[id, krevTenant().id]
+	);
 	if (!kort) return false;
-	await exec('DELETE FROM regningskort WHERE id = $1', [id]);
+	await exec('DELETE FROM regningskort WHERE id = $1 AND tenant_id = $2', [id, krevTenant().id]);
 	await logg(
 		{ type: 'oppgjor', subtype: 'regningskort:slettet', handling: 'D', utfall: '0', patientId: kort.patient_id, entityRef: `urn:regningskort:${id}` },
 		aktor

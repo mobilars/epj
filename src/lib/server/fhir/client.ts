@@ -1,4 +1,5 @@
 import { config } from '../config';
+import { krevTenant } from '../tenant/kontekst';
 import { FhirError, issue } from './outcome';
 import type { Bundle, FhirResource } from './types';
 
@@ -9,6 +10,10 @@ import type { Bundle, FhirResource } from './types';
  * `$everything`, `$validate` og profilvalidering mot de norske basisprofilene.
  * Denne klienten er bevisst tynn - all forretningslogikk og tilgangskontroll
  * ligger i `gateway.ts`, som er det eneste som skal kalle hit.
+ *
+ * Alle kall går mot virksomhetens egen partisjon. Partisjonsnavnet hentes fra
+ * virksomhetskonteksten, ikke fra kalleren: da kan ingen kodesti be om data fra
+ * en annen virksomhet ved å sende med feil navn.
  */
 
 export interface FhirRespons<T = FhirResource> {
@@ -28,6 +33,16 @@ export interface KallOpsjoner {
 	signal?: AbortSignal;
 }
 
+/**
+ * Basen for virksomhetens partisjon. Uten partisjonering brukes serverens rot,
+ * slik at enkeltvirksomhetsinstallasjoner virker uendret.
+ */
+export function tenantBase(): string {
+	const base = config.fhirServer.baseUrl;
+	if (!config.fhirServer.multitenant) return base;
+	return `${base}/${krevTenant().id}`;
+}
+
 function autorisasjonsHeader(): Record<string, string> {
 	const { brukernavn, passord } = config.fhirServer;
 	if (!brukernavn) return {};
@@ -40,7 +55,7 @@ async function kall(
 	kropp?: unknown,
 	opsjoner: KallOpsjoner = {}
 ): Promise<FhirRespons> {
-	const url = sti.startsWith('http') ? sti : `${config.fhirServer.baseUrl}/${sti.replace(/^\//, '')}`;
+	const url = sti.startsWith('http') ? sti : `${tenantBase()}/${sti.replace(/^\//, '')}`;
 	const kontroller = new AbortController();
 	const timeout = setTimeout(() => kontroller.abort(), config.fhirServer.timeoutMs);
 	opsjoner.signal?.addEventListener('abort', () => kontroller.abort());
@@ -118,7 +133,7 @@ export const fhirKlient = {
 
 	/** Søk med POST og skjemakodet kropp (foretrukket for pasientnære søk). */
 	async sokPost(resourceType: string, query: URLSearchParams, o?: KallOpsjoner): Promise<Bundle> {
-		const url = `${config.fhirServer.baseUrl}/${resourceType}/_search`;
+		const url = `${tenantBase()}/${resourceType}/_search`;
 		const svar = await fetch(url, {
 			method: 'POST',
 			headers: {

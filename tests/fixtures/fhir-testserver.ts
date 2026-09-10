@@ -14,13 +14,20 @@ import { randomUUID } from 'node:crypto';
  * `integrasjon-hapi`, som kjører den samme testsuiten mot hapiproject/hapi.
  */
 
+export type Ressurslager = Map<string, Map<string, Record<string, unknown>>>;
+
 export interface TestFhirServer {
 	url: string;
 	server: Server | null;
 	/** True når testene kjører mot en ekte HAPI-server i stedet for dobbelen. */
 	erEkte: boolean;
-	lager: Map<string, Map<string, Record<string, unknown>>>;
-	kall: { metode: string; sti: string }[];
+	/** Innholdet i den upartisjonerte roten. Se `lagerFor` for partisjonene. */
+	lager: Ressurslager;
+	/** Innholdet i én partisjon. Tomt kart hvis partisjonen ikke er tatt i bruk. */
+	lagerFor(partisjon: string): Ressurslager;
+	/** Partisjonene serveren kjenner, slik $partition-management-list-partitions svarer. */
+	partisjoner(): { id: number; navn: string }[];
+	kall: { metode: string; sti: string; partisjon: string }[];
 	lukk(): Promise<void>;
 	nullstill(): void;
 }
@@ -81,6 +88,8 @@ export async function fhirForTest(): Promise<TestFhirServer> {
 			server: null,
 			erEkte: true,
 			lager: new Map(),
+			lagerFor: () => new Map(),
+			partisjoner: () => [],
 			kall: [],
 			nullstill() {
 				/* En ekte server tømmes ikke mellom tester; testene lager egne pasienter. */
@@ -91,18 +100,47 @@ export async function fhirForTest(): Promise<TestFhirServer> {
 	return startTestFhirServer();
 }
 
-export async function startTestFhirServer(): Promise<TestFhirServer> {
-	const lager = new Map<string, Map<string, Record<string, unknown>>>();
-	const historikk = new Map<string, Record<string, unknown>[]>();
-	const kall: { metode: string; sti: string }[] = [];
+/**
+ * Partisjonering.
+ *
+ * HAPI med `URL_BASED` tenantidentifikasjon legger partisjonsnavnet foran
+ * ressurstypen: /fhir/<partisjon>/Patient/123. Dobbelen gjør det samme, og
+ * holder ett lager per partisjon. Det er nettopp den isolasjonen
+ * multitenancy hviler på, så den må testes - ikke antas.
+ *
+ * Ressurstyper i FHIR begynner alltid med stor bokstav, og partisjonsnavn er
+ * små bokstaver (eller `DEFAULT`). Segmentene kan derfor ikke forveksles.
+ */
+const PARTISJONSNAVN = /^(DEFAULT|[a-z][a-z0-9-]{1,30})$/;
 
-	const hent = (type: string) => {
-		if (!lager.has(type)) lager.set(type, new Map());
-		return lager.get(type) as Map<string, Record<string, unknown>>;
+function erPartisjonssegment(segment: string): boolean {
+	return PARTISJONSNAVN.test(segment) && segment !== 'metadata';
+}
+
+export async function startTestFhirServer(): Promise<TestFhirServer> {
+	// '' er roten: den brukes når serveren kjøres uten partisjonering.
+	const partisjonslagre = new Map<string, Ressurslager>([['', new Map()]]);
+	const partisjonsregister = new Map<string, { id: number; navn: string; beskrivelse?: string }>([
+		['DEFAULT', { id: 0, navn: 'DEFAULT', beskrivelse: 'Standardpartisjon' }]
+	]);
+	const historikk = new Map<string, Record<string, unknown>[]>();
+	const kall: { metode: string; sti: string; partisjon: string }[] = [];
+
+	const lager = partisjonslagre.get('') as Ressurslager;
+
+	const lagerFor = (partisjon: string): Ressurslager => {
+		if (!partisjonslagre.has(partisjon)) partisjonslagre.set(partisjon, new Map());
+		return partisjonslagre.get(partisjon) as Ressurslager;
 	};
 
-	function lagre(type: string, id: string, ressurs: Record<string, unknown>): Record<string, unknown> {
-		const forrige = hent(type).get(id);
+	const hent = (partisjon: string, type: string) => {
+		const l = lagerFor(partisjon);
+		if (!l.has(type)) l.set(type, new Map());
+		return l.get(type) as Map<string, Record<string, unknown>>;
+	};
+
+	function lagre(partisjon: string, type: string, id: string, ressurs: Record<string, unknown>): Record<string, unknown> {
+		const forrige = hent(partisjon, type).get(id);
 		const versjon = forrige ? Number((forrige.meta as { versionId?: string })?.versionId ?? 1) + 1 : 1;
 		const lagret = {
 			...ressurs,
@@ -110,14 +148,14 @@ export async function startTestFhirServer(): Promise<TestFhirServer> {
 			id,
 			meta: { ...(ressurs.meta as object), versionId: String(versjon), lastUpdated: new Date().toISOString() }
 		};
-		hent(type).set(id, lagret);
-		const nokkel = `${type}/${id}`;
+		hent(partisjon, type).set(id, lagret);
+		const nokkel = `${partisjon}:${type}/${id}`;
 		historikk.set(nokkel, [...(historikk.get(nokkel) ?? []), lagret]);
 		return lagret;
 	}
 
-	function sok(type: string, params: URLSearchParams): Record<string, unknown> {
-		let treff = [...hent(type).values()];
+	function sok(partisjon: string, type: string, params: URLSearchParams): Record<string, unknown> {
+		let treff = [...hent(partisjon, type).values()];
 		for (const [nokkel, verdi] of params) {
 			if (nokkel.startsWith('_') && nokkel !== '_id') continue;
 			const uttrekk = SOKEFELT[nokkel.split(':')[0]];
@@ -143,9 +181,14 @@ export async function startTestFhirServer(): Promise<TestFhirServer> {
 		req.on('data', (b) => biter.push(b));
 		req.on('end', () => {
 			const url = new URL(req.url ?? '/', 'http://test');
-			const sti = url.pathname.replace(/^\/fhir\/?/, '');
+			const helSti = url.pathname.replace(/^\/fhir\/?/, '');
 			const kropp = Buffer.concat(biter).toString('utf8');
-			kall.push({ metode: req.method ?? 'GET', sti });
+
+			// Skill partisjonssegmentet fra resten, slik HAPI gjør med URL_BASED.
+			const alleDeler = helSti.split('/').filter(Boolean);
+			const partisjon = alleDeler.length && erPartisjonssegment(alleDeler[0]) ? alleDeler[0] : '';
+			const sti = partisjon ? alleDeler.slice(1).join('/') : helSti;
+			kall.push({ metode: req.method ?? 'GET', sti, partisjon });
 
 			const svar = (status: number, data: unknown, headers: Record<string, string> = {}) => {
 				res.writeHead(status, { 'content-type': 'application/fhir+json', ...headers });
@@ -156,6 +199,54 @@ export async function startTestFhirServer(): Promise<TestFhirServer> {
 
 			const deler = sti.split('/').filter(Boolean);
 
+			// --- Partisjonsadministrasjon (kalles på standardpartisjonen) -----
+			if (deler.length === 1 && deler[0].startsWith('$partition-management-')) {
+				const operasjon = deler[0].slice('$partition-management-'.length);
+				const inn = kropp ? (JSON.parse(kropp) as { parameter?: { name: string; valueInteger?: number; valueString?: string }[] }) : {};
+				const del = (navn: string) => inn.parameter?.find((p) => p.name === navn);
+
+				if (operasjon === 'list-partitions') {
+					return svar(200, {
+						resourceType: 'Parameters',
+						parameter: [...partisjonsregister.values()].map((p) => ({
+							name: 'partition',
+							part: [
+								{ name: 'id', valueInteger: p.id },
+								{ name: 'name', valueString: p.navn },
+								{ name: 'description', valueString: p.beskrivelse ?? '' }
+							]
+						}))
+					});
+				}
+				if (operasjon === 'create-partition') {
+					const id = del('id')?.valueInteger ?? 0;
+					const navn = del('name')?.valueString ?? '';
+					if (!navn) return feil(400, 'Partisjonen må ha et navn');
+					if (partisjonsregister.has(navn)) return feil(400, `Partisjonen ${navn} finnes allerede`);
+					if ([...partisjonsregister.values()].some((p) => p.id === id)) {
+						return feil(400, `Partisjons-id ${id} er allerede i bruk`);
+					}
+					partisjonsregister.set(navn, { id, navn, beskrivelse: del('description')?.valueString });
+					lagerFor(navn);
+					return svar(200, {
+						resourceType: 'Parameters',
+						parameter: [
+							{ name: 'id', valueInteger: id },
+							{ name: 'name', valueString: navn }
+						]
+					});
+				}
+				if (operasjon === 'delete-partition') {
+					const id = del('id')?.valueInteger ?? -1;
+					const funnet = [...partisjonsregister.values()].find((p) => p.id === id);
+					if (!funnet) return feil(404, `Ukjent partisjon ${id}`);
+					partisjonsregister.delete(funnet.navn);
+					partisjonslagre.delete(funnet.navn);
+					return svar(200, { resourceType: 'Parameters', parameter: [] });
+				}
+				return feil(400, `Ukjent partisjonsoperasjon: ${operasjon}`);
+			}
+
 			if (deler[0] === 'metadata') {
 				return svar(200, {
 					resourceType: 'CapabilityStatement',
@@ -163,7 +254,7 @@ export async function startTestFhirServer(): Promise<TestFhirServer> {
 					date: new Date().toISOString(),
 					fhirVersion: '5.0.0',
 					format: ['application/fhir+json'],
-					rest: [{ mode: 'server', resource: [...lager.keys()].map((t) => ({ type: t })) }]
+					rest: [{ mode: 'server', resource: [...lagerFor(partisjon).keys()].map((t) => ({ type: t })) }]
 				});
 			}
 
@@ -175,17 +266,17 @@ export async function startTestFhirServer(): Promise<TestFhirServer> {
 					const målUrl = e.request?.url ?? '';
 					const type = e.resource?.resourceType ?? målUrl.split('/')[0];
 					if (metode === 'POST' && e.resource) {
-						const lagret = lagre(type as string, randomUUID(), e.resource);
+						const lagret = lagre(partisjon, type as string, randomUUID(), e.resource);
 						return { response: { status: '201 Created', location: `${type}/${lagret.id}` }, resource: lagret };
 					}
 					if (metode === 'PUT' && e.resource) {
 						const id = målUrl.split('/')[1] ?? (e.resource.id as string);
-						const lagret = lagre(type as string, id, e.resource);
+						const lagret = lagre(partisjon, type as string, id, e.resource);
 						return { response: { status: '200 OK' }, resource: lagret };
 					}
 					if (metode === 'DELETE') {
 						const [t, id] = målUrl.split('/');
-						hent(t).delete(id);
+						hent(partisjon, t).delete(id);
 						return { response: { status: '204 No Content' } };
 					}
 					return { response: { status: '200 OK' } };
@@ -196,15 +287,16 @@ export async function startTestFhirServer(): Promise<TestFhirServer> {
 			const type = deler[0];
 
 			if (deler.length === 2 && deler[1] === '_search' && req.method === 'POST') {
-				return svar(200, sok(type, new URLSearchParams(kropp)));
+				return svar(200, sok(partisjon, type, new URLSearchParams(kropp)));
 			}
 			if (deler.length === 1 && req.method === 'GET') {
-				return svar(200, sok(type, url.searchParams));
+				return svar(200, sok(partisjon, type, url.searchParams));
 			}
 			if (deler.length === 1 && req.method === 'POST') {
 				const ressurs = JSON.parse(kropp) as Record<string, unknown>;
-				const lagret = lagre(type, (ressurs.id as string) ?? randomUUID(), ressurs);
-				return svar(201, lagret, { location: `/fhir/${type}/${lagret.id}`, etag: `W/"${(lagret.meta as { versionId: string }).versionId}"` });
+				const lagret = lagre(partisjon, type, (ressurs.id as string) ?? randomUUID(), ressurs);
+				const prefiks = partisjon ? `/fhir/${partisjon}` : '/fhir';
+				return svar(201, lagret, { location: `${prefiks}/${type}/${lagret.id}`, etag: `W/"${(lagret.meta as { versionId: string }).versionId}"` });
 			}
 			if (deler.length === 2 && deler[1] === '$validate' && req.method === 'POST') {
 				return svar(200, { resourceType: 'OperationOutcome', issue: [] });
@@ -213,10 +305,10 @@ export async function startTestFhirServer(): Promise<TestFhirServer> {
 			const id = deler[1];
 
 			if (deler.length === 3 && deler[2] === '$everything') {
-				const pasient = hent('Patient').get(id);
+				const pasient = hent(partisjon, 'Patient').get(id);
 				if (!pasient) return feil(404, 'Ukjent pasient');
 				const alle: Record<string, unknown>[] = [pasient];
-				for (const [t, m] of lager) {
+				for (const [t, m] of lagerFor(partisjon)) {
 					if (t === 'Patient') continue;
 					for (const r of m.values()) {
 						if (refVerdier(r, ['subject', 'patient', 'beneficiary', 'for']).includes(`Patient/${id}`)) alle.push(r);
@@ -225,41 +317,41 @@ export async function startTestFhirServer(): Promise<TestFhirServer> {
 				return svar(200, { resourceType: 'Bundle', type: 'searchset', total: alle.length, entry: alle.map((r) => ({ resource: r })) });
 			}
 			if (deler.length === 3 && deler[2] === '_history') {
-				const versjoner = historikk.get(`${type}/${id}`) ?? [];
+				const versjoner = historikk.get(`${partisjon}:${type}/${id}`) ?? [];
 				return svar(200, { resourceType: 'Bundle', type: 'history', total: versjoner.length, entry: versjoner.map((r) => ({ resource: r })) });
 			}
 			if (deler.length === 4 && deler[2] === '_history') {
-				const versjon = (historikk.get(`${type}/${id}`) ?? []).find((r) => (r.meta as { versionId: string }).versionId === deler[3]);
+				const versjon = (historikk.get(`${partisjon}:${type}/${id}`) ?? []).find((r) => (r.meta as { versionId: string }).versionId === deler[3]);
 				return versjon ? svar(200, versjon) : feil(404, 'Ukjent versjon');
 			}
 
 			if (deler.length === 2) {
 				switch (req.method) {
 					case 'GET': {
-						const r = hent(type).get(id);
+						const r = hent(partisjon, type).get(id);
 						return r
 							? svar(200, r, { etag: `W/"${(r.meta as { versionId: string }).versionId}"`, 'last-modified': String((r.meta as { lastUpdated: string }).lastUpdated) })
 							: feil(404, `${type}/${id} finnes ikke`);
 					}
 					case 'PUT': {
 						const ressurs = JSON.parse(kropp) as Record<string, unknown>;
-						const fantes = hent(type).has(id);
-						const lagret = lagre(type, id, ressurs);
+						const fantes = hent(partisjon, type).has(id);
+						const lagret = lagre(partisjon, type, id, ressurs);
 						return svar(fantes ? 200 : 201, lagret, { etag: `W/"${(lagret.meta as { versionId: string }).versionId}"` });
 					}
 					case 'DELETE': {
-						const fantes = hent(type).delete(id);
+						const fantes = hent(partisjon, type).delete(id);
 						return svar(fantes ? 200 : 404, { resourceType: 'OperationOutcome', issue: [{ severity: 'information', code: 'informational', diagnostics: 'Slettet' }] });
 					}
 					case 'PATCH': {
-						const gjeldende = hent(type).get(id);
+						const gjeldende = hent(partisjon, type).get(id);
 						if (!gjeldende) return feil(404, 'Ukjent ressurs');
 						const patcher = JSON.parse(kropp) as { op: string; path: string; value: unknown }[];
 						const kopi = { ...gjeldende };
 						for (const p of patcher) {
 							if (p.op === 'replace' || p.op === 'add') kopi[p.path.replace(/^\//, '')] = p.value;
 						}
-						return svar(200, lagre(type, id, kopi));
+						return svar(200, lagre(partisjon, type, id, kopi));
 					}
 				}
 			}
@@ -276,9 +368,13 @@ export async function startTestFhirServer(): Promise<TestFhirServer> {
 		server,
 		erEkte: false,
 		lager,
+		lagerFor,
+		partisjoner: () => [...partisjonsregister.values()].map((p) => ({ id: p.id, navn: p.navn })),
 		kall,
 		nullstill() {
-			lager.clear();
+			for (const l of partisjonslagre.values()) l.clear();
+			partisjonsregister.clear();
+			partisjonsregister.set('DEFAULT', { id: 0, navn: 'DEFAULT', beskrivelse: 'Standardpartisjon' });
 			historikk.clear();
 			kall.length = 0;
 		},
