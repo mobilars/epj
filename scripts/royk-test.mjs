@@ -32,7 +32,8 @@ page.on('console', (m) => {
 try {
 	// --- Sign in as a demo user ------------------------------------------
 	await page.goto(`${base}/logg-inn`, { waitUntil: 'domcontentloaded' });
-	check('påloggingssiden svarer', await page.getByRole('heading', { name: 'Logg inn' }).isVisible());
+	// The front page leads with the organisation, not the word 'Logg inn'.
+	check('forsiden svarer', await page.locator('.forsidetopp h1').isVisible());
 
 	// The demo buttons need JavaScript: clicking before hydration does nothing,
 	// and the test then waits for a navigation that never comes.
