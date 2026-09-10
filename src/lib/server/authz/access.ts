@@ -27,6 +27,7 @@ export type Basis =
 	| 'egen-journal'
 	| 'nodrett'
 	| 'administrativ-rolle'
+	| 'pasientregistrering'
 	| 'ikke-pasientdata';
 
 export interface Decision {
@@ -126,6 +127,26 @@ export async function evaluate(question: AccessQuestion): Promise<Decision> {
 
 	// --- Lag 2: rolle -------------------------------------------------------
 	const writes = operation === 'c' || operation === 'u' || operation === 'd';
+
+	/**
+	 * Registering a patient is the one write with no patient to judge against.
+	 * The record does not exist yet, so there is no care relationship to have
+	 * and nothing that could be restricted - the three layers below have
+	 * nothing to work on. The role's own `pasient:opprett` decides instead.
+	 *
+	 * It is deliberately not `journal:skriv`: the front desk registers patients
+	 * without being allowed to write in anyone's record. Whoever registers the
+	 * patient records a care relationship at the same time, which is what gives
+	 * them access to the record afterwards - and leaves the trace that says why.
+	 */
+	const registersPatient = operation === 'c' && resourceType === 'Patient' && !patientId;
+	if (registersPatient) {
+		if (!ctx.permissions.has('pasient:opprett')) {
+			return DENY('Rollen din kan ikke registrere nye pasienter');
+		}
+		return { allowed: true, basis: 'pasientregistrering', purposeOfUse: 'TREAT', limitations: scopeResponse.limitations, status: 403 };
+	}
+
 	if (writes && !ctx.permissions.has('journal:skriv') && !ctx.permissions.has('admin:system')) {
 		return DENY('Rollen din har ikke skriverettigheter i journal');
 	}

@@ -56,10 +56,14 @@ const PRACTICE: TestPerson[] = [
  * clinical scopes at all.
  */
 const PLATFORM: TestPerson = {
-	nationalId: '70917001144',
-	name: 'HYPPIG AVTALE',
-	username: 'hyppig.avtale',
-	profession: 'Ikke helsepersonell (D-nummer)',
+	nationalId: '02037340726',
+	// The account the seed script already creates. Giving it the identity number
+	// means the same platform administrator can be reached both locally and
+	// through HelseID, rather than there being two of them. The name is replaced
+	// when the person first signs in: HelseID is the source of that.
+	name: 'Plattformadministrator',
+	username: 'systemeier',
+	profession: 'Plattformadministrator',
 	role: 'systemeier'
 };
 
@@ -73,16 +77,29 @@ async function ensure(person: TestPerson): Promise<'created' | 'linked' | 'uncha
 	let outcome: 'created' | 'linked' | 'unchanged' = 'unchanged';
 
 	if (!userId) {
-		// An account may already exist from a sign-in made before the person was
-		// registered here - HelseID created it then, without a role. Recognise it
-		// by the subject HelseID gave it, through the name it was given.
-		const byName = await one<{ id: string }>(
-			'SELECT id FROM user_account WHERE name = $1 AND national_id IS NULL AND tenant_id = $2',
-			[person.name, requireTenant().id]
+		/**
+		 * The account may already exist under another identifier:
+		 *
+		 *   - the username this script would use, from the ordinary seed;
+		 *   - an account HelseID created on a sign-in made before the person was
+		 *     registered here, which carries the name HelseID gave it.
+		 *
+		 * The name is only trusted for an account HelseID itself created, and
+		 * never on its own: two people can share a name, and attaching an
+		 * identity number to the wrong account would hand one person another
+		 * person's access.
+		 */
+		const match = await one<{ id: string }>(
+			`SELECT id FROM user_account
+			 WHERE tenant_id = $1 AND national_id IS NULL
+			   AND (username = $2 OR (name = $3 AND helseid_sub IS NOT NULL))
+			 ORDER BY (username = $2) DESC
+			 LIMIT 1`,
+			[requireTenant().id, person.username, person.name]
 		);
-		if (byName) {
-			await exec('UPDATE user_account SET national_id = $2, updated_at = now() WHERE id = $1', [byName.id, person.nationalId]);
-			userId = byName.id;
+		if (match) {
+			await exec('UPDATE user_account SET national_id = $2, updated_at = now() WHERE id = $1', [match.id, person.nationalId]);
+			userId = match.id;
 			outcome = 'linked';
 		}
 	}

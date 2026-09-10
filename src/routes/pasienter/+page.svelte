@@ -34,6 +34,21 @@
 				Du har ingen registrerte pasienter ennå.
 			{/if}
 		</p>
+		{#if data.canRegister}
+			<!-- A search that finds nobody is the ordinary way to a registration: the
+			     patient is standing at the desk. The search term is carried over. -->
+			<p>
+				<a class="knapp knapp-primar" href="/pasienter/ny{data.search ? `?sok=${encodeURIComponent(data.search)}` : ''}">
+					Registrer ny pasient
+				</a>
+			</p>
+			{#if data.search}
+				<small class="svak">
+					Merk at et treff også kan mangle fordi du ikke har behandlingsrelasjon til
+					pasienten. Registrering avbrytes hvis fødselsnummeret allerede finnes.
+				</small>
+			{/if}
+		{/if}
 	{:else}
 		<div class="tabell-omslag">
 			<table>

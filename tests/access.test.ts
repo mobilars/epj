@@ -197,6 +197,52 @@ describeIf('tilgangsbeslutning', () => {
 		});
 	});
 
+	describe('registrering av ny pasient', () => {
+		/**
+		 * A Patient being created has no id, so there is no patient to judge
+		 * against - no care relationship can exist, and nothing can be
+		 * restricted. Before this was handled explicitly, the create fell through
+		 * to the rule that denies a patient-bearing resource with no patient
+		 * reference, and nobody could register a patient at all.
+		 */
+		const newPatient = { resourceType: 'Patient', name: [{ family: 'Nordmann', given: ['Kari'] }] };
+
+		it('lar en rolle med pasient:opprett registrere en ny pasient', async () => {
+			const decision = await evaluate({ ctx: context({ roles: ['lege'] }), resourceType: 'Patient', operation: 'c', resource: newPatient });
+			expect(decision.allowed).toBe(true);
+			expect(decision.basis).toBe('pasientregistrering');
+		});
+
+		it('lar helsesekretæren registrere, selv uten skriverett i journal', async () => {
+			const sekretaer = context({ roles: ['helsesekretaer'] });
+			expect(sekretaer.permissions.has('journal:skriv')).toBe(false);
+			expect((await evaluate({ ctx: sekretaer, resourceType: 'Patient', operation: 'c', resource: newPatient })).allowed).toBe(true);
+		});
+
+		it('nekter en rolle uten pasient:opprett', async () => {
+			const sykepleier = context({ roles: ['sykepleier'] });
+			expect(sykepleier.permissions.has('pasient:opprett')).toBe(false);
+			expect((await evaluate({ ctx: sykepleier, resourceType: 'Patient', operation: 'c', resource: newPatient })).allowed).toBe(false);
+		});
+
+		it('gir ikke tilgang til en pasient som allerede finnes', async () => {
+			// The exception covers registration only. A create carrying an id names
+			// an existing record, and must be judged the ordinary way.
+			const decision = await evaluate({
+				ctx: context({ roles: ['lege'] }),
+				resourceType: 'Patient',
+				operation: 'c',
+				resource: { ...newPatient, id: ANNEN_PATIENT }
+			});
+			expect(decision.allowed).toBe(false);
+		});
+
+		it('gir ikke skrivetilgang til journalinnhold som følge av registreringen', async () => {
+			const sekretaer = context({ roles: ['helsesekretaer'] });
+			expect((await evaluate({ ctx: sekretaer, resourceType: 'Observation', operation: 'c', resource: observation(PATIENT) })).allowed).toBe(false);
+		});
+	});
+
 	describe('innbygger med innsyn i egen journal', () => {
 		it('ser bare sin egen journal, og kan ikke skrive', async () => {
 			const patientCtx = context({ roles: ['pasient'], actorRef: `Patient/${PATIENT}`, userId: 'innbygger-1' });

@@ -36,12 +36,25 @@ export const load: PageServerLoad = async (event) => {
 		const patients = mine.length
 			? resources(await searchResources(ctx, 'Patient', { _id: mine.map((m) => m.patient_id).join(','), _count: 100, _sort: 'family' }))
 			: [];
-		return { search: '', match: patients.map(toPatientDisplay), countMine: mine.length, sokteAfterFnr: false };
+		return {
+			search: '',
+			match: patients.map(toPatientDisplay),
+			countMine: mine.length,
+			sokteAfterFnr: false,
+			canRegister: ctx.permissions.has('pasient:opprett')
+		};
 	}
 
 	const isFnr = /^\d{11}$/.test(search);
 	if (isFnr && !validNorwegianNationalId(search)) {
-		return { search, match: [], countMine: mine.length, sokteAfterFnr: true, error: 'Ugyldig fødselsnummer (kontrollsiffer stemmer ikke).' };
+		return {
+			search,
+			match: [],
+			countMine: mine.length,
+			sokteAfterFnr: true,
+			canRegister: ctx.permissions.has('pasient:opprett'),
+			error: 'Ugyldig fødselsnummer (kontrollsiffer stemmer ikke).'
+		};
 	}
 
 	const bundle = isFnr
@@ -60,6 +73,7 @@ export const load: PageServerLoad = async (event) => {
 		search,
 		match: resources(bundle).map(toPatientDisplay),
 		countMine: mine.length,
-		sokteAfterFnr: isFnr
+		sokteAfterFnr: isFnr,
+		canRegister: ctx.permissions.has('pasient:opprett')
 	};
 };

@@ -118,7 +118,7 @@ export const ROLE_DEFINISJONER: Record<Role, RoleDefinisjon> = {
 	helsesekretaer: {
 		name: 'Helsesekretær',
 		description: 'Administrativ oppfølging, timebok og oppgjør. Begrenset innsyn i kliniske notater.',
-		scopes: ['user/Patient.rs', 'user/Appointment.cruds', 'user/Encounter.rs', 'user/Communication.rs', 'user/Coverage.rs', 'user/Claim.cruds', 'user/Practitioner.rs', 'user/Organization.rs'],
+		scopes: ['user/Patient.crs', 'user/Appointment.cruds', 'user/Encounter.rs', 'user/Communication.rs', 'user/Coverage.rs', 'user/Claim.cruds', 'user/Practitioner.rs', 'user/Organization.rs'],
 		permissions: ['journal:les', 'journal:utlever', 'melding:les', 'time:administrer', 'pasient:opprett', 'oppgjor:registrer', 'oppgjor:send'],
 		canEmergencyAccess: false,
 		canSeeAllPatients: false
