@@ -1,6 +1,6 @@
 import { redirect, error, isRedirect } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { isConfigured, startLogin } from '$srv/auth/helseid';
+import { describeOAuthError, isConfigured, startLogin } from '$srv/auth/helseid';
 import { log } from '$srv/audit';
 
 /** Starts HelseID sign-in. */
@@ -17,7 +17,7 @@ export const GET: RequestHandler = async (event) => {
 		// or HelseID being down. Send them back to the sign-in page with a
 		// message rather than a stack trace, so the local sign-in is still usable.
 		await log(
-			{ type: 'login', subtype: 'helseid', action: 'E', outcome: '12', outcomeDescription: (err as Error).message },
+			{ type: 'login', subtype: 'helseid', action: 'E', outcome: '12', outcomeDescription: describeOAuthError(err) },
 			{
 				userId: null,
 				actorRef: 'Person/ukjent',

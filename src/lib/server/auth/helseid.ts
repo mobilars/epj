@@ -237,7 +237,7 @@ export async function completeLogin(cookies: Cookies, currentUrl: URL): Promise<
 		}
 		claims = { ...fromUserinfo, ...(verified as unknown as Record<string, unknown>) };
 	} catch (err) {
-		return { ok: false, error: `HelseID avviste innloggingen: ${(err as Error).message}` };
+		return { ok: false, error: `HelseID avviste innloggingen: ${describeOAuthError(err)}` };
 	}
 
 	const securityLevel = (claims[CLAIM.SECURITY_LEVEL] as string) ?? null;
@@ -256,6 +256,25 @@ export async function completeLogin(cookies: Cookies, currentUrl: URL): Promise<
 
 	const { user, roles, newUser } = await linkToLocalUser(parsed);
 	return { ok: true, claims: parsed, returnTo: flowState.returnTo, user, roles, newUser };
+}
+
+/**
+ * Unwraps what the authorization server actually said.
+ *
+ * openid-client's own message for a failed token exchange is "server responded
+ * with an error in the response body" - the `error` and `error_description`
+ * that say why sit on the error object. Without unwrapping them, a
+ * configuration fault is indistinguishable from HelseID being down, both in the
+ * message shown to the user and in the security log.
+ */
+export function describeOAuthError(err: unknown): string {
+	if (err instanceof oidc.ResponseBodyError || err instanceof oidc.AuthorizationResponseError) {
+		return err.error_description ? `${err.error} - ${err.error_description}` : err.error;
+	}
+	if (err instanceof oidc.ClientError && err.cause) {
+		return `${(err as Error).message} (${String((err.cause as { error?: string }).error ?? err.cause)})`;
+	}
+	return (err as Error).message;
 }
 
 /**
