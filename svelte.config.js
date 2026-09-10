@@ -25,7 +25,18 @@ const config = {
 				'font-src': ['self'],
 				'connect-src': ['self'],
 				'form-action': ['self'],
-				'frame-ancestors': ['none'],
+				/*
+				 * 'self', ikke 'none'.
+				 *
+				 * En SMART-app kjører i en ramme inne i journalen, og sender seg selv
+				 * til journalens autorisasjonsendepunkt for å be om samtykke. Da rammes
+				 * journalen inn av seg selv. Med 'none' ble samtykkedialogen blokkert,
+				 * og appen kom aldri gjennom påloggingen.
+				 *
+				 * Fremmede nettsteder kan fortsatt ikke ramme inn journalen - det er
+				 * det clickjacking-vernet handler om.
+				 */
+				'frame-ancestors': ['self'],
 				/*
 				 * SMART-apper kjøres i en ramme inne i journalen. Bare registrerte
 				 * apper får en ramme i det hele tatt - adressen kommer fra
