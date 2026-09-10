@@ -156,6 +156,29 @@ bygget: rekvisisjon og svarrapport for lab og radiologi (utover mottak),
 pleie- og omsorgsmeldinger (PLO), fødselsepikrise, og melding om
 legemiddelutlevering.
 
+### 3.5 Øvrige NHN-tjenester **[N]**
+
+Norsk helsenett dokumenterer API-ene sine på **<https://utviklerportal.nhn.no/>**
+— HelseID, Adresseregisteret, Grunndata/personoppslag, Kjernejournal, SFM,
+meldingsutveksling og flere. Vi bruker i dag bare HelseID og SFM, og resten er
+uimplementert.
+
+Bruk portalen som kilde når disse skal bygges: kravene er detaljerte og ikke
+alltid det man ville gjettet. Et eksempel fra HelseID-klientassertionen, som
+kostet en halv dag:
+
+- `typ` i JWT-hodet **må** være `client-authentication+jwt`, ikke `JWT`.
+  Feil verdi gir `invalid_client` uten nærmere forklaring.
+- `aud` skal være issuer-verdien fra metadatadokumentet, ikke token-endepunktet.
+- `exp` skal ikke settes mer enn ti sekunder fram i tid.
+
+  <https://utviklerportal.nhn.no/informasjonstjenester/helseid/bruksmoenstre-og-eksempelkode/bruk-av-helseid/docs/tekniske-mekanismer/bruk_av_client_assertion_no_nbmd>
+
+Feilene logges i NHN Selvbetjening under klienten, med forklarende tekst. Se
+der først når HelseID avviser noe.
+
+Rekkefølgen tas etter at prototypen står — dette er ikke arbeid som haster.
+
 ---
 
 ## 4. Plattform og drift
