@@ -1,13 +1,19 @@
 # ---------------------------------------------------------------------------
-# The FHIR test app, on a hostname of its own.
+# The SMART apps, each on a hostname of its own.
 #
-# A separate origin on purpose: a SMART app is a third party, and running it on
-# the record's own hostname would make it share cookies and origin with the
-# record itself. Everything that makes the app safe to embed rests on it being
-# somewhere else.
+# Separate origins on purpose. A SMART app is a third party even when we wrote
+# it, and everything that makes one safe to embed rests on it being somewhere
+# else: its own origin, its own storage, no cookies of the record's. Putting
+# them on paths under one host would make them one app wearing four hats.
 #
-# Static files served by nginx. The app is a public client - all of it runs in
-# the browser, and there is no server to keep a secret in.
+# One nginx serves them all, choosing the file by server name. They are static
+# pages - a public client has nowhere to keep a secret, so there is no server
+# side to any of them.
+#
+#   smartdemo.apps.apus.no    the technical test app
+#   notat.apps.apus.no        the note editor
+#   kritisk.apps.apus.no      critical information
+#   legemidler.apps.apus.no   the medication list
 # ---------------------------------------------------------------------------
 apiVersion: v1
 kind: ConfigMap
@@ -16,21 +22,36 @@ metadata:
   namespace: epj
 data:
   default.conf: |
+    # try_files resolves its fallback as a URI under root, not as a path on
+    # disk. An absolute path here sends nginx round in a redirect loop.
+    map $host $appfil {
+      default                 /index.html;
+      notat.apps.apus.no      /notat.html;
+      kritisk.apps.apus.no    /kritisk.html;
+      legemidler.apps.apus.no /legemidler.html;
+    }
+
     server {
       listen 8080;
       server_name _;
       root /usr/share/nginx/html;
 
-      # /launch and /callback are states of the same page, not separate files.
-      location / {
-        try_files $uri /index.html;
-      }
-
-      # The record frames the app. It says who may do so; the record's own
-      # frame-ancestors stays 'none' - this is the app allowing the record.
+      # The record frames these apps, and says so here. The record's own
+      # frame-ancestors stays 'none' - this is each app allowing the record,
+      # not the other way round.
       add_header Content-Security-Policy "frame-ancestors https://epj.apps.apus.no https://epj-admin.apps.apus.no" always;
       add_header X-Content-Type-Options nosniff always;
       add_header Referrer-Policy no-referrer always;
+
+      # Shared files keep their own names.
+      location = /smart.js { try_files /smart.js =404; }
+      location = /app.css  { try_files /app.css =404; }
+
+      # /launch and /callback are states of the same page, not separate files.
+      # Which page depends on the hostname.
+      location / {
+        try_files $uri $appfil =404;
+      }
     }
 ---
 apiVersion: apps/v1
@@ -112,8 +133,8 @@ spec:
               kubernetes.io/metadata.name: ingress
       ports:
         - port: 8080
-  # Serves files and nothing else. It talks to no one - the browser does the
-  # talking to the record, not this pod.
+  # Serves files and nothing else. The browser talks to the record; this pod
+  # talks to no one.
   egress: []
 ---
 apiVersion: networking.k8s.io/v1
@@ -129,15 +150,24 @@ spec:
   tls:
     - hosts:
         - smartdemo.apps.apus.no
+        - notat.apps.apus.no
+        - kritisk.apps.apus.no
+        - legemidler.apps.apus.no
       secretName: demoapp-tls
   rules:
     - host: smartdemo.apps.apus.no
       http:
         paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: demoapp
-                port:
-                  number: 80
+          - { path: /, pathType: Prefix, backend: { service: { name: demoapp, port: { number: 80 } } } }
+    - host: notat.apps.apus.no
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: demoapp, port: { number: 80 } } } }
+    - host: kritisk.apps.apus.no
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: demoapp, port: { number: 80 } } } }
+    - host: legemidler.apps.apus.no
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: demoapp, port: { number: 80 } } } }

@@ -1,4 +1,4 @@
-import { one, exec, query } from '../db';
+import { one, exec, query, transaction } from '../db';
 import { requireTenant, issuerFor } from '../tenant/context';
 import { hashPassword, likeStrenger, tokenHash, verifyPassword } from '../util/crypto';
 import { newId, newToken } from '../util/ids';
@@ -28,13 +28,15 @@ export interface OAuthClient {
 	launch_url: string | null;
 	/** Sits directly in the main menu rather than under the apps dropdown. */
 	in_main_menu: boolean;
+	/** `ingen`, `hoved` (the wide surface) or `side` (the narrow panel). */
+	placement: string;
 	status: string;
 	created_at: string;
 }
 
 const FIELD = `client_id, tenant_id, name, type, client_category, secret_hash, jwks, jwks_uri, redirect_uris,
 	allowed_scopes, grant_types, require_pkce, require_consent, logo_url, databehandleravtale, launch_url,
-	in_main_menu, status, created_at`;
+	in_main_menu, placement, status, created_at`;
 
 export async function getClient(clientId: string): Promise<OAuthClient | null> {
 	return one<OAuthClient>(`SELECT ${FIELD} FROM oauth_client WHERE client_id = $1 AND tenant_id = $2`, [
@@ -61,6 +63,7 @@ export interface NewClient {
 	databehandleravtale?: string;
 	launchUrl?: string;
 	inMainMenu?: boolean;
+	placement?: Placement;
 	createdOf?: string;
 }
 
@@ -70,20 +73,57 @@ export async function registerClient(inValue: NewClient): Promise<{ client: OAut
 	await exec(
 		`INSERT INTO oauth_client (client_id, tenant_id, name, type, client_category, secret_hash, jwks, jwks_uri,
 			redirect_uris, allowed_scopes, grant_types, require_pkce, logo_url, databehandleravtale, launch_url,
-			in_main_menu, created_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+			in_main_menu, placement, created_by)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
 		[
 			clientId, requireTenant().id, inValue.name, inValue.type, inValue.category, secret ? hashPassword(secret) : null,
 			inValue.jwks ? JSON.stringify(inValue.jwks) : null, inValue.jwksUri ?? null,
 			JSON.stringify(inValue.redirectUris), JSON.stringify(inValue.scopes),
 			JSON.stringify(inValue.grantTypes ?? (inValue.category === 'backend' ? ['client_credentials'] : ['authorization_code', 'refresh_token'])),
 			inValue.type === 'public', inValue.logoUrl ?? null, inValue.databehandleravtale ?? null, inValue.launchUrl ?? null,
-			inValue.inMainMenu ?? false, inValue.createdOf ?? null
+			inValue.inMainMenu ?? false, inValue.placement ?? 'ingen', inValue.createdOf ?? null
 		]
 	);
 	const client = await getClient(clientId);
 	if (!client) throw new Error('Klarte ikke å registrere klienten');
 	return { client, secret };
+}
+
+/**
+ * Where an app is rendered.
+ *
+ * `hoved` and `side` place it in the record itself, beside or instead of the
+ * record's own surfaces. Only one app can hold each place at a time - two
+ * things cannot occupy one panel - so setting a placement clears it from
+ * whoever had it.
+ */
+export type Placement = 'ingen' | 'hoved' | 'side';
+
+export async function setPlacement(clientId: string, placement: Placement): Promise<void> {
+	const tenantId = requireTenant().id;
+	await transaction(async () => {
+		if (placement !== 'ingen') {
+			await exec('UPDATE oauth_client SET placement = $1 WHERE tenant_id = $2 AND placement = $3', [
+				'ingen',
+				tenantId,
+				placement
+			]);
+		}
+		await exec('UPDATE oauth_client SET placement = $2 WHERE client_id = $1 AND tenant_id = $3', [
+			clientId,
+			placement,
+			tenantId
+		]);
+	});
+}
+
+/** The app holding a given place, if any. */
+export async function clientAtPlacement(placement: Placement): Promise<OAuthClient | null> {
+	if (placement === 'ingen') return null;
+	return one<OAuthClient>(
+		`SELECT ${FIELD} FROM oauth_client WHERE tenant_id = $1 AND placement = $2 AND status = 'aktiv' LIMIT 1`,
+		[requireTenant().id, placement]
+	);
 }
 
 /** Places an app in the main menu, or takes it out again. */

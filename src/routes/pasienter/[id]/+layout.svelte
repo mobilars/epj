@@ -3,6 +3,8 @@
 	import type { Snippet } from 'svelte';
 	let { data, children }: { data: PatientLayoutData; children: Snippet } = $props();
 
+	type PanelApp = { name: string; clientId: string; url: string };
+
 	type PatientLayoutData = {
 		patientId: string;
 		patient: { name: string; nationalIdMasked: string | null; age: number | null; gender: string; phone: string | null; dod: boolean } | null;
@@ -13,6 +15,8 @@
 		canBeAboutEmergencyAccess: boolean;
 		canUtlevere: boolean;
 		canSkrive: boolean;
+		sidePanel: PanelApp | null;
+		widePanel: PanelApp | null;
 		requireIsOneTimeCode: boolean;
 	};
 
@@ -90,6 +94,18 @@
 
 	<div class="journalflate">
 		<div class="journalinnhold">
+			{#if data.widePanel}
+				<!-- An app holding the wide place sits above the record's own content
+				     rather than replacing it: the tabs still work, and the app is
+				     part of the surface instead of a detour away from it. -->
+				<section class="kort apppanel">
+					<div class="rad-mellom">
+						<h2>{data.widePanel.name}</h2>
+						<a class="svak" href="/pasienter/{data.patientId}/apper/{data.widePanel.clientId}">Åpne stor</a>
+					</div>
+					<iframe class="appramme appramme-hoved" src={data.widePanel.url} title={data.widePanel.name}></iframe>
+				</section>
+			{/if}
 			{@render children()}
 		</div>
 
@@ -101,7 +117,18 @@
 			there is no second way into the record.
 		-->
 		<aside class="hurtigpanel" aria-label="Hurtighandlinger">
-			{#if data.canSkrive}
+			{#if data.sidePanel}
+				<!-- The panel is an app. The record's own note editor is only the
+				     default; a practice can put something else here, and a user can
+				     choose for themselves. -->
+				<section class="kort apppanel">
+					<div class="rad-mellom">
+						<h2>{data.sidePanel.name}</h2>
+						<a class="svak" href="/innstillinger">Bytt</a>
+					</div>
+					<iframe class="appramme appramme-side" src={data.sidePanel.url} title={data.sidePanel.name}></iframe>
+				</section>
+			{:else if data.canSkrive}
 				<section class="kort">
 					<h2>Nytt notat</h2>
 					<form method="POST" action="/pasienter/{data.patientId}/notater?/newValue">
@@ -123,7 +150,10 @@
 			{/if}
 
 			<section class="kort">
-				<h2>Snarveier</h2>
+				<div class="rad-mellom">
+					<h2>Snarveier</h2>
+					<a class="svak" href="/innstillinger">Panel</a>
+				</div>
 				<ul class="snarveier">
 					<li><a href="/pasienter/{data.patientId}/notater">Alle journalnotater</a></li>
 					<li><a href="/pasienter/{data.patientId}/legemidler">Legemidler og resepter</a></li>

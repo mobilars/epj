@@ -100,6 +100,15 @@
 		</details>
 		<div class="rad">
 			{#if a.launchUrl}
+				<form method="POST" action="?/plassering" class="rad">
+					<input type="hidden" name="clientId" value={a.clientId} />
+					<select name="plassering" aria-label="Plassering i journalen">
+						<option value="ingen" selected={a.placement === 'ingen'}>Startes ved behov</option>
+						<option value="hoved" selected={a.placement === 'hoved'}>Stor flate i journalen</option>
+						<option value="side" selected={a.placement === 'side'}>Sidepanel i journalen</option>
+					</select>
+					<button type="submit" class="liten">Lagre plassering</button>
+				</form>
 				<!-- An app used in most consultations belongs in the main menu, where it
 				     starts in one press with the open patient already in context. -->
 				<form method="POST" action="?/hovedmeny">

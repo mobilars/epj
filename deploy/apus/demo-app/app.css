@@ -1,0 +1,107 @@
+/*
+ * Shared look for the apps.
+ *
+ * They sit in a panel inside the record, so they have to look like they belong
+ * there rather than like a web page someone dropped in: the same restraint,
+ * the same spacing, nothing that competes with the record's own chrome. Sober
+ * on purpose - this is a working surface during a consultation, not a
+ * dashboard to be admired.
+ */
+
+:root {
+	color-scheme: light dark;
+	--bg: #ffffff;
+	--flate-2: #eef1f5;
+	--kant: #d3d9e0;
+	--tekst: #14181d;
+	--svak: #5a6672;
+	--primar: #12507e;
+	--primar-svak: #e3edf5;
+	--fare: #a4262c;
+	--fare-svak: #fdecec;
+	--advarsel: #8a5a00;
+	--advarsel-svak: #fdf3e0;
+	--ok: #14682f;
+	--ok-svak: #e6f4ea;
+	--mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #171b20;
+		--flate-2: #1f242b;
+		--kant: #333d49;
+		--tekst: #e7ebef;
+		--svak: #9aa6b2;
+		--primar: #7fb3dd;
+		--primar-svak: #1c2a36;
+		--fare-svak: #33191b;
+		--advarsel-svak: #2e2513;
+		--ok-svak: #16281c;
+	}
+}
+
+* { box-sizing: border-box; }
+
+body {
+	margin: 0;
+	padding: 0.9rem 1rem 1.2rem;
+	background: var(--bg);
+	color: var(--tekst);
+	font: 14px/1.55 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+h1 { font-size: 1.05rem; margin: 0 0 0.15rem; letter-spacing: -0.01em; }
+h2 { font-size: 0.92rem; margin: 1.1rem 0 0.4rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--svak); }
+p { margin: 0 0 0.6rem; }
+
+.svak { color: var(--svak); }
+.mono { font-family: var(--mono); font-size: 0.86em; }
+.liten { font-size: 0.86rem; }
+
+.kort { border: 1px solid var(--kant); border-radius: 7px; padding: 0.7rem 0.8rem; margin-bottom: 0.7rem; }
+
+label { display: block; font-weight: 600; font-size: 0.86rem; margin: 0.55rem 0 0.2rem; }
+input, select, textarea {
+	width: 100%; padding: 0.42rem 0.55rem; font: inherit;
+	color: inherit; background: var(--bg);
+	border: 1px solid var(--kant); border-radius: 5px;
+}
+textarea { resize: vertical; min-height: 3.4rem; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible {
+	outline: 2px solid var(--primar); outline-offset: 1px;
+}
+
+button {
+	padding: 0.45rem 0.85rem; font: inherit; font-weight: 500; cursor: pointer;
+	border-radius: 5px; border: 1px solid var(--primar);
+	background: var(--primar); color: #fff;
+}
+button.sekundar { background: transparent; color: inherit; border-color: var(--kant); }
+button:disabled { opacity: 0.55; cursor: progress; }
+
+.rad { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: flex-end; }
+.rad > * { flex: 1 1 8rem; }
+.rad > .fast { flex: 0 0 auto; }
+.mellom { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
+
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+th { text-align: left; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--svak); padding: 0.3rem 0.4rem; }
+td { padding: 0.35rem 0.4rem; border-top: 1px solid var(--kant); vertical-align: top; }
+tr:first-child td { border-top: none; }
+
+.merke {
+	display: inline-block; padding: 0.05rem 0.4rem; border-radius: 999px;
+	font-size: 0.76rem; font-weight: 600; background: var(--flate-2); color: var(--svak);
+}
+.merke-fare { background: var(--fare-svak); color: var(--fare); }
+.merke-advarsel { background: var(--advarsel-svak); color: var(--advarsel); }
+.merke-ok { background: var(--ok-svak); color: var(--ok); }
+
+.varsel { border-left: 3px solid var(--kant); padding: 0.5rem 0.7rem; border-radius: 4px; margin-bottom: 0.6rem; }
+.varsel-feil { border-color: var(--fare); background: var(--fare-svak); }
+.varsel-ok { border-color: var(--ok); background: var(--ok-svak); }
+.varsel-advarsel { border-color: var(--advarsel); background: var(--advarsel-svak); }
+
+pre { background: var(--flate-2); padding: 0.6rem; border-radius: 5px; overflow-x: auto; font-size: 0.78rem; margin: 0; }
+details summary { cursor: pointer; font-size: 0.86rem; color: var(--svak); }

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="no">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Legemidler</title>
+		<link rel="stylesheet" href="/app.css" />
+	</head>
+	<body>
+		<main id="app"><p class="svak">Kobler til journalen …</p></main>
+
+		<script type="module">
+			/**
+			 * The medication list, as a SMART app.
+			 *
+			 * Reads what the record holds and can add an entry. What it deliberately
+			 * does not do is prescribe: a prescription goes to Reseptformidleren
+			 * through SFM, and that is the record's job, not an app's. An app that
+			 * pretended otherwise would write something into the list that no
+			 * pharmacy will ever see - worse than not offering it.
+			 *
+			 * So: the list, discontinuation, and a local entry for something the
+			 * patient takes that was prescribed elsewhere.
+			 */
+			import { connect, escapeHtml as esc, SmartError } from '/smart.js';
+
+			const SCOPE =
+				'openid fhirUser launch launch/patient online_access ' +
+				'patient/Patient.rs patient/MedicationRequest.rs patient/MedicationRequest.cu patient/AllergyIntolerance.rs';
+
+			const app = document.getElementById('app');
+			const el = (html) => (app.innerHTML = html);
+			const showError = (title, detail) =>
+				el(`<div class="varsel varsel-feil"><strong>${esc(title)}</strong><pre>${esc(detail ?? '')}</pre></div>`);
+
+			let smart;
+			try {
+				smart = await connect({ scope: SCOPE });
+			} catch (err) {
+				showError(err.message, err instanceof SmartError ? err.detail : String(err));
+				throw err;
+			}
+
+			if (smart === null) {
+				el(`<h1>Legemidler</h1>
+					<p class="svak">Startes fra journalen.</p>
+					<div class="kort liten">
+						<div><strong>Launch</strong> <span class="mono">${location.origin}/launch?client_id=…</span></div>
+						<div><strong>Redirect</strong> <span class="mono">${location.origin}/callback</span></div>
+						<div><strong>Scopes</strong> <span class="mono">${esc(SCOPE)}</span></div>
+					</div>`);
+			} else {
+				await render();
+			}
+
+			const naming = (r) =>
+				r.medicationCodeableConcept?.text ??
+				r.medication?.concept?.text ??
+				r.medication?.concept?.coding?.[0]?.display ??
+				r.medicationReference?.display ??
+				'Uten navn';
+
+			const dosage = (r) => (r.dosageInstruction ?? []).map((d) => d.text).filter(Boolean).join('; ');
+
+			async function render(message = '') {
+				const [medications, allergies] = await Promise.all([
+					smart.read(`MedicationRequest?patient=${smart.patientId}&_count=50`),
+					smart.read(`AllergyIntolerance?patient=${smart.patientId}&_count=25`)
+				]);
+				if (!medications.ok) return showError('Kunne ikke lese legemidler', JSON.stringify(medications.body, null, 2));
+
+				const all = smart.entries(medications);
+				const active = all.filter((r) => r.status === 'active');
+				const ended = all.filter((r) => r.status !== 'active');
+				const allergyNames = smart
+					.entries(allergies)
+					.map((a) => (a.code?.text ?? a.code?.coding?.[0]?.display ?? '').toLowerCase())
+					.filter(Boolean);
+
+				el(`
+					<div class="mellom">
+						<h1>Legemidler</h1>
+						<span class="svak liten">${active.length} i bruk</span>
+					</div>
+					${message}
+
+					${
+						allergyNames.length
+							? `<div class="varsel varsel-advarsel liten">
+									Registrerte allergier: ${esc(allergyNames.join(', '))}
+								</div>`
+							: ''
+					}
+
+					${
+						active.length
+							? `<table><tbody>${active
+									.map(
+										(r, i) => `<tr>
+											<td><strong>${esc(naming(r))}</strong>
+												${dosage(r) ? `<div class="svak liten">${esc(dosage(r))}</div>` : ''}</td>
+											<td style="width:6rem">
+												<button class="sekundar liten seponer" data-i="${i}" type="button">Seponer</button>
+											</td>
+										</tr>`
+									)
+									.join('')}</tbody></table>`
+							: '<p class="svak liten">Ingen legemidler i bruk.</p>'
+					}
+
+					<h2>Legg til</h2>
+					<form id="skjema">
+						<div class="rad">
+							<div><label for="navn">Legemiddel</label><input id="navn" required placeholder="f.eks. Paracet 500 mg" /></div>
+						</div>
+						<div class="rad">
+							<div><label for="dose">Dosering</label><input id="dose" placeholder="1-2 tabletter inntil 4 ganger daglig" /></div>
+							<div class="fast" style="align-self:flex-end"><button type="submit" id="lagre">Legg til</button></div>
+						</div>
+						<p class="svak liten" style="margin-top:0.5rem">
+							Legges i journalens liste. Dette er ikke en resept – forskrivning går gjennom SFM
+							i journalen.
+						</p>
+					</form>
+
+					${
+						ended.length
+							? `<h2>Avsluttet</h2>
+								<table><tbody>${ended
+									.map(
+										(r) => `<tr>
+											<td class="svak">${esc(naming(r))}</td>
+											<td style="width:6rem"><span class="merke">${esc(r.status)}</span></td>
+										</tr>`
+									)
+									.join('')}</tbody></table>`
+							: ''
+					}
+				`);
+
+				document.getElementById('skjema').addEventListener('submit', (e) => add(e));
+				document.querySelectorAll('.seponer').forEach((button) =>
+					button.addEventListener('click', () => discontinue(active[Number(button.dataset.i)]))
+				);
+			}
+
+			async function add(event) {
+				event.preventDefault();
+				const button = document.getElementById('lagre');
+				const name = document.getElementById('navn').value.trim();
+				if (!name) return;
+				button.disabled = true;
+				const result = await smart.create({
+					resourceType: 'MedicationRequest',
+					status: 'active',
+					intent: 'order',
+					medication: { concept: { text: name } },
+					subject: { reference: `Patient/${smart.patientId}` },
+					authoredOn: new Date().toISOString(),
+					dosageInstruction: [{ text: document.getElementById('dose').value.trim() || 'Etter avtale' }]
+				});
+				button.disabled = false;
+				if (!result.ok) return showError('Journalen avviste oppføringen', JSON.stringify(result.body, null, 2));
+				await render('<div class="varsel varsel-ok">Lagt til i legemiddellisten.</div>');
+			}
+
+			async function discontinue(resource) {
+				// A discontinuation changes the status of the entry that exists rather
+				// than adding a new one: the history has to stay readable afterwards,
+				// and HAPI keeps the previous version.
+				const current = await smart.read(`MedicationRequest/${resource.id}`);
+				if (!current.ok) return showError('Fant ikke legemidlet', JSON.stringify(current.body, null, 2));
+
+				const result = await smart.update({ ...current.body, status: 'stopped' });
+				if (!result.ok) return showError('Journalen avviste seponeringen', JSON.stringify(result.body, null, 2));
+				await render('<div class="varsel varsel-ok">Legemidlet er seponert.</div>');
+			}
+		</script>
+	</body>
+</html>

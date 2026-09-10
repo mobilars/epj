@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="no">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Journalnotat</title>
+		<link rel="stylesheet" href="/app.css" />
+	</head>
+	<body>
+		<main id="app"><p class="svak">Kobler til journalen …</p></main>
+
+		<script type="module">
+			/**
+			 * The note editor, as a SMART app.
+			 *
+			 * This is the record's own note-writing surface rebuilt as a third-party
+			 * app, and it is the point of the exercise: if the panel a doctor uses in
+			 * every consultation can be an app, then so can anything, and a practice
+			 * can replace it without waiting for us. It also means the record's own
+			 * surface goes through the same door third parties come in by - the
+			 * surest way to find out whether that door actually works.
+			 *
+			 * The note is a FHIR Composition with the four sections the record uses,
+			 * tied to an Encounter. Nothing is written that the record's own editor
+			 * would not write.
+			 */
+			import { connect, escapeHtml as esc, SmartError } from '/smart.js';
+
+			const SCOPE =
+				'openid fhirUser launch launch/patient online_access ' +
+				'patient/Patient.rs patient/Composition.rs patient/Composition.c patient/Encounter.c patient/Condition.c';
+
+			const app = document.getElementById('app');
+			const el = (html) => (app.innerHTML = html);
+
+			function showError(title, detail) {
+				el(`<div class="varsel varsel-feil"><strong>${esc(title)}</strong>
+					<pre>${esc(detail ?? '')}</pre></div>`);
+			}
+
+			let smart;
+			try {
+				smart = await connect({ scope: SCOPE });
+			} catch (err) {
+				showError(err.message, err instanceof SmartError ? err.detail : String(err));
+				throw err;
+			}
+
+			if (smart === null) {
+				// Either a redirect is under way, or the app was opened directly.
+				if (location.pathname === '/notat' || location.pathname === '/') {
+					el(`<h1>Journalnotat</h1>
+						<p class="svak">Startes fra journalen. Den kan ikke åpne seg selv.</p>
+						<div class="kort liten">
+							<div><strong>Launch</strong> <span class="mono">${location.origin}/launch?client_id=…</span></div>
+							<div><strong>Redirect</strong> <span class="mono">${location.origin}/callback</span></div>
+							<div><strong>Scopes</strong> <span class="mono">${esc(SCOPE)}</span></div>
+						</div>`);
+				}
+			} else {
+				await render();
+			}
+
+			async function render(message = '') {
+				const patient = smart.patientId ? await smart.read(`Patient/${smart.patientId}`) : null;
+				const name = patient?.body?.name?.[0];
+				const shown = [name?.given?.join(' '), name?.family].filter(Boolean).join(' ');
+				const earlier = smart.patientId
+					? smart.entries(await smart.read(`Composition?patient=${smart.patientId}&_count=3&_sort=-date`))
+					: [];
+
+				el(`
+					<div class="mellom">
+						<h1>Nytt notat</h1>
+						<span class="svak liten">${esc(shown)}</span>
+					</div>
+					${message}
+					<form id="skjema">
+						<label for="subjektivt">Subjektivt</label>
+						<textarea id="subjektivt" rows="3"></textarea>
+						<label for="objektivt">Objektivt</label>
+						<textarea id="objektivt" rows="3"></textarea>
+						<label for="vurdering">Vurdering og plan</label>
+						<textarea id="vurdering" rows="3"></textarea>
+						<div class="rad" style="margin-top:0.6rem">
+							<div><label for="diagnose">ICPC-2</label><input id="diagnose" placeholder="valgfritt, f.eks. T90" /></div>
+							<div><label for="diagnosetekst">Diagnosetekst</label><input id="diagnosetekst" /></div>
+						</div>
+						<p style="margin-top:0.7rem"><button type="submit" id="lagre">Lagre notat</button></p>
+					</form>
+
+					<h2>Siste notater</h2>
+					${
+						earlier.length
+							? `<table><tbody>${earlier
+									.map(
+										(c) =>
+											`<tr><td>${esc(c.title ?? 'Notat')}</td><td class="svak">${esc((c.date ?? '').slice(0, 16).replace('T', ' '))}</td></tr>`
+									)
+									.join('')}</tbody></table>`
+							: '<p class="svak liten">Ingen notater ennå.</p>'
+					}
+				`);
+
+				document.getElementById('skjema').addEventListener('submit', save);
+			}
+
+			async function save(event) {
+				event.preventDefault();
+				const button = document.getElementById('lagre');
+				const value = (id) => document.getElementById(id).value.trim();
+				const subjektivt = value('subjektivt');
+				const objektivt = value('objektivt');
+				const vurdering = value('vurdering');
+				if (!subjektivt && !objektivt && !vurdering) {
+					return render('<div class="varsel varsel-advarsel">Notatet må ha innhold.</div>');
+				}
+
+				button.disabled = true;
+				button.textContent = 'Lagrer …';
+				const now = new Date().toISOString();
+				const subject = { reference: `Patient/${smart.patientId}` };
+
+				// The contact ties the note, the diagnosis and any settlement together,
+				// exactly as the record's own editor does.
+				const encounter = await smart.create({
+					resourceType: 'Encounter',
+					status: 'completed',
+					class: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode', code: 'AMB' }] }],
+					subject,
+					actualPeriod: { start: now, end: now }
+				});
+				if (!encounter.ok) {
+					button.disabled = false;
+					button.textContent = 'Lagre notat';
+					return showError('Journalen avviste kontakten', JSON.stringify(encounter.body, null, 2));
+				}
+
+				const code = value('diagnose');
+				if (code) {
+					await smart.create({
+						resourceType: 'Condition',
+						clinicalStatus: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-clinical', code: 'active' }] },
+						verificationStatus: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-ver-status', code: 'provisional' }] },
+						category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-category', code: 'encounter-diagnosis' }] }],
+						code: { coding: [{ system: 'http://ehelse.no/fhir/CodeSystem/icpc-2', code, display: value('diagnosetekst') }], text: value('diagnosetekst') || code },
+						subject,
+						encounter: { reference: `Encounter/${encounter.body.id}` },
+						recordedDate: now
+					});
+				}
+
+				const div = (text) => ({
+					status: 'generated',
+					div: `<div xmlns="http://www.w3.org/1999/xhtml">${esc(text)}</div>`
+				});
+				const composition = await smart.create({
+					resourceType: 'Composition',
+					status: 'final',
+					type: { coding: [{ system: 'http://loinc.org', code: '11488-4', display: 'Konsultasjonsnotat' }] },
+					subject,
+					encounter: { reference: `Encounter/${encounter.body.id}` },
+					date: now,
+					title: 'Konsultasjon',
+					section: [
+						...(subjektivt ? [{ title: 'Subjektivt', text: div(subjektivt) }] : []),
+						...(objektivt ? [{ title: 'Objektivt', text: div(objektivt) }] : []),
+						...(vurdering ? [{ title: 'Vurdering og plan', text: div(vurdering) }] : [])
+					]
+				});
+
+				button.disabled = false;
+				button.textContent = 'Lagre notat';
+				if (!composition.ok) {
+					return showError('Journalen avviste notatet', JSON.stringify(composition.body, null, 2));
+				}
+				await render('<div class="varsel varsel-ok">Notatet er lagret i journalen.</div>');
+			}
+		</script>
+	</body>
+</html>

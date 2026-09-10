@@ -5,10 +5,13 @@ import { FhirError } from '$srv/fhir/outcome';
 import { toPatientDisplay } from '$srv/fhir/display';
 import { activeEmergencyAccess, hasCareRelationship } from '$srv/authz/access';
 import { query } from '$srv/db';
-import { requireTenant } from '$srv/tenant/context';
+import { fhirBaseFor, requireTenant } from '$srv/tenant/context';
 import { config } from '$srv/config';
 import { canEmergencyAccess } from '$srv/authz/roles';
 import { fhirClient } from '$srv/fhir/client';
+import { clientAtPlacement, listClients } from '$srv/auth/clients';
+import { createLaunch } from '$srv/auth/oauth';
+import { SETTING, getSetting } from '$srv/auth/settings';
 
 /**
  * The frame around a single patient record.
@@ -57,9 +60,41 @@ export const load: LayoutServerLoad = async (event) => {
 		if (raw) minimaltName = toPatientDisplay(raw).name;
 	}
 
+	/**
+	 * The apps that hold a place in the record.
+	 *
+	 * `side` is the narrow panel, `hoved` the wide surface beside the record's
+	 * own content. A user may keep a different app in the side panel than the
+	 * practice's default, so their own choice wins when they have made one; the
+	 * record's built-in note editor is what is there when nobody has chosen.
+	 *
+	 * The launch context is minted here rather than in the frame, so the app
+	 * receives an opaque `launch` exactly as it would if started any other way.
+	 */
+	const [sideDefault, wideApp] = await Promise.all([
+		clientAtPlacement('side'),
+		clientAtPlacement('hoved')
+	]);
+	const chosen = ctx.userId ? await getSetting(ctx.userId, SETTING.SIDE_APP) : null;
+	const sideApp =
+		chosen === 'journal' ? null : chosen ? (await listClients()).find((c) => c.client_id === chosen && c.status === 'aktiv') ?? sideDefault : sideDefault;
+
+	const launchFor = async (client: { client_id: string; launch_url: string | null } | null | undefined) => {
+		if (!client?.launch_url || !ctx.userId || !patient) return null;
+		const launchId = await createLaunch({ clientId: client.client_id, userId: ctx.userId, patientId, encounterId: null });
+		const url = new URL(client.launch_url);
+		url.searchParams.set('iss', fhirBaseFor(requireTenant()));
+		url.searchParams.set('launch', launchId);
+		return url.toString();
+	};
+
+	const [sideUrl, wideUrl] = await Promise.all([launchFor(sideApp), launchFor(wideApp)]);
+
 	return {
 		patientId,
 		patient,
+		sidePanel: sideApp && sideUrl ? { name: sideApp.name, clientId: sideApp.client_id, url: sideUrl } : null,
+		widePanel: wideApp && wideUrl ? { name: wideApp.name, clientId: wideApp.client_id, url: wideUrl } : null,
 		nektet,
 		minimaltName,
 		emergencyAccess,

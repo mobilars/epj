@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="no">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Kritisk informasjon</title>
+		<link rel="stylesheet" href="/app.css" />
+	</head>
+	<body>
+		<main id="app"><p class="svak">Kobler til journalen …</p></main>
+
+		<script type="module">
+			/**
+			 * Kritisk informasjon.
+			 *
+			 * The things a clinician must know before doing anything else: severe
+			 * allergies, conditions that change what is safe to give, and implants or
+			 * devices that matter in an emergency. Kjernejournal defines the term in
+			 * Norway; this reads the same categories out of the record itself.
+			 *
+			 * Deliberately loud when there is something, and quiet when there is not.
+			 * A panel that always shows a box stops being read.
+			 *
+			 * The same content is served as a CDS Hooks service (see /cds-services),
+			 * so a record that speaks CDS Hooks can show these as cards on the
+			 * patient's dashboard without embedding the app at all.
+			 */
+			import { connect, escapeHtml as esc, SmartError } from '/smart.js';
+
+			const SCOPE =
+				'openid fhirUser launch launch/patient online_access ' +
+				'patient/Patient.rs patient/AllergyIntolerance.rs patient/Condition.rs';
+
+			const app = document.getElementById('app');
+			const el = (html) => (app.innerHTML = html);
+
+			let smart;
+			try {
+				smart = await connect({ scope: SCOPE });
+			} catch (err) {
+				el(`<div class="varsel varsel-feil"><strong>${esc(err.message)}</strong>
+					<pre>${esc(err instanceof SmartError ? err.detail : String(err))}</pre></div>`);
+				throw err;
+			}
+
+			if (smart === null) {
+				el(`<h1>Kritisk informasjon</h1>
+					<p class="svak">Startes fra journalen.</p>
+					<div class="kort liten">
+						<div><strong>Launch</strong> <span class="mono">${location.origin}/launch?client_id=…</span></div>
+						<div><strong>Redirect</strong> <span class="mono">${location.origin}/callback</span></div>
+						<div><strong>Scopes</strong> <span class="mono">${esc(SCOPE)}</span></div>
+					</div>`);
+			} else {
+				await render();
+			}
+
+			/** Severity as the eye should read it, not as FHIR spells it. */
+			function severity(allergy) {
+				const criticality = allergy.criticality;
+				if (criticality === 'high') return { merke: 'merke-fare', text: 'Høy risiko' };
+				if (criticality === 'low') return { merke: 'merke-advarsel', text: 'Lav risiko' };
+				return { merke: 'merke-advarsel', text: 'Ukjent risiko' };
+			}
+
+			async function render() {
+				const [allergies, conditions] = await Promise.all([
+					smart.read(`AllergyIntolerance?patient=${smart.patientId}&_count=25`),
+					smart.read(`Condition?patient=${smart.patientId}&_count=50`)
+				]);
+
+				const active = smart
+					.entries(allergies)
+					.filter((a) => (a.clinicalStatus?.coding?.[0]?.code ?? 'active') === 'active');
+
+				// A condition counts as critical when it is flagged as a warning or a
+				// problem the record has marked severe. Everything else belongs on the
+				// ordinary problem list, not here.
+				const severe = smart.entries(conditions).filter((c) => {
+					const sev = c.severity?.coding?.[0]?.code;
+					const cat = (c.category ?? []).flatMap((k) => k.coding ?? []).map((k) => k.code);
+					return sev === 'severe' || cat.includes('problem-list-item') === false ? sev === 'severe' : false;
+				});
+
+				const nothing = active.length === 0 && severe.length === 0;
+
+				el(`
+					<div class="mellom">
+						<h1>Kritisk informasjon</h1>
+						${nothing ? '<span class="merke merke-ok">Ingenting registrert</span>' : `<span class="merke merke-fare">${active.length + severe.length}</span>`}
+					</div>
+
+					${
+						nothing
+							? `<p class="svak liten">
+									Ingen alvorlige allergier eller tilstander er registrert på denne pasienten.
+									Fravær av registrering er ikke det samme som fravær av risiko.
+								</p>`
+							: ''
+					}
+
+					${
+						active.length
+							? `<h2>Allergier og intoleranser</h2>
+								<table><tbody>${active
+									.map((a) => {
+										const s = severity(a);
+										const reaction = (a.reaction ?? [])
+											.flatMap((r) => (r.manifestation ?? []).map((m) => m.concept?.text ?? m.text ?? ''))
+											.filter(Boolean)
+											.join(', ');
+										return `<tr>
+											<td><strong>${esc(a.code?.text ?? a.code?.coding?.[0]?.display ?? 'Ukjent')}</strong>
+												${reaction ? `<div class="svak liten">${esc(reaction)}</div>` : ''}</td>
+											<td style="width:7rem"><span class="merke ${s.merke}">${s.text}</span></td>
+										</tr>`;
+									})
+									.join('')}</tbody></table>`
+							: ''
+					}
+
+					${
+						severe.length
+							? `<h2>Alvorlige tilstander</h2>
+								<table><tbody>${severe
+									.map(
+										(c) => `<tr>
+											<td><strong>${esc(c.code?.text ?? c.code?.coding?.[0]?.display ?? '')}</strong></td>
+											<td style="width:7rem"><span class="merke merke-fare">Alvorlig</span></td>
+										</tr>`
+									)
+									.join('')}</tbody></table>`
+							: ''
+					}
+
+					<p class="svak liten" style="margin-top:0.8rem">
+						Hentet fra journalen. Kjernejournal er ikke spurt.
+					</p>
+				`);
+			}
+		</script>
+	</body>
+</html>

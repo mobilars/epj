@@ -40,6 +40,11 @@ configMapGenerator:
   - name: demoapp-html
     files:
       - index.html=demo-app/index.html
+      - notat.html=demo-app/notat.html
+      - kritisk.html=demo-app/kritisk.html
+      - legemidler.html=demo-app/legemidler.html
+      - smart.js=demo-app/smart.js
+      - app.css=demo-app/app.css
 
 patches:
   - path: fjern-grunnoppsett.yaml
