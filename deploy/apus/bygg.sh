@@ -146,6 +146,20 @@ echo "✓ publisert $REGISTER_UT:$SHA"
 
 if [ "$RULL_UT" = "ja" ]; then
   echo "→ ruller ut"
-  kubectl -n "$NS_APP" set image deployment/epj epj="$REGISTER_UT:$SHA"
+  # Merkelappen skrives inn i overlaget, ikke bare på deploymenten med
+  # `kubectl set image`. To grunner:
+  #
+  #   * et senere `kubectl apply -k deploy/apus` ville ellers satt taggen
+  #     tilbake til `latest`, og stilltiende rullet tilbake til et annet bilde
+  #   * `latest` sammen med `imagePullPolicy: IfNotPresent` betyr at noden
+  #     beholder det bildet den allerede har. Ny kode, gammelt bilde, ingen feil.
+  #
+  # Med commit-summen i kustomization.yaml er det som kjører til enhver tid
+  # mulig å lese ut av git.
+  sed -i.bak "s#^\( *newTag:\).*#\1 $SHA#" deploy/apus/kustomization.yaml
+  rm -f deploy/apus/kustomization.yaml.bak
+  kubectl apply -k deploy/apus
   kubectl -n "$NS_APP" rollout status deployment/epj --timeout=10m
+  echo
+  echo "deploy/apus/kustomization.yaml peker nå på $SHA. Husk å sjekke den inn."
 fi
