@@ -4,13 +4,17 @@ import { harTestdatabase, opprettTestdatabase, tomTabeller, type Testdatabase, s
 import { appKontekst, kontekst } from './fixtures/kontekst';
 import {
 	aktivNodrett,
+	erPasientnaer,
 	harBehandlingsrelasjon,
+	kanAvgjorePasient,
 	pasientIdFraRessurs,
 	sperredePasienter,
 	tillattePasienter,
 	vurder
 } from '../src/lib/server/authz/tilgang';
+import { STOTTEDE_RESSURSTYPER } from '../src/lib/server/fhir/searchparams';
 import { nyId } from '../src/lib/server/util/ids';
+import { parseScopes } from '../src/lib/server/authz/scopes';
 
 const beskriv = harTestdatabase() ? describe : describe.skip;
 
@@ -248,6 +252,49 @@ beskriv('tilgangsbeslutning', () => {
 				[nyId(), 'bruker-1', ANNEN_PASIENT]
 			);
 			expect((await sperredePasienter(kontekst())).has(ANNEN_PASIENT)).toBe(false);
+		});
+	});
+
+	describe('ressurser der pasienten ikke kan avgjøres', () => {
+		/**
+		 * Tjenstlig behov og sperring forutsetter begge at vi vet hvilken pasient
+		 * opplysningen gjelder. Før dette slapp et oppslag der pasienten ikke lot
+		 * seg utlede rett gjennom - `Binary` var en slik type, og den bærer
+		 * vedlegg: skannede dokumenter, prøvesvar, bilder.
+		 */
+		it('nekter oppslag på en pasientnær type uten pasientreferanse', async () => {
+			await girRelasjon('bruker-1', PASIENT);
+			const b = await vurder({
+				ctx: kontekst({ scopes: parseScopes('user/Binary.rs user/Observation.rs') }),
+				resourceType: 'Binary',
+				operasjon: 'r',
+				ressurs: { resourceType: 'Binary', id: 'bin-1', contentType: 'application/pdf' }
+			});
+			expect(b.tillatt).toBe(false);
+			expect(b.grunn).toMatch(/pasientreferanse/);
+		});
+
+		it('nekter oppslag når referansen mangler på en type som ellers har den', async () => {
+			await girRelasjon('bruker-1', PASIENT);
+			const utenSubject = { resourceType: 'Observation', id: 'obs-2', status: 'final', code: { text: 'Uten pasient' } };
+			const b = await vurder({ ctx: kontekst(), resourceType: 'Observation', operasjon: 'r', ressurs: utenSubject });
+			expect(b.tillatt).toBe(false);
+			expect(b.grunn).toMatch(/pasientreferanse/);
+		});
+
+		it('lar søk slippe gjennom - der avgrenses det per treff i stedet', async () => {
+			const b = await vurder({ ctx: kontekst(), resourceType: 'Observation', operasjon: 's' });
+			expect(b.tillatt).toBe(true);
+		});
+
+		/**
+		 * Strukturell kontroll, ikke en liste å vedlikeholde: legger noen til en
+		 * ressurstype uten `patient`/`subject`-parameter, skal den enten unntas
+		 * eksplisitt som ikke-pasientnær, eller feile her.
+		 */
+		it('alle støttede pasientnære typer har en pasientreferanse å avgrense på', () => {
+			const uavklarte = STOTTEDE_RESSURSTYPER.filter((t) => erPasientnaer(t) && !kanAvgjorePasient(t));
+			expect(uavklarte).toEqual([]);
 		});
 	});
 });

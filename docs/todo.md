@@ -211,6 +211,55 @@ verdt navnet:
 - Testet gjenoppretting. En sikkerhetskopi ingen har gjenopprettet fra er en
   antakelse.
 
+### 4.7b HAPI-partisjonering lar seg ikke slå på **[K]**
+
+Journalen kjører nå med `EPJ_HAPI_MULTITENANT=false` i
+[deploy/apus](../deploy/apus), altså mot HAPI sin rot i stedet for
+`/fhir/<virksomhet>/`.
+
+Grunnen er at partisjoneringen ikke lar seg slå på i `hapiproject/hapi:v8.0.0`.
+Konfigurasjonen monteres nå som fil (se 04-hapi.yaml), og det virker for
+dialekten - men `tenant_identification_strategy: URL_BASED` slår ikke inn, og
+`/fhir/<virksomhet>/metadata` svarer fortsatt 404 «Unknown resource type».
+Loggen viser i tillegg at Hibernate ender på `org.hibernate.dialect.PostgreSQLDialect`
+selv om HAPI sin egen dialektklasse lastes.
+
+Det er forsvarlig i denne installasjonen fordi den har én virksomhet. Det er
+**ikke** forsvarlig med flere: uten partisjonering ligger alle virksomheters
+kliniske data i samme rom i HAPI, og skillet hviler utelukkende på at
+`tenant_id` filtreres riktig i vår egen kode. `tests/multitenancy.test.ts`
+kjører mot en partisjonsbevisst testdobbel, ikke mot HAPI selv, og fanger derfor
+ikke dette.
+
+Må løses før systemet tar imot mer enn én virksomhet. Se også 6.5 og 6.6.
+
+### 4.8 Vedlegg (Binary) med pasienttilknytning **[V]**
+
+`Binary` ble tatt ut av de støttede ressurstypene i sikkerhetsgjennomgangen:
+typen har ingen `subject`, så tilgangskontrollen kunne ikke avgjøre hvilken
+pasient et vedlegg hørte til, og verken tjenstlig behov eller sperring lot seg
+håndheve. Se [sikkerhet.md](sikkerhet.md).
+
+Journalen har dermed ingen vei til skannede dokumenter, PDF-er og bilder. Skal
+den få det, må pasienten utledes fra den `DocumentReference` som peker på
+ressursen, og tilgangen vurderes mot den - ikke mot vedlegget selv. Det samme
+gjelder `Group`, som ble tatt ut av samme grunn.
+
+### 4.9 Gjenbruk av engangskoder **[N]**
+
+En TOTP-kode kan brukes om igjen innenfor sitt eget vindu, om lag 90 sekunder
+med den klokkeslakken vi godtar. Å hindre det krever at brukte koder lagres per
+bruker til vinduet er ute. Verdt å gjøre hvis engangskoder blir hovedveien inn;
+med HelseID som hovedvei er det mindre viktig.
+
+### 4.10 Tellingen i søkeresultater røper sperrede pasienter **[N]**
+
+`sokRessurser()` filtrerer bort sperrede pasienter etter at HAPI har svart, og
+trekker fra det som ble fjernet på siden. `total` kommer likevel fra HAPI, og
+kan dermed antyde at det finnes treff brukeren ikke får se. Å rette det krever
+enten at sperringen håndheves i selve spørringen, eller at `total` sløyfes når
+noe er filtrert bort.
+
 ### 4.7 Rader per virksomhet i databasen (RLS) **[N]**
 
 Isolasjonen hviler i dag på at all kode filtrerer på `tenant_id`, og på at

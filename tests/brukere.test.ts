@@ -143,6 +143,21 @@ beskriv('brukere, pålogging og sesjoner', () => {
 			expect((await loggInn('lege', 'Testpassord1!', '000000')).utfall).toBe('feil-passord');
 		});
 
+		/**
+		 * Telles bare feil passord, står den som allerede har passordet fritt til
+		 * å gjette seksifret engangskode så lenge den vil, og totrinnsverifiseringen
+		 * er bare et forsinkende ledd.
+		 */
+		it('låser kontoen etter for mange feil engangskoder', async () => {
+			const bruker = await lagInnlogget();
+			const hemmelighet = nyTotpHemmelighet();
+			await aktiverMfa(bruker.id, hemmelighet, totpKode(hemmelighet));
+			for (let i = 0; i < config.security.maxFailedLogins; i++) {
+				expect((await loggInn('lege', 'Testpassord1!', '000000')).utfall).toBe('feil-passord');
+			}
+			expect((await loggInn('lege', 'Testpassord1!', totpKode(hemmelighet))).utfall).toBe('laast');
+		});
+
 		it('svarer likt for ukjent bruker og feil passord', async () => {
 			await lagInnlogget();
 			expect((await loggInn('finnesikke', 'hva som helst')).utfall).toBe('ukjent-bruker');

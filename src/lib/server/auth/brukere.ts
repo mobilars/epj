@@ -177,7 +177,11 @@ export async function loggInn(brukernavn: string, passord: string, totp?: string
 		return { utfall: 'laast', til: rad.laast_til };
 	}
 
-	if (!verifiserPassord(passord, rad.passord_hash)) {
+	// Et mislykket forsøk teller likt enten det var passordet eller engangskoden
+	// som var feil. Teller vi bare passordet, får den som allerede har passordet
+	// fritt spillerom til å gjette seksifret engangskode, og totrinnsverifiseringen
+	// er da bare et forsinkende ledd.
+	const registrerFeil = async (): Promise<Innloggingsresultat> => {
 		const forsok = rad.feilede_forsok + 1;
 		const laas = forsok >= config.security.maxFailedLogins;
 		await exec(
@@ -186,11 +190,17 @@ export async function loggInn(brukernavn: string, passord: string, totp?: string
 			[rad.id, laas ? 0 : forsok, laas, String(config.security.lockoutSeconds)]
 		);
 		return { utfall: 'feil-passord' };
+	};
+
+	if (!verifiserPassord(passord, rad.passord_hash)) {
+		return registrerFeil();
 	}
 
 	if (rad.mfa_aktivert && rad.totp_secret_enc) {
 		if (!totp) return { utfall: 'krever-mfa', bruker: rad };
-		if (!verifiserTotp(dekrypter(rad.totp_secret_enc), totp)) return { utfall: 'feil-passord' };
+		if (!verifiserTotp(dekrypter(rad.totp_secret_enc), totp)) {
+			return registrerFeil();
+		}
 	} else if (config.security.requireMfa) {
 		return { utfall: 'krever-mfa', bruker: rad };
 	}

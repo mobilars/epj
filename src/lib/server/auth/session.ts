@@ -3,7 +3,7 @@ import { en, exec } from '../db';
 import { krevTenant } from '../tenant/kontekst';
 import { config } from '../config';
 import { nyId, nyToken } from '../util/ids';
-import { tokenHash } from '../util/crypto';
+import { likeStrenger, tokenHash } from '../util/crypto';
 
 export interface Sesjon {
 	id: string;
@@ -65,7 +65,7 @@ export async function hentSesjon(cookies: Cookies): Promise<Sesjon | null> {
 		[id, krevTenant().id]
 	);
 	if (!rad) return null;
-	if (rad.token_hash !== tokenHash(token)) {
+	if (!likeStrenger(rad.token_hash, tokenHash(token))) {
 		// Gyldig sesjons-id med feil token: mulig tyveri av cookie. Avslutt sesjonen.
 		await exec('UPDATE user_session SET avsluttet = true WHERE id = $1', [id]);
 		return null;

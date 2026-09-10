@@ -6,7 +6,7 @@ import type { Bundle, FhirResource } from './types';
 import { config } from '../config';
 import { fhirBaseFor, krevTenant, utstederFor } from '../tenant/kontekst';
 import type { AuthContext } from '../authz/context';
-import { pasientIdFraRessurs, sperredePasienter, tillattePasienter, vurder } from '../authz/tilgang';
+import { erPasientnaer, pasientIdFraRessurs, sperredePasienter, tillattePasienter, vurder } from '../authz/tilgang';
 import type { Operasjon } from '../authz/scopes';
 import { aktorFraKontekst, logg } from '../audit';
 
@@ -257,11 +257,21 @@ async function sokRessurser(f: Forespørsel, resourceType: string): Promise<Gate
 	// Avgrensning til pasienter brukeren faktisk har tjenstlig behov for.
 	const tillatte = await tillattePasienter(f.ctx);
 	const param = pasientParam(resourceType);
-	if (tillatte !== 'alle' && param) {
-		if (tillatte.length === 0) {
-			return { status: 200, ressurs: tomBundle(), headers: {} };
+	if (tillatte !== 'alle') {
+		// Uten et parameter å avgrense på ville spørringen gått ufiltrert til HAPI
+		// og returnert hele virksomhetens data for typen. `vurder` skal allerede ha
+		// avvist slike typer; dette er den andre låsen på samme dør.
+		if (!param && erPasientnaer(resourceType)) {
+			throw new FhirError(403, [
+				issue('error', 'forbidden', `Søk i ${resourceType} kan ikke avgrenses til pasientene du har tjenstlig behov for`)
+			]);
 		}
-		sok.append(param, tillatte.map((id) => (param === '_id' ? id : `Patient/${id}`)).join(','));
+		if (param) {
+			if (tillatte.length === 0) {
+				return { status: 200, ressurs: tomBundle(), headers: {} };
+			}
+			sok.append(param, tillatte.map((id) => (param === '_id' ? id : `Patient/${id}`)).join(','));
+		}
 	}
 
 	const grense = Math.min(Number(sok.get('_count') ?? 50), 200);

@@ -355,11 +355,14 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		status: p('token', 'status'),
 		date: p('date', 'date')
 	},
-	Group: {
-		type: p('token', 'type'),
-		code: p('token', 'code'),
-		'managing-entity': p('reference', 'managingEntity')
-	},
+	// Group er med vilje ikke støttet gjennom /fhir, av samme grunn som Binary.
+	//
+	// En Group kan ha `member.entity` som peker på pasienter - et kohortuttrekk
+	// er nettopp en liste over hvem som hører til, og for et fastlegekontor kan
+	// selve medlemskapet være den følsomme opplysningen. Typen har ingen
+	// `subject`, så tilgangen kan ikke vurderes per pasient. Den sto tidligere
+	// oppført som «ikke pasientnær», og slapp dermed forbi både tjenstlig behov
+	// og sperring.
 	Location: {
 		name: p('string', 'name'),
 		identifier: p('token', 'identifier'),
@@ -381,9 +384,16 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		recorded: p('date', 'recorded'),
 		patient: p('reference', 'patient', { targets: ['Patient'] })
 	},
-	Binary: {
-		'content-type': p('token', 'contentType')
-	},
+	// Binary er med vilje ikke støttet gjennom /fhir.
+	//
+	// Ressursen bærer vedlegg - skannede dokumenter, prøvesvar, bilder - men har
+	// ingen `subject` eller `patient`. Tilgangskontrollen kan derfor ikke avgjøre
+	// hvilken pasient et vedlegg hører til, og verken tjenstlig behov eller
+	// sperring lar seg håndheve. Så lenge typen sto her, kunne et token med
+	// `Binary`-scope hente hvilket som helst vedlegg i virksomheten.
+	//
+	// Skal vedlegg eksponeres, må pasienten utledes fra den DocumentReference
+	// som peker på ressursen, og tilgangen vurderes mot den. Se docs/todo.md.
 	Subscription: {
 		status: p('token', 'status'),
 		topic: p('uri', 'topic'),

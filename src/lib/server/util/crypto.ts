@@ -11,9 +11,28 @@ import { config } from '../config';
 
 const KEY_LEN = 32;
 
+/**
+ * Utledet nøkkel, bufret per EPJ_DATA_KEY.
+ *
+ * scrypt er med vilje kostbar - det er poenget med den for passord. Men denne
+ * nøkkelen utledes fra en konfigurasjonsverdi, ikke fra noe en angriper gjetter
+ * på, og `tokenHash()` bruker den ved *hvert* sesjonsoppslag, altså ved hver
+ * eneste forespørsel. Uten bufring betaler serveren en full scrypt-runde per
+ * kall, og ratebegrensningen på 600 kall i minuttet blir i praksis en oppskrift
+ * på å spise opp CPU-en.
+ *
+ * Nøkkelen bufres på verdien den er utledet fra, slik at en nøkkelrotasjon i
+ * samme prosess gir en ny utledning.
+ */
+let bufretNokkel: { fra: string; nokkel: Buffer } | null = null;
+
 function masterKey(): Buffer {
+	const fra = config.dataEncryptionKey;
+	if (bufretNokkel?.fra === fra) return bufretNokkel.nokkel;
 	// EPJ_DATA_KEY strekkes til 32 byte med en fast, applikasjonsspesifikk salt.
-	return scryptSync(config.dataEncryptionKey, 'epj-data-key-v1', KEY_LEN);
+	const nokkel = scryptSync(fra, 'epj-data-key-v1', KEY_LEN);
+	bufretNokkel = { fra, nokkel };
+	return nokkel;
 }
 
 /** AES-256-GCM. Format: v1.<iv>.<tag>.<ciphertext>, alle deler base64url. */

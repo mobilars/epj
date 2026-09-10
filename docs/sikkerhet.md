@@ -209,6 +209,103 @@ men det er fortsatt disiplin, ikke en garanti fra databasen. Se
 [arkitektur.md](arkitektur.md) for hvorfor Row Level Security ble valgt bort, og
 [todo.md](todo.md) punkt 4.7.
 
+## Sikkerhetsgjennomgang mot OWASP Top 10
+
+Gjennomgått september 2026, med OWASP Top 10 (2021) som sjekkliste. Ni funn ble
+rettet. De to første er de alvorlige; resten er herding.
+
+### A01 Broken Access Control - vedlegg og grupper uten pasienttilknytning
+
+`Binary` og `Group` var oppført som støttede ressurstyper i `/fhir`, men ingen
+av dem har `subject` eller `patient`. Følgen var at
+`pasientIdFraRessurs()` ga `null`, og `vurder()` behandlet «ingen kjent
+pasient» som «ingen grunn til å nekte»:
+
+```
+if (!pasientId) return { tillatt: true, ... }
+```
+
+Det var en fail-open. For et enkeltoppslag betydde det at både tjenstlig behov
+(lag 3) og sperring (lag 4) ble hoppet over. `Binary` bærer vedleggene -
+skannede dokumenter, prøvesvar, bilder - og en `Group` er et kohortuttrekk der
+selve medlemskapet kan være den følsomme opplysningen.
+
+Det samme slo ut i søk: `sokRessurser()` tvinger inn et `patient=`-filter, men
+bare når typen *har* et parameter å filtrere på. For `Binary` fantes ikke det,
+og søket gikk ufiltrert videre til HAPI.
+
+Utnyttbart for en registrert backend-tjeneste med `system/Binary.rs`, siden
+`client_credentials` gir de scopene klienten er registrert med. Rollene i
+journalen gir ingen av delene, så den vanlige innloggingen nådde ikke hit.
+
+Rettet i tre lag:
+
+1. `vurder()` nekter nå typer der pasienten ikke kan avgjøres, og nekter
+   enkeltoppslag der referansen mangler. Søk slipper fortsatt gjennom, fordi de
+   avgrenses per treff.
+2. `sokRessurser()` avviser søk som ikke kan avgrenses, i stedet for å sende dem
+   videre uten filter.
+3. `Binary` og `Group` er tatt ut av de støttede typene. Skal vedlegg
+   eksponeres, må pasienten utledes fra den `DocumentReference` som peker på
+   dem.
+
+Punkt 1 er en strukturell sperre, ikke en liste: en ny ressurstype uten
+pasientreferanse blir avvist inntil noen har tatt stilling til den. En test i
+`tests/tilgang.test.ts` går gjennom alle støttede typer og feiler hvis noen
+slipper unna.
+
+### A10 SSRF - `jwks_uri` på registrerte apper
+
+Adressene til HelseID, SFM, NHN og Helfo settes av den som drifter systemet.
+`jwks_uri` er noe annet: den kommer fra et skjemafelt når en app registreres, og
+ble hentet med `fetch()` uten kontroll. Journalen kunne dermed brukes til å
+hente adresser bare den selv når - HAPI, databasen, API-tjeneren, eller
+metadatatjenesten til skyleverandøren på 169.254.169.254.
+
+`src/lib/server/util/utgaende.ts` krever nå https, avviser navn og adresser som
+peker inn i private eller lenkelokale nett, følger ikke omdirigeringer, og
+leser ikke mer enn 512 kB.
+
+### De øvrige funnene
+
+| | Funn | Rettet ved |
+| --- | --- | --- |
+| A07 | Feil engangskode telte ikke mot utestengelse. Den som allerede hadde passordet kunne gjette TOTP fritt | Både passord og engangskode teller nå likt |
+| A07 | `X-Forwarded-For` ble brukt selv når kjeden var kortere enn antall betrodde hopp - klienten kunne velge sin egen adresse, og både ratebegrensning per IP og `source_ip` i loggen ble verdiløs | Headeren ignoreres når kjeden er for kort |
+| A07 | En `client_assertion` uten `exp` var gyldig for alltid | `exp` er påkrevd, med maks én times levetid |
+| A07 | Feil prosentkoding i en Basic-header ga 500 i stedet for 401 | Fanges og gir 401 |
+| A02 | Sesjonstokenets hash ble sammenliknet med `!==` | `timingSafeEqual` |
+| A04 | `scryptSync` ble kjørt på nytt ved hvert sesjonsoppslag, altså ved hver forespørsel. Ratebegrensningen på 600 kall i minuttet ble dermed en oppskrift på å spise CPU-en | Nøkkelen utledes én gang og bufres på verdien den kommer fra |
+
+### Gjennomgått uten funn
+
+* **A03 Injection.** All SQL er parametrisert; det ene stedet som bygger en
+  `WHERE` dynamisk (`hentLogg`) setter sammen faste fragmenter med
+  posisjonsparametere. XML-parseren i `util/xml.ts` støtter ikke DTD eller egne
+  entiteter, og har dybdegrense - hverken XXE eller entitetsutvidelse er mulig.
+  Journalutskriften escaper alle felter, og serveres som `attachment`.
+* **A02 Kryptografi.** AES-256-GCM med tilfeldig IV, scrypt for passord,
+  ES256 for tokens. JWS-verifiseringen har en tillatelsesliste for `alg`, så
+  «none» og bytte til HMAC er utelukket.
+* **A05 Feilkonfigurasjon.** CSP settes av rammeverket med nonce, cookies er
+  HttpOnly/SameSite=Strict/Secure, HSTS er på når `EPJ_HTTPS_ONLY` er satt,
+  feilmeldinger til klienten røper ikke interne detaljer.
+* **A07 Autentisering.** PKCE S256 er påkrevd, `redirect_uri` sammenliknes
+  eksakt, autorisasjonskoder er engangsbruk med tilbakekalling ved gjenbruk,
+  refresh tokens roteres med tyverideteksjon.
+
+### Kjent, ikke rettet
+
+* En TOTP-kode kan brukes om igjen innenfor sitt eget vindu på om lag 90
+  sekunder. Å hindre det krever at brukte koder lagres per bruker.
+* `total` i et søkeresultat trekker fra det som ble filtrert bort på siden man
+  ser, men røper fortsatt at det finnes flere treff. En pasient med sperret
+  journal kan dermed anes i et tall.
+* `avsluttSesjon()` avslutter sesjonen ut fra id-en i cookien uten å
+  kontrollere tokenet. Den som kjenner en sesjons-id kan logge ut den sesjonen.
+* Systemet er fortsatt ikke penetrasjonstestet av noen utenfra. En gjennomgang
+  av egen kode finner ikke det samme som et angrep gjør.
+
 ## Kjente svakheter
 
 Ærlig oppsummert, og utdypet i [åpne punkter](apne-punkter.md):

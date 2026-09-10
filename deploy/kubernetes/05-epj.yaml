@@ -81,9 +81,12 @@ spec:
                   key: EPJ_HELSEID_PRIVATE_KEY
           ports:
             - containerPort: 3000
+          # Startup venter på at prosessen lytter, ikke på at HAPI er oppe. HAPI
+          # bruker et par minutter på å bygge skjemaet ved første oppstart, og
+          # med /api/helse her ville journalen blitt drept og startet på nytt i
+          # ring så lenge det pågikk.
           startupProbe:
-            httpGet:
-              path: /api/helse
+            tcpSocket:
               port: 3000
             periodSeconds: 5
             failureThreshold: 30
@@ -93,9 +96,14 @@ spec:
               port: 3000
             periodSeconds: 10
             timeoutSeconds: 5
+          # Liveness sjekker at prosessen svarer, ikke at avhengighetene gjør
+          # det. `/api/helse` svarer 503 når HAPI er nede, og brukt her ville
+          # den drept journalen hver gang det kliniske lageret startet på nytt -
+          # en nedetid ett sted ble til nedetid to steder. Readiness bruker
+          # /api/helse, og det er riktig: da tas instansen ut av lastbalansering
+          # uten å bli restartet.
           livenessProbe:
-            httpGet:
-              path: /api/helse
+            tcpSocket:
               port: 3000
             periodSeconds: 30
             timeoutSeconds: 5

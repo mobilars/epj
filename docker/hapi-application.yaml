@@ -1,0 +1,52 @@
+# ---------------------------------------------------------------------------
+# HAPI FHIR-konfigurasjon for utviklingsoppsettet.
+#
+# Som fil, ikke som miljøvariabler, og det er ikke en stilpreferanse: HAPI sine
+# nøkler har understrek i navnet (`fhir_version`,
+# `tenant_identification_strategy`, `allow_references_across_partitions`), og
+# dialekten ligger under en kartnøkkel som bokstavelig heter
+# `hibernate.dialect`. Spring oversetter understrek til punktum når det binder
+# miljøvariabler, så `HAPI_FHIR_TENANT_IDENTIFICATION_STRATEGY` blir
+# `hapi.fhir.tenant.identification.strategy` - en nøkkel ingen leser. Verdien
+# forsvinner uten varsel, og HAPI kjører videre på standardverdien.
+#
+# Målt mot hapiproject/hapi:v8.0.0 ga det H2-dialekt mot PostgreSQL (skjemaet
+# bygget med `clob`-kolonner databasen avviser) og ingen partisjonering
+# (/fhir/<virksomhet>/ svarte 404). Se docs/installasjon-kubernetes.md.
+#
+# Samme innhold ligger i ConfigMap-en i deploy/kubernetes/04-hapi.yaml. Endrer
+# du her, endre der også.
+# ---------------------------------------------------------------------------
+spring:
+  jpa:
+    properties:
+      hibernate.dialect: ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect
+      hibernate.search.enabled: false
+hapi:
+  fhir:
+    # R5 er datamodellen for hele journalen.
+    fhir_version: R5
+    server_address: http://hapi:8080/fhir
+
+    # --- Multitenancy -----------------------------------------------------
+    # Hver virksomhet har sin egen partisjon. Med URL_BASED inngår
+    # partisjonsnavnet i FHIR-URL-en: /fhir/<virksomhet>/Patient/123.
+    tenant_identification_strategy: URL_BASED
+    partitioning:
+      allow_references_across_partitions: false
+      partitioning_include_in_search_hashes: false
+      conditional_create_duplicate_identifiers_enabled: false
+
+    allow_multiple_delete: true
+    allow_external_references: true
+    allow_placeholder_references: true
+    # $everything og pasientkompartment brukes av /fhir-fasaden.
+    allow_cascading_deletes: false
+    enforce_referential_integrity_on_write: false
+    enforce_referential_integrity_on_delete: false
+    default_page_size: 50
+    max_page_size: 200
+    cors:
+      allow_Credentials: false
+      allowed_origin:
+        - 'http://localhost:5173'

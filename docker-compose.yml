@@ -46,38 +46,17 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-epj}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-epj}
       SPRING_DATASOURCE_DRIVERCLASSNAME: org.postgresql.Driver
-      # Dialekten må settes med SPRING_APPLICATION_JSON. Bildets
-      # application.yaml har punktum i selve nøkkelen
-      # (`hibernate.dialect: ...HapiFhirH2Dialect`), og en miljøvariabel binder
-      # til en annen nøkkel i det samme kartet - HAPI blir da stående på
-      # H2-dialekten og bygger skjemaet med `clob`- og `blob`-kolonner
-      # PostgreSQL ikke har. Verifisert mot hapiproject/hapi:v8.0.0.
-      SPRING_APPLICATION_JSON: >-
-        {"spring.jpa.properties.hibernate.dialect":
-        "ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgres94Dialect",
-        "spring.jpa.properties.hibernate.search.enabled": false}
-      # R5 er datamodellen for hele journalen.
-      HAPI_FHIR_FHIR_VERSION: R5
-      HAPI_FHIR_SERVER_ADDRESS: http://hapi:8080/fhir
-      HAPI_FHIR_ALLOW_MULTIPLE_DELETE: 'true'
-      HAPI_FHIR_ALLOW_EXTERNAL_REFERENCES: 'true'
-      HAPI_FHIR_ALLOW_PLACEHOLDER_REFERENCES: 'true'
-      HAPI_FHIR_ENFORCE_REFERENTIAL_INTEGRITY_ON_WRITE: 'false'
-      HAPI_FHIR_ENFORCE_REFERENTIAL_INTEGRITY_ON_DELETE: 'false'
-      # $everything og pasientkompartment brukes av /fhir-fasaden.
-      HAPI_FHIR_ALLOW_CASCADING_DELETES: 'false'
-      # --- Multitenancy -------------------------------------------------
-      # Hver virksomhet har sin egen partisjon. Med URL_BASED inngår
-      # partisjonsnavnet i FHIR-URL-en: /fhir/<virksomhet>/Patient/123.
-      HAPI_FHIR_PARTITIONING_ALLOW_REFERENCES_ACROSS_PARTITIONS: 'false'
-      HAPI_FHIR_PARTITIONING_PARTITIONING_INCLUDE_IN_SEARCH_HASHES: 'false'
-      HAPI_FHIR_PARTITIONING_CONDITIONAL_CREATE_DUPLICATE_IDENTIFIERS_ENABLED: 'false'
-      HAPI_FHIR_PARTITIONING_CROSS_PARTITION_REFERENCE_MODE: 'NOT_ALLOWED'
-      HAPI_FHIR_TENANT_IDENTIFICATION_STRATEGY: URL_BASED
-      HAPI_FHIR_DEFAULT_PAGE_SIZE: '50'
-      HAPI_FHIR_MAX_PAGE_SIZE: '200'
-      HAPI_FHIR_CORS_ALLOWED_ORIGIN: 'http://localhost:5173'
+      # HAPI sine egne nøkler kan ikke uttrykkes som miljøvariabler: de har
+      # understrek i navnet, og dialekten ligger under en kartnøkkel som
+      # bokstavelig heter `hibernate.dialect`. Spring gjør understrek om til
+      # punktum, verdien havner et annet sted, og HAPI kjører videre på
+      # standardverdien - H2-dialekt mot PostgreSQL, som bygger skjemaet med
+      # `clob`-kolonner databasen avviser. Konfigurasjonen monteres derfor som
+      # fil. Se docker/hapi-application.yaml og deploy/kubernetes/04-hapi.yaml.
+      SPRING_CONFIG_ADDITIONAL_LOCATION: file:/etc/hapi/
       JAVA_TOOL_OPTIONS: '-Xmx2g'
+    volumes:
+      - ./docker/hapi-application.yaml:/etc/hapi/application.yaml:ro
     ports:
       # Kun for lokal feilsøking. Fjernes i produksjon.
       - '${HAPI_PORT:-8080}:8080'

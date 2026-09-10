@@ -23,6 +23,80 @@ spec:
       port: 8080
       targetPort: 8080
 ---
+# ---------------------------------------------------------------------------
+# HAPI-konfigurasjon som fil, ikke som miljøvariabler.
+#
+# Dette er ikke en stilpreferanse. HAPI sine egne nøkler har understrek i
+# navnet - `fhir_version`, `tenant_identification_strategy`,
+# `allow_references_across_partitions` - og dialekten ligger under en nøkkel som
+# har punktum i seg: `spring.jpa.properties` er et *kart*, og oppføringen der
+# heter bokstavelig `hibernate.dialect`.
+#
+# Spring oversetter understrek til punktum når det binder miljøvariabler.
+# `HAPI_FHIR_TENANT_IDENTIFICATION_STRATEGY` blir dermed
+# `hapi.fhir.tenant.identification.strategy`, som ingen leser. Verdien
+# forsvinner uten et eneste varsel, og HAPI kjører videre med standardverdien.
+#
+# Målt mot hapiproject/hapi:v8.0.0 ga det:
+#
+#   * dialekten falt tilbake til H2, og skjemaet ble bygget med `clob`- og
+#     `blob`-kolonner PostgreSQL avviste - serveren startet, og feilet først
+#     på første søk med «relation hfj_resource does not exist»
+#   * partisjoneringen ble aldri slått på, og /fhir/<virksomhet>/ svarte 404
+#     «Unknown resource type» - altså ingen virksomhetsavgrensning i det
+#     kliniske lageret i det hele tatt
+#
+# `SPRING_APPLICATION_JSON` med flate nøkler er ikke nok: dialekten endte da på
+# Hibernates automatisk oppdagede `PostgreSQLDialect`, ikke HAPI sin. En fil med
+# riktig nøsting er den eneste formen som treffer, og
+# `spring.config.additional-location` har høyere presedens enn konfigurasjonen
+# i bildet.
+#
+# Legger du til noe her: kontroller etterpå at /fhir/<virksomhet>/metadata
+# svarer 200, ikke 404.
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hapi-konfigurasjon
+  namespace: epj
+data:
+  application.yaml: |
+    spring:
+      jpa:
+        properties:
+          hibernate.dialect: ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect
+          hibernate.search.enabled: false
+    hapi:
+      fhir:
+        # R5 er datamodellen for hele journalen.
+        fhir_version: R5
+        server_address: http://hapi:8080/fhir
+
+        # --- Multitenancy -------------------------------------------------
+        # Hver virksomhet har sin egen partisjon, og partisjonsnavnet inngår i
+        # FHIR-URL-en: /fhir/<virksomhet>/Patient/123.
+        tenant_identification_strategy: URL_BASED
+        partitioning:
+          # Dette er det som gjør at en ressurs i én virksomhet ikke kan peke
+          # inn i en annen - heller ikke ved en feil i vår egen kode.
+          allow_references_across_partitions: false
+          partitioning_include_in_search_hashes: false
+          conditional_create_duplicate_identifiers_enabled: false
+
+        allow_multiple_delete: true
+        allow_external_references: true
+        allow_placeholder_references: true
+        allow_cascading_deletes: false
+        enforce_referential_integrity_on_write: false
+        enforce_referential_integrity_on_delete: false
+        default_page_size: 50
+        max_page_size: 200
+        # HAPI nås aldri av en nettleser. Ingen CORS-opprinnelser.
+        cors:
+          allow_Credentials: false
+          allowed_origin: []
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -51,6 +125,10 @@ spec:
         runAsUser: 1001
         seccompProfile:
           type: RuntimeDefault
+      volumes:
+        - name: konfigurasjon
+          configMap:
+            name: hapi-konfigurasjon
       containers:
         - name: hapi
           image: hapiproject/hapi:v8.0.0
@@ -66,65 +144,17 @@ spec:
                   key: POSTGRES_PASSWORD
             - name: SPRING_DATASOURCE_DRIVERCLASSNAME
               value: org.postgresql.Driver
-            # Dialekten settes med SPRING_APPLICATION_JSON, ikke som egen
-            # miljøvariabel. Bildets application.yaml har punktum i selve
-            # nøkkelen (`hibernate.dialect: ...HapiFhirH2Dialect`), og en
-            # miljøvariabel binder til en annen nøkkel i det samme kartet.
-            # Følgen er at HAPI blir stående på H2-dialekten og bygger skjemaet
-            # med `clob`- og `blob`-kolonner PostgreSQL ikke har. Verifisert mot
-            # hapiproject/hapi:v8.0.0.
-            - name: SPRING_APPLICATION_JSON
-              value: >-
-                {"spring.jpa.properties.hibernate.dialect":
-                "ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgres94Dialect",
-                "spring.jpa.properties.hibernate.search.enabled": false,
-                "hapi.fhir.tenant_identification_strategy": "URL_BASED",
-                "hapi.fhir.partitioning.allow_references_across_partitions": false,
-                "hapi.fhir.partitioning.partitioning_include_in_search_hashes": false,
-                "hapi.fhir.partitioning.conditional_create_duplicate_identifiers_enabled": false}
-
-            # R5 er datamodellen for hele journalen.
-            - name: HAPI_FHIR_FHIR_VERSION
-              value: R5
-            - name: HAPI_FHIR_SERVER_ADDRESS
-              value: http://hapi:8080/fhir
-
-            # --- Multitenancy ---------------------------------------------
-            # Hver virksomhet har sin egen partisjon, og partisjonsnavnet
-            # inngår i FHIR-URL-en: /fhir/<virksomhet>/Patient/123. Nøklene
-            # står i SPRING_APPLICATION_JSON over, ikke som egne
-            # miljøvariabler: `tenant_identification_strategy` og
-            # `allow_references_across_partitions` har understrek i navnet, og
-            # Spring leser `HAPI_FHIR_TENANT_IDENTIFICATION_STRATEGY` som
-            # `hapi.fhir.tenant.identification.strategy` - en annen nøkkel, som
-            # ingen leser. Uten dette er partisjoneringen av, og /fhir/<v>/
-            # svarer 404 «Unknown resource type».
-            #
-            # `allow_references_across_partitions: false` er det som gjør at en
-            # ressurs i én virksomhet ikke kan peke inn i en annen - heller
-            # ikke ved en feil i vår egen kode.
-            - name: HAPI_FHIR_PARTITIONING_CONDITIONAL_CREATE_DUPLICATE_IDENTIFIERS_ENABLED
-              value: 'false'
-
-            - name: HAPI_FHIR_ALLOW_MULTIPLE_DELETE
-              value: 'true'
-            - name: HAPI_FHIR_ALLOW_EXTERNAL_REFERENCES
-              value: 'true'
-            - name: HAPI_FHIR_ALLOW_PLACEHOLDER_REFERENCES
-              value: 'true'
-            - name: HAPI_FHIR_ENFORCE_REFERENTIAL_INTEGRITY_ON_WRITE
-              value: 'false'
-            - name: HAPI_FHIR_ENFORCE_REFERENTIAL_INTEGRITY_ON_DELETE
-              value: 'false'
-            - name: HAPI_FHIR_ALLOW_CASCADING_DELETES
-              value: 'false'
-            - name: HAPI_FHIR_DEFAULT_PAGE_SIZE
-              value: '50'
-            - name: HAPI_FHIR_MAX_PAGE_SIZE
-              value: '200'
-            # HAPI nås aldri av en nettleser. Ingen CORS-opprinnelser.
+            # Alt annet står i application.yaml, montert fra ConfigMap-en
+            # under. Se merknaden der: HAPI sine nøkler kan ikke uttrykkes som
+            # miljøvariabler.
+            - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+              value: file:/etc/hapi/
             - name: JAVA_TOOL_OPTIONS
               value: '-Xmx2g -XX:MaxRAMPercentage=75'
+          volumeMounts:
+            - name: konfigurasjon
+              mountPath: /etc/hapi
+              readOnly: true
           ports:
             - containerPort: 8080
           startupProbe:

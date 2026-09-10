@@ -45,12 +45,42 @@ const NEKT = (grunn: string, status: 401 | 403 = 403): Beslutning => ({
 	tillatt: false, grunn, purposeOfUse: 'TREAT', begrensninger: [], status
 });
 
-/** Ressurstyper som ikke inneholder pasientopplysninger og derfor ikke krever tjenstlig behov. */
+/**
+ * Ressurstyper som ikke inneholder pasientopplysninger og derfor ikke krever
+ * tjenstlig behov.
+ *
+ * Listen skal være kort og lett å forsvare. En type hører bare hjemme her hvis
+ * den ikke kan peke på en pasient i det hele tatt - `Group` sto her, men en
+ * gruppe kan ha `member.entity` mot Patient, og et kohortuttrekk er nettopp en
+ * liste over hvem som hører til.
+ */
 const IKKE_PASIENTNAERE = new Set([
 	'Practitioner', 'PractitionerRole', 'Organization', 'Location', 'Medication',
-	'Questionnaire', 'Schedule', 'Slot', 'Group', 'Subscription', 'CapabilityStatement',
+	'Questionnaire', 'Schedule', 'Slot', 'Subscription', 'CapabilityStatement',
 	'StructureDefinition', 'ValueSet', 'CodeSystem'
 ]);
+
+/**
+ * Om tilgangskontrollen kan avgjøre hvilken pasient en ressurstype gjelder.
+ *
+ * Både tjenstlig behov (lag 3) og sperring (lag 4) forutsetter at vi vet hvilken
+ * pasient opplysningen hører til. For en type uten pasientreferanse i
+ * kompartmentdefinisjonen kan ingen av delene håndheves - og da skal typen ikke
+ * være tilgjengelig, uansett hva scopet sier.
+ *
+ * Dette er en strukturell sperre, ikke en liste å vedlikeholde: en ny
+ * ressurstype i SEARCH_PARAMS uten `patient`/`subject`-parameter blir avvist
+ * inntil noen har tatt stilling til hvordan pasienten skal utledes.
+ */
+export function kanAvgjorePasient(resourceType: string): boolean {
+	if (resourceType === 'Patient') return true;
+	return (PASIENTKOMPARTMENT[resourceType]?.length ?? 0) > 0;
+}
+
+/** Om en ressurstype i det hele tatt inneholder pasientopplysninger. */
+export function erPasientnaer(resourceType: string): boolean {
+	return !IKKE_PASIENTNAERE.has(resourceType);
+}
 
 /** Finner pasienten en ressurs gjelder, ut fra kompartmentdefinisjonen. */
 export function pasientIdFraRessurs(ressurs: FhirResource): string | null {
@@ -107,6 +137,13 @@ export async function vurder(spm: TilgangSporsmal): Promise<Beslutning> {
 		return { tillatt: true, grunnlag: 'ikke-pasientdata', purposeOfUse: 'HOPERAT', begrensninger: scopeSvar.begrensninger, status: 403 };
 	}
 
+	// Typen er pasientnær, men vi har ingen måte å finne ut hvilken pasient den
+	// gjelder. Da kan verken tjenstlig behov eller sperring vurderes, og eneste
+	// forsvarlige svar er nei.
+	if (!kanAvgjorePasient(resourceType)) {
+		return NEKT(`Tilgangen til ${resourceType} kan ikke vurderes: ressurstypen har ingen pasientreferanse`);
+	}
+
 	// Innbygger som ser sin egen journal.
 	if (erPasient(ctx)) {
 		const egen = egenPasientId(ctx);
@@ -116,10 +153,17 @@ export async function vurder(spm: TilgangSporsmal): Promise<Beslutning> {
 		return { tillatt: true, grunnlag: 'egen-journal', purposeOfUse: 'PATRQT', begrensninger: scopeSvar.begrensninger, status: 403 };
 	}
 
-	// Uten kjent pasient (f.eks. søk) avgjøres tilgangen per treff; kalleren
-	// bruker `tillattePasienter()` til å avgrense spørringen.
 	if (!pasientId) {
-		return { tillatt: true, grunnlag: 'behandlingsrelasjon', purposeOfUse: 'TREAT', begrensninger: scopeSvar.begrensninger, status: 403 };
+		// Søk har ingen pasient på forhånd. Tilgangen avgjøres per treff, ved at
+		// `sokRessurser` avgrenser spørringen med `tillattePasienter()`.
+		if (operasjon === 's') {
+			return { tillatt: true, grunnlag: 'behandlingsrelasjon', purposeOfUse: 'TREAT', begrensninger: scopeSvar.begrensninger, status: 403 };
+		}
+		// Et enkeltoppslag på en pasientnær ressurs uten pasientreferanse kan
+		// ikke vurderes mot verken behandlingsrelasjon eller sperring. Tidligere
+		// slapp slike kall gjennom; det gjorde tjenstlig behov omgåelig for enhver
+		// ressurs der referansen manglet eller ikke ble gjenkjent.
+		return NEKT(`Fant ingen pasientreferanse i ${resourceType}, og tilgangen kan derfor ikke vurderes`);
 	}
 
 	// --- Lag 3: tjenstlig behov --------------------------------------------

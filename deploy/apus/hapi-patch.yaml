@@ -2,9 +2,9 @@
 #
 #   1. Databasen ligger i operatørens klynge. JDBC-driveren forhandler TLS av
 #      seg selv (`sslmode=prefer`), så den trenger ingen CA montert.
-#   2. Partisjonering og dialekt settes med SPRING_APPLICATION_JSON. Se
-#      merknaden i 04-hapi.yaml: nøklene inneholder understrek og punktum som
-#      en miljøvariabel ikke kan uttrykke.
+#   2. Resten av HAPI-konfigurasjonen ligger i ConfigMap-en i 04-hapi.yaml, som
+#      fil. Se merknaden der: HAPI sine nøkler kan ikke uttrykkes som
+#      miljøvariabler.
 #   3. Nodene her har under 4 GB hver. Malens 2 GB forespurt og 3 GB tak er
 #      mer enn klyngen tåler ved siden av alt annet.
 apiVersion: apps/v1

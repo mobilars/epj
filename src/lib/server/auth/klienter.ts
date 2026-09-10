@@ -4,6 +4,7 @@ import { hashPassord, likeStrenger, tokenHash, verifiserPassord } from '../util/
 import { nyId, nyToken } from '../util/ids';
 import { verifiser as verifiserJws, dekodUtenVerifisering, type Jwk } from './jws';
 import { config } from '../config';
+import { hentJsonUtenfra, sjekkUtgaendeUrl, UtgaendeFeil } from '../util/utgaende';
 
 export type Klientkategori = 'smart-ehr' | 'smart-standalone' | 'backend' | 'internal';
 
@@ -117,8 +118,14 @@ export async function autentiserKlient(
 	if (authorizationHeader?.toLowerCase().startsWith('basic ')) {
 		const dekodet = Buffer.from(authorizationHeader.slice(6), 'base64').toString('utf8');
 		const skille = dekodet.indexOf(':');
-		clientId = decodeURIComponent(dekodet.slice(0, skille));
-		clientSecret = decodeURIComponent(dekodet.slice(skille + 1));
+		if (skille < 0) return { ok: false, feil: 'Ugyldig Basic-header' };
+		try {
+			clientId = decodeURIComponent(dekodet.slice(0, skille));
+			clientSecret = decodeURIComponent(dekodet.slice(skille + 1));
+		} catch {
+			// Feil prosentkoding skal gi 401, ikke en uhåndtert feil og 500.
+			return { ok: false, feil: 'Ugyldig Basic-header' };
+		}
 		metode = 'client_secret_basic';
 	} else if (form.get('client_secret')) {
 		clientSecret = form.get('client_secret') ?? undefined;
@@ -154,7 +161,17 @@ export async function autentiserKlient(
 			if (typeof payload.jti !== 'string' || await jtiBrukt(payload.jti)) {
 				return { ok: false, feil: 'client_assertion mangler jti eller er gjenbrukt' };
 			}
-			await lagreJti(payload.jti, payload.exp ?? Math.floor(Date.now() / 1000) + 300);
+			// RFC 7523 krever `exp`. Uten den er assertionen gyldig for alltid, og
+			// en lekket assertion blir en evig legitimasjon. `verifiser` avviser en
+			// utløpt `exp`, men godtar at den mangler - her er den påkrevd.
+			const nå = Math.floor(Date.now() / 1000);
+			if (typeof payload.exp !== 'number') {
+				return { ok: false, feil: 'client_assertion mangler exp' };
+			}
+			if (payload.exp > nå + 3600) {
+				return { ok: false, feil: 'client_assertion har for lang levetid (maks én time)' };
+			}
+			await lagreJti(payload.jti, payload.exp);
 		} catch (err) {
 			return { ok: false, feil: `Ugyldig client_assertion: ${(err as Error).message}` };
 		}
@@ -176,12 +193,27 @@ async function klientNokler(klient: OAuthKlient): Promise<Jwk[]> {
 	if (klient.jwks?.keys?.length) return klient.jwks.keys;
 	if (!klient.jwks_uri) return [];
 	try {
-		const svar = await fetch(klient.jwks_uri, { signal: AbortSignal.timeout(5000) });
-		if (!svar.ok) return [];
-		const jwks = (await svar.json()) as { keys?: Jwk[] };
+		// `jwks_uri` er et skjemafelt, ikke driftskonfigurasjon. Uten kontrollen i
+		// `sjekkUtgaendeUrl` ville den som registrerer en app kunne få journalen
+		// til å hente vilkårlige interne adresser - HAPI, databasen, API-tjeneren
+		// eller skyens metadatatjeneste.
+		const jwks = (await hentJsonUtenfra(klient.jwks_uri)) as { keys?: Jwk[] };
 		return jwks.keys ?? [];
-	} catch {
+	} catch (err) {
+		if (err instanceof UtgaendeFeil) {
+			console.warn(`[oauth] jwks_uri for ${klient.client_id} ble avvist: ${err.message}`);
+		}
 		return [];
+	}
+}
+
+/** Kontroll av `jwks_uri` ved registrering, slik at feilen oppdages der den gjøres. */
+export async function gyldigJwksUri(uri: string): Promise<string | null> {
+	try {
+		await sjekkUtgaendeUrl(uri);
+		return null;
+	} catch (err) {
+		return err instanceof UtgaendeFeil ? err.message : 'Adressen kunne ikke kontrolleres';
 	}
 }
 

@@ -11,8 +11,15 @@ export function klientIp(event: RequestEvent): string {
 		const kjede = forwarded.split(',').map((s) => s.trim()).filter(Boolean);
 		// Ta adressen som ligger `hops` fra slutten - alt lenger til venstre kan
 		// klienten selv ha satt.
-		const idx = Math.max(0, kjede.length - hops);
-		if (kjede[idx]) return kjede[idx];
+		//
+		// Er kjeden kortere enn antall betrodde hopp, har den ikke vært gjennom de
+		// proxyene vi tror. Da er hele headeren klientens eget verk, og vi bruker
+		// den ikke: ellers kunne hvem som helst velge sin egen adresse, og både
+		// ratebegrensningen per IP og kilde-IP i sikkerhetsloggen ville vært verdiløs.
+		if (kjede.length >= hops) {
+			const kandidat = kjede[kjede.length - hops];
+			if (kandidat) return kandidat;
+		}
 	}
 	try {
 		return event.getClientAddress();
