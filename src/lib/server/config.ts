@@ -149,6 +149,13 @@ export const config = {
 	 */
 	testLogin: {
 		aktivert: bool('EPJ_TEST_LOGIN', process.env.NODE_ENV !== 'production'),
+		/**
+		 * Signing in with a code sent by email.
+		 *
+		 * Weaker than HelseID: it proves someone reads mail at an address, not who
+		 * they are. Meant for trials with synthetic data, and off by default.
+		 */
+		epost: bool('EPJ_EPOST_INNLOGGING', false),
 		/** Shows demo users with the password filled in on the sign-in page. */
 		showDemoUsers: bool('EPJ_SHOW_DEMO_USERS', process.env.NODE_ENV !== 'production')
 	},
@@ -193,6 +200,18 @@ export const config = {
 		 * badly something is configured later.
 		 */
 		developerHostname: env.EPJ_DEVELOPER_HOSTNAME ?? '',
+		/**
+		 * The hostname trial organisations share.
+		 *
+		 * They have no hostname each: which organisation a request belongs to
+		 * follows from who is signed in, not from the address. That is a
+		 * deliberate narrowing - it works because a trial user belongs to exactly
+		 * one organisation and signs in by email - and it is why trials cannot be
+		 * reached from a practice's own hostname.
+		 */
+		trialHostname: env.EPJ_PROVE_VERTSNAVN ?? '',
+		/** Whether anyone may create a trial organisation from the front page. */
+		trialsEnabled: bool('EPJ_PROVEKONTO', false),
 		/** The hostname platform administration is reached on. */
 		platformHostname: env.EPJ_PLATFORM_HOSTNAME ?? '',
 		/** Accept an unknown hostname and use the default organisation. Off in production. */

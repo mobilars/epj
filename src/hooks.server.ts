@@ -3,7 +3,7 @@ import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
 import { config } from '$srv/config';
 import { clientIp, rateLimit, securityHeaders } from '$srv/http';
-import { getSession } from '$srv/auth/session';
+import { getSession, tenantIdForSession } from '$srv/auth/session';
 import { getUser, rolesFor } from '$srv/auth/users';
 import { validateAccessToken } from '$srv/auth/tokens';
 import { parseScopes } from '$srv/authz/scopes';
@@ -72,7 +72,34 @@ async function contextFromBearer(authorization: string, event: Parameters<Handle
  * unknown hostname is refused in production; in development we fall back to the
  * default organisation, so localhost works without setup.
  */
-async function resolveTenant(hostname: string): Promise<{ tenant: Tenant; isPlatform: boolean } | { error: string; status: number }> {
+async function resolveTenant(
+	hostname: string,
+	sessionTenantId?: string | null
+): Promise<{ tenant: Tenant; isPlatform: boolean } | { error: string; status: number }> {
+	/**
+	 * Trial organisations share one hostname, and the organisation follows from
+	 * who is signed in.
+	 *
+	 * The narrowing that makes this safe: the id comes from the session, which
+	 * is server-side, never from anything the client can name. A signed-out
+	 * visitor here gets the front page and the sign-in, and no organisation at
+	 * all - which is why this cannot be used to reach a practice that has its
+	 * own hostname.
+	 */
+	if (config.tenant.trialHostname && hostname === config.tenant.trialHostname) {
+		if (!sessionTenantId) {
+			const fallback = await getTenant(config.tenant.defaultValue);
+			if (!fallback) return { error: 'Standardvirksomheten mangler', status: 500 };
+			return { tenant: fallback, isPlatform: false };
+		}
+		const theirs = await getTenant(sessionTenantId);
+		if (!theirs) return { error: 'Virksomheten finnes ikke', status: 404 };
+		if (theirs.status !== 'aktiv') {
+			return { error: `Virksomheten er ${theirs.status}.`, status: 503 };
+		}
+		return { tenant: theirs, isPlatform: false };
+	}
+
 	if (config.tenant.platformHostname && hostname === config.tenant.platformHostname) {
 		const platform = await getTenant(PLATFORM_TENANT);
 		if (!platform) return { error: 'Plattformvirksomheten mangler', status: 500 };
@@ -98,7 +125,12 @@ async function resolveTenant(hostname: string): Promise<{ tenant: Tenant; isPlat
 export const handle: Handle = async ({ event, resolve }) => {
 	await ensureSchema();
 
-	const resolution = await resolveTenant(event.url.hostname);
+	// On the shared trial hostname the organisation comes from the session, so
+	// it has to be looked up before the organisation context exists.
+	const sessionTenant = config.tenant.trialHostname && event.url.hostname === config.tenant.trialHostname
+		? await tenantIdForSession(event.cookies)
+		: null;
+	const resolution = await resolveTenant(event.url.hostname, sessionTenant);
 	if ('error' in resolution) {
 		return new Response(resolution.error, { status: resolution.status, headers: { 'content-type': 'text/plain; charset=utf-8' } });
 	}

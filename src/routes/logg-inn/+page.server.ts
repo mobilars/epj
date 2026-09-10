@@ -37,7 +37,15 @@ export const load: PageServerLoad = async (event) => {
 		returnTo: trygtReturnTo(event.url.searchParams.get('retur')),
 		// The organisation the hostname resolves to - not the one in the
 		// configuration, which is only the fallback used to seed the first one.
-		organisation: requireTenant().name
+		organisation: requireTenant().name,
+		// The other ways in, so the front page can point at them rather than
+		// leaving people to guess at hostnames.
+		emailLogin: config.testLogin.epost,
+		trialUrl: config.tenant.trialsEnabled && config.tenant.trialHostname
+			? `https://${config.tenant.trialHostname}/prov`
+			: null,
+		platformUrl: config.tenant.platformHostname ? `https://${config.tenant.platformHostname}/systemadmin` : null,
+		developerUrl: config.tenant.developerHostname ? `https://${config.tenant.developerHostname}/utvikler` : null
 	};
 };
 

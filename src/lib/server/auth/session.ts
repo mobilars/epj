@@ -119,3 +119,30 @@ export async function endAllSessions(userId: string): Promise<number> {
 export async function purgeUtlopteSessions(): Promise<number> {
 	return exec("DELETE FROM user_session WHERE expires_at < now() - interval '30 days'");
 }
+
+/**
+ * The organisation a session belongs to, without knowing it first.
+ *
+ * Every other lookup in the record is bounded to one organisation, and this
+ * one deliberately is not - it exists for the shared trial hostname, where
+ * there is no hostname to derive the organisation from and it has to come from
+ * whose session this is instead.
+ *
+ * It reads no session data and grants nothing: it answers only "which
+ * organisation", and the session is then verified inside that organisation by
+ * `getSession` exactly as on any other hostname. A forged or expired cookie
+ * gets no further here than it does anywhere else.
+ */
+export async function tenantIdForSession(cookies: Cookies): Promise<string | null> {
+	const raw = cookies.get(config.session.cookieName);
+	if (!raw) return null;
+	const separator = raw.indexOf('.');
+	if (separator < 0) return null;
+
+	const row = await one<{ tenant_id: string }>(
+		`SELECT u.tenant_id FROM user_session s JOIN user_account u ON u.id = s.user_id
+		 WHERE s.id = $1 AND s.expires_at > now()`,
+		[raw.slice(0, separator)]
+	);
+	return row?.tenant_id ?? null;
+}

@@ -37,8 +37,13 @@
 </script>
 
 <div class="paloggingsside">
-	<h1>Logg inn</h1>
-	<p class="svak">{data.organisation}</p>
+	<header class="forsidetopp">
+		<span class="merkenavn">EPJ</span>
+		<h1>{data.organisation}</h1>
+		<p class="svak">
+			Elektronisk pasientjournal for fastleger. FHIR R5, SMART on FHIR og HelseID.
+		</p>
+	</header>
 
 	{#if errorFromUrl}
 		<div class="varsel varsel-feil" role="alert">{errorFromUrl}</div>
@@ -57,6 +62,16 @@
 			<a class="knapp knapp-primar" href="/logg-inn/helseid?retur={encodeURIComponent(data.returnTo)}">
 				Logg inn med HelseID
 			</a>
+		</div>
+	{/if}
+
+	{#if data.emailLogin}
+		<div class="kort">
+			<h2>E-post</h2>
+			<p class="svak">
+				Logg inn med en kode på e-post. Beregnet på prøvekontoer med syntetiske data.
+			</p>
+			<a class="knapp" href="/logg-inn/epost">Logg inn med e-post</a>
 		</div>
 	{/if}
 
@@ -133,4 +148,25 @@
 			Ingen påloggingsmetode er konfigurert. Kontakt systemansvarlig.
 		</div>
 	{/if}
+
+	<footer class="forsidefot">
+		{#if data.trialUrl}
+			<a class="inngang" href={data.trialUrl}>
+				<strong>Prøv EPJ</strong>
+				<span class="svak">Få ditt eget legekontor med syntetiske data, på et minutt.</span>
+			</a>
+		{/if}
+		{#if data.developerUrl}
+			<a class="inngang" href={data.developerUrl}>
+				<strong>Utviklerportal</strong>
+				<span class="svak">Registrer SMART on FHIR-apper og se dokumentasjonen.</span>
+			</a>
+		{/if}
+		{#if data.platformUrl}
+			<a class="inngang" href={data.platformUrl}>
+				<strong>Plattformadministrasjon</strong>
+				<span class="svak">Virksomheter, apper og drift. Ingen tilgang til journaler.</span>
+			</a>
+		{/if}
+	</footer>
 </div>

@@ -33,6 +33,15 @@ data:
   # a separate origin means there is no path from one into the other.
   EPJ_DEVELOPER_HOSTNAME: utvikler.apps.apus.no
 
+  # Trial organisations share one hostname. They have no address each: which
+  # organisation a request belongs to follows from who is signed in, and a
+  # signed-out visitor here gets the front page and the sign-up form.
+  EPJ_PROVE_VERTSNAVN: prov.apps.apus.no
+  EPJ_PROVEKONTO: 'true'
+  # Sign-in by emailed code. Weaker than HelseID, and meant for trials with
+  # synthetic data - which is what this installation is.
+  EPJ_EPOST_INNLOGGING: 'true'
+
   # Sign-in codes for the portal. The key lives in `epj-hemmeligheter`.
   EPJ_SMTP_HOST: smtp-relay.brevo.com
   EPJ_SMTP_PORT: '587'

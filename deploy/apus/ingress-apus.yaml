@@ -24,6 +24,7 @@ spec:
         - epj.apps.apus.no
         - epj-admin.apps.apus.no
         - utvikler.apps.apus.no
+        - prov.apps.apus.no
       secretName: epj-tls
   rules:
     - host: epj.apps.apus.no
@@ -47,6 +48,16 @@ spec:
                 port:
                   number: 80
     - host: utvikler.apps.apus.no
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: epj
+                port:
+                  number: 80
+    - host: prov.apps.apus.no
       http:
         paths:
           - path: /

@@ -363,3 +363,25 @@ main.bred { max-width: none; }
 .cds-kort article { margin: 0; }
 .cds-kort article p { margin: 0.35rem 0; }
 .cds-kort small { display: block; margin-top: 0.35rem; }
+
+/* --- Front page ---------------------------------------------------------
+   The first thing anyone sees, and for most people the only page they see
+   before they are inside. Restrained on purpose: a masthead, the ways in, and
+   nothing that has to be scrolled past. */
+.forsidetopp { margin-bottom: 1.25rem; }
+.forsidetopp .merkenavn {
+  display: inline-block; font-weight: 700; letter-spacing: 0.08em; font-size: 0.78rem;
+  color: #fff; background: var(--primar); padding: 0.15rem 0.5rem; border-radius: 4px;
+  margin-bottom: 0.6rem;
+}
+.forsidetopp h1 { margin: 0 0 0.15rem; font-size: 1.6rem; letter-spacing: -0.02em; }
+.forsidetopp p { margin: 0; }
+
+.forsidefot { display: grid; gap: 0.5rem; margin-top: 1.5rem; }
+.inngang {
+  display: block; padding: 0.7rem 0.85rem; text-decoration: none; color: inherit;
+  border: 1px solid var(--kant); border-radius: 7px; background: var(--flate);
+}
+.inngang:hover { border-color: var(--primar); background: var(--primar-svak); }
+.inngang strong { display: block; }
+.inngang .svak { font-size: 0.88rem; }
