@@ -11,11 +11,19 @@
  * nowhere to keep a secret; PKCE is what protects the authorisation code.
  */
 
+/*
+ * One namespace per app, not per path.
+ *
+ * Each app has an origin of its own, so sessionStorage is already isolated
+ * between them. Keying by path instead meant /launch wrote the PKCE verifier
+ * and state under one key and /callback looked for them under another, and
+ * every launch failed at the state check.
+ */
 const NS = 'smart';
 
 const store = {
-	set: (k, v) => sessionStorage.setItem(`${NS}:${location.pathname.split('/')[1] || 'app'}:${k}`, v),
-	get: (k) => sessionStorage.getItem(`${NS}:${location.pathname.split('/')[1] || 'app'}:${k}`),
+	set: (k, v) => sessionStorage.setItem(`${NS}:${k}`, v),
+	get: (k) => sessionStorage.getItem(`${NS}:${k}`),
 	clear: () =>
 		Object.keys(sessionStorage)
 			.filter((k) => k.startsWith(`${NS}:`))

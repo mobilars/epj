@@ -37,7 +37,9 @@ try {
 	const demoButton = page.locator('.demobruker', { hasText: 'Dr. Ingrid Fastlege' });
 	check('demobrukeren er listet', (await demoButton.count()) > 0);
 	await demoButton.first().click();
-	await page.waitForURL((url) => !url.pathname.startsWith('/logg-inn'), { timeout: 20000 });
+	// Waiting on the URL alone is flaky: the navigation can finish before the
+	// wait begins. The navigation bar only exists for a signed-in user.
+	await page.getByRole('navigation', { name: 'Hovedmeny' }).waitFor({ timeout: 30000 });
 	check('innlogget', !page.url().includes('/logg-inn'), page.url());
 
 	// --- Open a patient ---------------------------------------------------
@@ -46,7 +48,7 @@ try {
 	check('pasientlisten har treff', (await firstPatient.count()) > 0);
 	const patientHref = await firstPatient.getAttribute('href');
 	await firstPatient.click();
-	await page.waitForURL(/\/pasienter\/[^/]+$/, { timeout: 20000 });
+	await page.locator('.pasientbanner').waitFor({ timeout: 30000 });
 	check('journalen åpnet', page.url().includes(patientHref ?? ''), page.url());
 
 	// --- The side panel is an app, and it authorises ----------------------

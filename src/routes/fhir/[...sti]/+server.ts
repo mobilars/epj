@@ -4,6 +4,7 @@ import { requireTenant, issuerFor } from '$srv/tenant/context';
 import { FhirError, operationOutcome, issue } from '$srv/fhir/outcome';
 import { execute } from '$srv/fhir/gateway';
 import { corsHeadere } from '$srv/http';
+import { allowedOpphav } from '$srv/auth/cors';
 import { listClients } from '$srv/auth/clients';
 
 /**
@@ -15,32 +16,6 @@ import { listClients } from '$srv/auth/clients';
  */
 
 const FHIR_JSON = 'application/fhir+json; charset=utf-8';
-
-const opphavsCache = new Map<string, { value: string[]; to: number }>();
-
-/** Permitted CORS origins are derived from registered SMART apps' redirect URIs. */
-async function allowedOpphav(): Promise<string[]> {
-	// The cache is per organisation: apps approved at one organisation must not
-	// grant CORS access at another.
-	const tenantId = requireTenant().id;
-	const cached = opphavsCache.get(tenantId);
-	if (cached && Date.now() < cached.to) return cached.value;
-	const clients = await listClients();
-	const opphav = new Set<string>([new URL(issuerFor(requireTenant())).origin]);
-	for (const k of clients) {
-		if (k.status !== 'aktiv') continue;
-		for (const uri of k.redirect_uris) {
-			try {
-				opphav.add(new URL(uri).origin);
-			} catch {
-				/* skip invalid URIs */
-			}
-		}
-	}
-	const value = [...opphav];
-	opphavsCache.set(tenantId, { value, to: Date.now() + 60_000 });
-	return value;
-}
 
 async function readBody(event: RequestEvent): Promise<unknown> {
 	const type = event.request.headers.get('content-type') ?? '';
