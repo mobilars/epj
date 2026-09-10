@@ -54,15 +54,21 @@ export const actions: Actions = {
 		const ctx = event.locals.auth;
 		if (!ctx?.permissions.has('admin:apper')) return fail(403, { error: 'Ingen tilgang.' });
 		const form = await event.request.formData();
+		// Handed back on failure so the form fills itself in again.
+		const values = Object.fromEntries(
+			['navn', 'kategori', 'type', 'redirectUris', 'scopes', 'launchUrl', 'jwks', 'jwksUri', 'logoUrl', 'databehandleravtale'].map(
+				(f) => [f, String(form.get(f) ?? '')]
+			)
+		);
 		const name = String(form.get('navn') ?? '').trim();
 		const redirectUris = String(form.get('redirectUris') ?? '').split(/\s+/).filter(Boolean);
 		const scopes = String(form.get('scopes') ?? '').split(/\s+/).filter(Boolean);
 		const category = String(form.get('kategori') ?? 'smart-ehr') as ClientCategory;
 		const type = String(form.get('type') ?? 'public') as 'public' | 'confidential';
 
-		if (!name) return fail(400, { error: 'Appen må ha et navn.' });
+		if (!name) return fail(400, { error: 'Appen må ha et navn.', values });
 		if (category !== 'backend' && redirectUris.length === 0) {
-			return fail(400, { error: 'SMART-apper må ha minst én redirect-URI.' });
+			return fail(400, { error: 'SMART-apper må ha minst én redirect-URI.', values });
 		}
 
 		let jwks: { keys: JsonWebKey[] } | undefined;
@@ -71,11 +77,11 @@ export const actions: Actions = {
 			try {
 				jwks = JSON.parse(jwksText);
 			} catch {
-				return fail(400, { error: 'JWKS er ikke gyldig JSON.' });
+				return fail(400, { error: 'JWKS er ikke gyldig JSON.', values });
 			}
 		}
 		if (category === 'backend' && !jwks && !String(form.get('jwksUri') ?? '').trim()) {
-			return fail(400, { error: 'Backend-tjenester må autentisere med private_key_jwt, og trenger JWKS eller jwks_uri.' });
+			return fail(400, { error: 'Backend-tjenester må autentisere med private_key_jwt, og trenger JWKS eller jwks_uri.', values });
 		}
 
 		const { client, secret } = await registerClient({

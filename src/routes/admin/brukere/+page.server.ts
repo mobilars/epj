@@ -5,6 +5,7 @@ import { endAllSessions } from '$srv/auth/session';
 import { revokeForUser } from '$srv/auth/tokens';
 import { isPlatformRole, isRole, ROLE_DEFINISJONER, TENANT_ROLES } from '$srv/authz/roles';
 import { log, actorFromContext } from '$srv/audit';
+import { validNorwegianNationalId } from '$srv/fhir/codesystems';
 import { newToken } from '$srv/util/ids';
 
 /** User administration. Every change to roles and status is logged. */
@@ -34,10 +35,25 @@ export const actions: Actions = {
 		const ctx = event.locals.auth;
 		if (!ctx?.permissions.has('admin:brukere')) return fail(403, { error: 'Ingen tilgang.' });
 		const form = await event.request.formData();
+		// Handed back on failure so the form fills itself in again.
+		const values = Object.fromEntries(
+			['brukernavn', 'navn', 'epost', 'hpr', 'fodselsnummer', 'practitionerId'].map((f) => [f, String(form.get(f) ?? '')])
+		);
 		const roles = form.getAll('roller').map(String).filter(isRole);
-		if (roles.some(isPlatformRole)) return fail(400, { error: 'Plattformroller tildeles fra plattformadministrasjonen.' });
+		if (roles.some(isPlatformRole)) {
+			return fail(400, { error: 'Plattformroller tildeles fra plattformadministrasjonen.', values });
+		}
 		const username = String(form.get('brukernavn') ?? '').trim();
-		if (!username) return fail(400, { error: 'Brukernavn må fylles ut.' });
+		if (!username) return fail(400, { error: 'Brukernavn må fylles ut.', values });
+
+		// Optional, but it is what a HelseID sign-in is matched on: with it
+		// recorded, the user's first sign-in attaches to this account and inherits
+		// the role. Not everyone at a practice holds an HPR number, so that cannot
+		// be the identifier - a fødselsnummer is.
+		const nationalId = String(form.get('fodselsnummer') ?? '').replace(/\s/g, '');
+		if (nationalId && !validNorwegianNationalId(nationalId)) {
+			return fail(400, { error: 'Ugyldig fødselsnummer (kontrollsiffer stemmer ikke).', values });
+		}
 
 		const temporary = newToken(9);
 		const user = await createUser({
@@ -45,6 +61,7 @@ export const actions: Actions = {
 			name: String(form.get('navn') ?? '').trim() || username,
 			email: String(form.get('epost') ?? '').trim() || undefined,
 			hprNumber: String(form.get('hpr') ?? '').trim() || undefined,
+			nationalId: nationalId || undefined,
 			practitionerId: String(form.get('practitionerId') ?? '').trim() || undefined,
 			password: temporary,
 			roles,

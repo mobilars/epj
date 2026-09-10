@@ -26,10 +26,15 @@
 		{ href: `/pasienter/${data.patientId}/legemidler`, text: 'Legemidler' },
 		{ href: `/pasienter/${data.patientId}/meldinger`, text: 'Meldinger' },
 		{ href: `/pasienter/${data.patientId}/oppgjor`, text: 'Oppgjør' },
-		{ href: `/pasienter/${data.patientId}/apper`, text: 'Apper' },
 		{ href: `/pasienter/${data.patientId}/logg`, text: 'Innsynslogg' },
 		...(data.canUtlevere ? [{ href: `/pasienter/${data.patientId}/utlevering`, text: 'Utlevering' }] : [])
 	]);
+
+	// The apps come from the root layout, and start straight from the tab bar
+	// with this patient in context - the Apper tab was a page you had to open
+	// before you could press start.
+	const apps = $derived((page.data.apps ?? []) as { clientId: string; name: string }[]);
+	let appsOpen = $state(false);
 </script>
 
 {#if data.patient}
@@ -59,6 +64,31 @@
 		{#each faner as f (f.href)}
 			<a href={f.href} aria-current={page.url.pathname === f.href ? 'page' : undefined}>{f.text}</a>
 		{/each}
+
+		<div class="nedtrekk">
+			<button
+				type="button"
+				class="fanelenke"
+				aria-expanded={appsOpen}
+				onclick={() => (appsOpen = !appsOpen)}
+			>
+				Apper ▾
+			</button>
+			{#if appsOpen}
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div class="nedtrekk-panel" onmouseleave={() => (appsOpen = false)}>
+					{#each apps as app (app.clientId)}
+						<form method="POST" action="/pasienter/{data.patientId}/apper?/start">
+							<input type="hidden" name="clientId" value={app.clientId} />
+							<button type="submit" class="menylenke">{app.name}</button>
+						</form>
+					{:else}
+						<span class="svak" style="padding: 0.4rem 0.55rem">Ingen apper er registrert.</span>
+					{/each}
+					<a href="/pasienter/{data.patientId}/apper">Alle apper og tilganger …</a>
+				</div>
+			{/if}
+		</div>
 	</nav>
 
 	<div class="journalflate">

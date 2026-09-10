@@ -232,6 +232,11 @@ tbody tr:hover { background: var(--flate-2); }
 	gap: 1.25rem;
 	align-items: center;
 	flex-wrap: wrap;
+	/* Above the sticky patient banner, which is also a stacking context and
+	   comes later in the document - without this the apps dropdown opened
+	   behind it. */
+	position: relative;
+	z-index: 60;
 }
 .topplinje a { color: #fff; text-decoration: none; font-weight: 500; padding: 0.3rem 0.5rem; border-radius: 4px; }
 .topplinje a:hover, .topplinje a[aria-current='page'] { background: rgb(255 255 255 / 15%); color: #fff; }
@@ -246,6 +251,14 @@ main.bred { max-width: none; }
    the content on a narrow screen rather than squeezing both. */
 .journalflate { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr) 22rem; align-items: start; }
 .journalinnhold { min-width: 0; }
+.faner { position: relative; z-index: 30; }
+/* The apps entry in the tab bar is a button, since starting one is a POST that
+   carries the patient. It must sit flush with the tabs beside it. */
+.faner .fanelenke {
+  background: none; border: none; font: inherit; cursor: pointer; color: var(--tekst-svak);
+  padding: 0.55rem 0.15rem; border-bottom: 3px solid transparent;
+}
+.faner .fanelenke:hover, .faner .fanelenke[aria-expanded="true"] { color: var(--primar); }
 .hurtigpanel { position: sticky; top: 1rem; display: flex; flex-direction: column; gap: 1rem; }
 .hurtigpanel h2 { font-size: 1rem; margin-top: 0; }
 .hurtigpanel textarea { width: 100%; }
@@ -271,7 +284,7 @@ main.bred { max-width: none; }
 .nedtrekk-panel .menylenke:hover, .nedtrekk-panel a:hover { background: var(--flate-2); }
 .nedtrekk { position: relative; display: inline-block; }
 .nedtrekk-panel {
-  position: absolute; top: 100%; left: 0; z-index: 20; min-width: 14rem;
+  position: absolute; top: 100%; left: 0; z-index: 61; min-width: 14rem;
   display: flex; flex-direction: column; gap: 0.15rem; padding: 0.35rem;
   background: var(--flate); border: 1px solid var(--kant); border-radius: 6px;
   box-shadow: 0 6px 18px rgb(0 0 0 / 18%);

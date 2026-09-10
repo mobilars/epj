@@ -117,10 +117,21 @@ describeIf('brukere, pålogging og sesjoner', () => {
 			return user;
 		};
 
-		it('krever totrinnsverifisering når det er slått på', async () => {
+		it('sender en konto uten autentiseringsapp til oppsett, ikke til kodefeltet', async () => {
+			// Riktig passord, men ingen hemmelighet å regne en kode fra. Å be om en
+			// kode her er en blindvei: kontoen kan da aldri brukes. Før dette var
+			// utfallet det samme som «skriv inn koden», og enhver bruker opprettet
+			// fra brukeradministrasjonen var utestengt for godt.
 			await layerLoggedIn();
 			const result = await logIn('lege', 'Testpassord1!');
-			expect(result.outcome).toBe('krever-mfa');
+			expect(result.outcome).toBe('krever-mfa-oppsett');
+		});
+
+		it('krever engangskode når kontoen har autentiseringsapp', async () => {
+			const user = await layerLoggedIn();
+			const secret = newTotpSecret();
+			expect(await activateMfa(user.id, secret, totpCode(secret))).toBe(true);
+			expect((await logIn('lege', 'Testpassord1!')).outcome).toBe('krever-mfa');
 		});
 
 		it('logger inn med riktig passord og engangskode', async () => {
@@ -190,7 +201,7 @@ describeIf('brukere, pålogging og sesjoner', () => {
 		it('lar passord byttes', async () => {
 			const user = await layerLoggedIn();
 			await setPassword(user.id, 'NyttPassord2?');
-			expect((await logIn('lege', 'NyttPassord2?')).outcome).toBe('krever-mfa');
+			expect((await logIn('lege', 'NyttPassord2?')).outcome).toBe('krever-mfa-oppsett');
 			expect((await logIn('lege', 'Testpassord1!')).outcome).toBe('feil-passord');
 		});
 

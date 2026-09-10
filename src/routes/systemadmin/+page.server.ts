@@ -43,12 +43,25 @@ export const load: PageServerLoad = async () => {
 	};
 };
 
+/** Accepts `example.no` as well as `https://example.no`. */
+function medProtokoll(value: string): string {
+	const trimmed = value.trim().replace(/\/$/, '');
+	if (!trimmed) return trimmed;
+	return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
 export const actions: Actions = {
 	create: async (event) => {
 		const ctx = event.locals.auth;
 		if (!ctx?.permissions.has('plattform:administrer')) return fail(403, { error: 'Ingen tilgang.' });
 		const form = await event.request.formData();
 		const text = (n: string) => String(form.get(n) ?? '').trim();
+
+		// Handed back on failure so the form can fill itself in again.
+		const values = Object.fromEntries(
+			['id', 'navn', 'organisasjonsnummer', 'herId', 'kommunenummer', 'vertsnavn', 'baseUrl', 'merknad',
+				'adminBrukernavn', 'adminNavn', 'adminFodselsnummer'].map((f) => [f, text(f)])
+		);
 
 		const result = await createTenant(
 			{
@@ -58,15 +71,18 @@ export const actions: Actions = {
 				herId: text('herId') || undefined,
 				municipality_code: text('kommunenummer') || undefined,
 				hostname: text('vertsnavn').toLowerCase() || undefined,
-				baseUrl: text('baseUrl').replace(/\/$/, ''),
+				// A bare hostname is what people type. Anything without a scheme gets
+				// https, so the form does not reject `legekontoret.apps.apus.no`.
+				baseUrl: medProtokoll(text('baseUrl')),
 				note: text('merknad') || undefined,
 				adminUsername: text('adminBrukernavn') || undefined,
-				adminName: text('adminNavn') || undefined
+				adminName: text('adminNavn') || undefined,
+				adminNationalId: text('adminFodselsnummer').replace(/\s/g, '') || undefined
 			},
 			actorFromContext(ctx)
 		);
 
-		if (!result.ok) return fail(400, { error: result.error });
+		if (!result.ok) return fail(400, { error: result.error, values });
 		return {
 			created_at: result.tenant.id,
 			adminUsername: result.adminUsername,

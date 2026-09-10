@@ -6,6 +6,7 @@ import { createSession } from '$srv/auth/session';
 import { isConfigured as healthIdConfigured } from '$srv/auth/helseid';
 import { log } from '$srv/audit';
 import { rateLimit } from '$srv/http';
+import { startMfaSetup } from './totp/+page.server';
 import { requireTenant } from '$srv/tenant/context';
 import { DEMO_PASSWORD, DEMO_TOTP_SECRET, demoUsersHere } from '$srv/auth/demo';
 
@@ -88,6 +89,11 @@ export const actions: Actions = {
 		const result = await logIn(username, password, oneTimeCode || undefined);
 
 		switch (result.outcome) {
+			case 'krever-mfa-oppsett':
+				// The password was right, but there is no authenticator yet. Asking
+				// for a code here would be a dead end, so take them through setup.
+				startMfaSetup(event.cookies, result.user.id, returnTo);
+				redirect(303, '/logg-inn/totp');
 			case 'krever-mfa':
 				return response(401, { requireIsMfa: true, username, error: 'Skriv inn engangskoden fra autentiseringsappen.' });
 			case 'laast':

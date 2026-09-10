@@ -3,7 +3,7 @@ import { withTenant, PLATFORM_TENANT, type Tenant } from './context';
 import { config } from '../config';
 import { createPartition, listPartitions } from './partition';
 import { log, type AuditActor } from '../audit';
-import { validOrganisationNumber } from '../fhir/codesystems';
+import { validNorwegianNationalId, validOrganisationNumber } from '../fhir/codesystems';
 import { createUser } from '../auth/users';
 import { newToken } from '../util/ids';
 
@@ -109,6 +109,8 @@ export interface NewTenant {
 	/** First administrator user in the organisation. */
 	adminUsername?: string;
 	adminName?: string;
+	/** Fødselsnummer, so the administrator can sign in with HelseID. */
+	adminNationalId?: string;
 	createdOf?: string;
 }
 
@@ -127,6 +129,9 @@ export type CreateResult =
 export async function createTenant(inValue: NewTenant, actor: AuditActor): Promise<CreateResult> {
 	if (!/^[a-z][a-z0-9-]{1,30}$/.test(inValue.id)) {
 		return { ok: false, error: 'Maskinnavnet må starte med en bokstav og bare inneholde små bokstaver, tall og bindestrek.' };
+	}
+	if (inValue.adminNationalId && !validNorwegianNationalId(inValue.adminNationalId)) {
+		return { ok: false, error: 'Ugyldig fødselsnummer for systemansvarlig (kontrollsiffer stemmer ikke).' };
 	}
 	if (!validOrganisationNumber(inValue.organisation_number)) {
 		return { ok: false, error: 'Ugyldig organisasjonsnummer (mod11-kontroll feilet).' };
@@ -176,13 +181,20 @@ export async function createTenant(inValue: NewTenant, actor: AuditActor): Promi
 		temporaryPassword = newToken(9);
 		// The user is created in the new organisation's context.
 		await withTenant(tenant, async () => {
-			await createUser({
+			const user = await createUser({
 				username: inValue.adminUsername as string,
 				name: inValue.adminName ?? 'Systemansvarlig',
 				password: temporaryPassword,
 				roles: ['systemansvarlig'],
 				createdOf: actor.userId ?? undefined
 			});
+			// With the national identity number recorded, the administrator's first
+			// HelseID sign-in attaches to this account and inherits the role. Without
+			// it they would arrive as a new user with no access, and the temporary
+			// password would be the only way in.
+			if (inValue.adminNationalId) {
+				await exec('UPDATE user_account SET national_id = $2 WHERE id = $1', [user.id, inValue.adminNationalId]);
+			}
 		});
 		adminUsername = inValue.adminUsername;
 	}

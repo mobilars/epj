@@ -39,13 +39,11 @@
 	 */
 	const patientId = $derived(page.data.patientId as string | undefined);
 	const mainMenuApps = $derived(data.apps.filter((a) => a.inMainMenu));
-	const otherApps = $derived(data.apps.filter((a) => !a.inMainMenu));
 
 	// The record is the working surface, and its tables are wide. Everything
 	// else keeps the narrower measure that is easier to read.
 	const wide = $derived(page.url.pathname.startsWith('/pasienter/'));
 
-	let appsOpen = $state(false);
 
 	// Marks the page as hydrated. The UI works without JavaScript, but hydration
 	// rewrites input values among other things. The marker lets automated tests -
@@ -97,33 +95,7 @@
 				{/if}
 			{/each}
 
-			{#if otherApps.length}
-				<div class="nedtrekk">
-					<button
-						type="button"
-						class="menylenke"
-						aria-expanded={appsOpen}
-						onclick={() => (appsOpen = !appsOpen)}
-					>
-						Apper ▾
-					</button>
-					{#if appsOpen}
-						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<div class="nedtrekk-panel" onmouseleave={() => (appsOpen = false)}>
-							{#each otherApps as app (app.clientId)}
-								{#if patientId}
-									<form method="POST" action="/pasienter/{patientId}/apper?/start">
-										<input type="hidden" name="clientId" value={app.clientId} />
-										<button type="submit" class="menylenke">{app.name}</button>
-									</form>
-								{:else}
-									<a href="/pasienter">{app.name}</a>
-								{/if}
-							{/each}
-						</div>
-					{/if}
-				</div>
-			{/if}
+
 			<div class="hoyre-del">
 				<span>
 					{data.user.name}

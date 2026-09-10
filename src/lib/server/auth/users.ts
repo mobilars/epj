@@ -79,6 +79,8 @@ export interface NewUser {
 	name: string;
 	email?: string;
 	hprNumber?: string;
+	/** Fødselsnummer. Lets the user sign in with HelseID, which identifies by it. */
+	nationalId?: string;
 	practitionerId?: string;
 	password?: string;
 	roles: Role[];
@@ -91,12 +93,13 @@ export async function createUser(inValue: NewUser): Promise<User> {
 	return transaction(async () => {
 		const id = newId();
 		await exec(
-			`INSERT INTO user_account (id, tenant_id, username, name, email, hpr_number, practitioner_id, password_hash, must_change_password)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+			`INSERT INTO user_account (id, tenant_id, username, name, email, hpr_number, national_id, practitioner_id,
+				password_hash, must_change_password)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
 			[
 				id, inValue.tenantId === undefined ? requireTenant().id : inValue.tenantId,
 				inValue.username, inValue.name, inValue.email ?? null, inValue.hprNumber ?? null,
-				inValue.practitionerId ?? null, inValue.password ? hashPassword(inValue.password) : null, inValue.password ? true : false
+				inValue.nationalId ?? null, inValue.practitionerId ?? null, inValue.password ? hashPassword(inValue.password) : null, inValue.password ? true : false
 			]
 		);
 		for (const role of inValue.roles) {
@@ -148,6 +151,13 @@ export async function setPassword(userId: string, password: string, mustByttes =
 export type Innloggingsresultat =
 	| { outcome: 'ok'; user: User; roles: Role[]; amr: string }
 	| { outcome: 'krever-mfa'; user: User }
+	/**
+	 * The password was right, but the account has no two-factor set up and the
+	 * installation requires it. Asking for a code here is a dead end - there is
+	 * no authenticator to read one from yet - so the user must be taken through
+	 * enrolment instead.
+	 */
+	| { outcome: 'krever-mfa-oppsett'; user: User }
 	| { outcome: 'feil-passord' }
 	| { outcome: 'laast'; to: string }
 	| { outcome: 'sperret' }
@@ -202,7 +212,7 @@ export async function logIn(username: string, password: string, totp?: string): 
 			return registerError();
 		}
 	} else if (config.security.requireMfa) {
-		return { outcome: 'krever-mfa', user: row };
+		return { outcome: 'krever-mfa-oppsett', user: row };
 	}
 
 	await exec('UPDATE user_account SET failed_attempts = 0, locked_until = NULL, last_login = now() WHERE id = $1', [row.id]);

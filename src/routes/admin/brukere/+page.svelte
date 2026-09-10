@@ -22,6 +22,11 @@
 			<div style="flex:1 1 12rem"><label for="brukernavn">Brukernavn</label><input id="brukernavn" name="brukernavn" required /></div>
 			<div style="flex:1 1 14rem"><label for="navn">Navn</label><input id="navn" name="navn" /></div>
 			<div style="flex:0 0 10rem"><label for="hpr">HPR-nummer</label><input id="hpr" name="hpr" /></div>
+			<div style="flex:0 0 12rem">
+				<label for="fodselsnummer">Fødselsnummer</label>
+				<input id="fodselsnummer" name="fodselsnummer" inputmode="numeric" />
+				<small class="svak">Gjør at brukeren kan logge inn med HelseID.</small>
+			</div>
 			<div style="flex:1 1 14rem"><label for="practitionerId">Practitioner-id</label><input id="practitionerId" name="practitionerId" /></div>
 		</div>
 		<fieldset>

@@ -1,6 +1,16 @@
 <script lang="ts">
 	let { data, form } = $props();
 
+	/**
+	 * What was typed before a failed submission.
+	 *
+	 * A validation failure must not empty the form: re-typing an organisation
+	 * number and an address because a check digit was wrong is how people give
+	 * up on a screen. The action returns the values it received, and every field
+	 * reads its own back from there.
+	 */
+	const was = (field: string) => (form as { values?: Record<string, string> } | null)?.values?.[field] ?? '';
+
 	const statustekst: Record<string, string> = {
 		active: 'Aktiv',
 		suspendert: 'Suspendert',
@@ -54,29 +64,36 @@
 			</div>
 			<div style="flex:1 1 16rem">
 				<label for="navn">Virksomhetens navn</label>
-				<input id="navn" name="navn" required placeholder="Legekontoret AS" />
+				<input id="navn" name="navn" required placeholder="Legekontoret AS" value={was('navn')} />
 			</div>
 			<div style="flex:0 0 11rem">
 				<label for="organisasjonsnummer">Organisasjonsnummer</label>
-				<input id="organisasjonsnummer" name="organisasjonsnummer" required inputmode="numeric" />
+				<input id="organisasjonsnummer" name="organisasjonsnummer" required inputmode="numeric" value={was('organisasjonsnummer')} />
 			</div>
 			<div style="flex:0 0 9rem">
 				<label for="herId">HER-id</label>
-				<input id="herId" name="herId" inputmode="numeric" />
+				<input id="herId" name="herId" inputmode="numeric" value={was('herId')} />
 			</div>
 			<div style="flex:0 0 9rem">
 				<label for="kommunenummer">Kommunenummer</label>
-				<input id="kommunenummer" name="kommunenummer" inputmode="numeric" />
+				<input id="kommunenummer" name="kommunenummer" inputmode="numeric" value={was('kommunenummer')} />
 			</div>
 		</div>
 		<div class="rad">
 			<div style="flex:1 1 16rem">
 				<label for="vertsnavn">Vertsnavn</label>
-				<input id="vertsnavn" name="vertsnavn" placeholder="legekontoret.epj.example.no" />
+				<input id="vertsnavn" name="vertsnavn" placeholder="legekontoret.epj.example.no" value={was('vertsnavn')} />
 			</div>
 			<div style="flex:1 1 18rem">
 				<label for="baseUrl">Utadvendt adresse (issuer)</label>
-				<input id="baseUrl" name="baseUrl" required type="url" placeholder="https://legekontoret.epj.example.no" />
+				<input
+					id="baseUrl"
+					name="baseUrl"
+					required
+					placeholder="legekontoret.epj.example.no"
+					value={was('baseUrl')}
+				/>
+				<small class="svak">Uten https:// blir det lagt til.</small>
 			</div>
 		</div>
 		<fieldset>
@@ -88,17 +105,27 @@
 			<div class="rad">
 				<div style="flex:1 1 12rem">
 					<label for="adminBrukernavn">Brukernavn</label>
-					<input id="adminBrukernavn" name="adminBrukernavn" />
+					<input id="adminBrukernavn" name="adminBrukernavn" value={was('adminBrukernavn')} />
 				</div>
 				<div style="flex:1 1 14rem">
 					<label for="adminNavn">Navn</label>
-					<input id="adminNavn" name="adminNavn" />
+					<input id="adminNavn" name="adminNavn" value={was('adminNavn')} />
+				</div>
+				<div style="flex:0 0 12rem">
+					<label for="adminFodselsnummer">Fødselsnummer</label>
+					<input
+						id="adminFodselsnummer"
+						name="adminFodselsnummer"
+						inputmode="numeric"
+						value={was('adminFodselsnummer')}
+					/>
+					<small class="svak">Gjør at brukeren kan logge inn med HelseID.</small>
 				</div>
 			</div>
 		</fieldset>
 		<div>
 			<label for="merknad">Merknad</label>
-			<input id="merknad" name="merknad" />
+			<input id="merknad" name="merknad" value={was('merknad')} />
 		</div>
 		<button type="submit" class="primar">Opprett virksomhet</button>
 	</form>
