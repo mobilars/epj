@@ -1,6 +1,6 @@
 # Testing
 
-Kort oppsummert: **294 enhets- og integrasjonstester** og **36
+Kort oppsummert: **346 enhets- og integrasjonstester** og **49
 ende-til-ende-tester**. Enhetstestene kjører mot ekte PostgreSQL, ikke mot en
 etterlikning. Ende-til-ende-testene kjører mot hele stakken i en ekte nettleser.
 
@@ -46,11 +46,15 @@ PLAYWRIGHT_CHROMIUM_PATH=/sti/til/chrome npm run test:e2e
 | `tests/oauth.test.ts` | Hele OAuth- og SMART-flyten, inkludert angrepsscenarioer |
 | `tests/integrasjoner.test.ts` | SFM, NHN-kø, Adresseregisteret, Helfo |
 | `tests/brukere.test.ts` | Roller, pålogging, sesjoner, ratebegrensning |
+| `tests/multitenancy.test.ts` | Virksomhetsregister, partisjoner og isolasjon mellom virksomheter |
+| `tests/utlevering.test.ts` | Journalutskrift i FHIR-dokument og lesbart format |
 | `e2e/palogging.spec.ts` | Pålogging i nettleser |
 | `e2e/journal.spec.ts` | Pasientsøk, notat, feilføring, forskrivning, innsynslogg |
 | `e2e/tilgang.spec.ts` | Tjenstlig behov, sperring, nødrett, rollegrenser |
 | `e2e/smart.spec.ts` | Hele SMART-flyten, og hva appen ikke får |
 | `e2e/oppgjor.spec.ts` | Takstvalg, regelbrudd, fritak, innsending |
+| `e2e/utlevering.spec.ts` | Nedlasting av journal i begge formater, og hvem som ikke får |
+| `e2e/systemadmin.spec.ts` | Opprettelse og suspensjon av virksomheter, og hvem som ikke slipper inn |
 
 ## Prinsipper
 
@@ -82,9 +86,14 @@ snakker den delen av FHIR REST som klienten faktisk bruker: les, vread, søk via
 `$validate` og `metadata`. Den finnes for at testene skal kunne kjøre uten
 Docker, og gjør at vokteren testes over ekte HTTP.
 
-Den er **ikke** en FHIR-server for produksjon. CI-jobben `integrasjon-hapi`
-kjører den samme testsuiten mot ekte `hapiproject/hapi`, slik at kontrakten mot
-den virkelige serveren også blir verifisert.
+Dobbelen er også partisjonsbevisst: den legger ressursene i hvert sitt lager per
+partisjon og svarer på `$partition-management`-operasjonene, slik at isolasjonen
+mellom virksomheter kan prøves over ekte HTTP.
+
+Den er **ikke** en FHIR-server for produksjon. CI-jobbene `integrasjon-hapi` og
+`integrasjon-hapi-partisjonert` kjører testene mot ekte `hapiproject/hapi` - med
+og uten partisjonering - slik at kontrakten mot den virkelige serveren også blir
+verifisert.
 
 ## Hva testene har avdekket
 
@@ -106,8 +115,18 @@ produksjon:
    riktig ut, men virket ikke i nettleseren.
 7. **En lege kunne ikke gi en app `patient/`-scope**, fordi rollene beskrives med
    `user/`-scope og innsnevringen krevde eksakt samme kontekst.
+8. **Ingen virksomhet kunne opprettes på en ny installasjon.** Plattformen hadde
+   partisjons-id 2147483647, og neste ledige id ble regnet ut som
+   `MAX(partisjon_id) + 1` - som gikk ut over heltallsområdet. Systemvirksomheter
+   har nå ingen partisjon i det hele tatt.
+9. **Standardvirksomheten hadde alltid adressen `http://localhost:5173`**, fordi
+   migrasjonen la den inn og SQL ikke kan lese miljøvariabler. Enhver
+   installasjon på en annen adresse fikk feil `issuer` i OAuth-metadata og feil
+   `iss` ved app-oppstart, som ga avvisning i `aud`-kontrollen.
+10. **Standardvirksomhetens partisjon ble aldri opprettet i HAPI.** Migrasjonen
+    kan ikke opprette den - den ligger i en annen tjeneste.
 
-Punkt 6 og 7 kunne bare finnes av ende-til-ende-tester i en ekte nettleser.
+Punkt 6, 7 og 9 kunne bare finnes av ende-til-ende-tester i en ekte nettleser.
 
 ## Kontinuerlig integrasjon
 
@@ -117,4 +136,8 @@ Punkt 6 og 7 kunne bare finnes av ende-til-ende-tester i en ekte nettleser.
 2. enhets- og integrasjonstester mot PostgreSQL,
 3. ende-til-ende-tester mot applikasjonen,
 4. integrasjonstester mot ekte HAPI FHIR R5,
-5. produksjonsbygg.
+5. isolasjonstestene mot en HAPI-server med partisjonering slått på,
+6. produksjonsbygg.
+
+Punkt 4 og 5 er ikke kjørt i utviklingsmiljøet - det hadde ingen tilgjengelig
+Docker-motor. Se [åpne punkter](apne-punkter.md).

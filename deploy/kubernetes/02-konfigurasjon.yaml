@@ -1,0 +1,46 @@
+# ---------------------------------------------------------------------------
+# Konfigurasjon som ikke er hemmelig.
+#
+# Verdiene her er satt for et produksjonsmiljø: ingen testinnlogging, HTTPS
+# påkrevd, og ukjente vertsnavn avvises. Endre EPJ_BASE_URL og
+# EPJ_PLATTFORM_VERTSNAVN til dine egne.
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: epj-konfigurasjon
+  namespace: epj
+data:
+  NODE_ENV: production
+  PORT: '3000'
+
+  # Kanonisk utadvendt adresse for standardvirksomheten. Hver virksomhet har i
+  # tillegg sin egen base_url i virksomhetsregisteret.
+  EPJ_BASE_URL: https://legekontoret.example.no
+
+  # Kliniske data. HAPI nås bare internt i klyngen.
+  EPJ_HAPI_BASE_URL: http://hapi:8080/fhir
+  EPJ_HAPI_MULTITENANT: 'true'
+  EPJ_HAPI_TIMEOUT_MS: '20000'
+
+  # Virksomhet og plattform.
+  EPJ_STANDARD_TENANT: standard
+  EPJ_PLATTFORM_VERTSNAVN: admin.example.no
+  EPJ_TILLAT_UKJENT_VERTSNAVN: 'false'
+
+  # Sikkerhet.
+  EPJ_HTTPS_ONLY: 'true'
+  EPJ_REQUIRE_MFA: 'true'
+  EPJ_SESSION_IDLE_SECONDS: '1800'
+  EPJ_MAX_FAILED_LOGINS: '5'
+
+  # Pålogging: HelseID er hovedveien. Testinnlogging skal være av.
+  EPJ_TESTINNLOGGING: 'false'
+  EPJ_VIS_DEMOBRUKERE: 'false'
+  EPJ_HELSEID_ENABLED: 'true'
+  EPJ_HELSEID_ISSUER: https://helseid-sts.nhn.no
+  EPJ_HELSEID_CLIENT_ID: ''
+  EPJ_HELSEID_KEY_ID: ''
+
+  # Integrasjoner.
+  EPJ_INTEGRASJON_MODUS: live

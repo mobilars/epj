@@ -37,11 +37,31 @@ export async function ventPaHydrering(page: Page): Promise<void> {
 	await page.waitForFunction(() => document.documentElement.dataset.hydrert === 'ja');
 }
 
+/**
+ * Adressen plattformadministrasjonen nås på.
+ *
+ * Virksomheten utledes av vertsnavnet, så plattformbrukeren må logge inn på
+ * plattformens eget vertsnavn - ikke på et legekontors. I testmiljøet peker
+ * begge navnene på den samme serveren.
+ */
+export const PLATTFORM_URL = `http://localhost:${process.env.E2E_PORT ?? 4173}`;
+
 export async function loggInn(page: Page, brukernavn: string, passord = 'Testpassord1!'): Promise<void> {
 	await page.goto('/logg-inn');
 	await ventPaHydrering(page);
 	await page.getByLabel('Brukernavn').fill(brukernavn);
 	await page.getByLabel('Passord').fill(passord);
+	await page.getByLabel('Engangskode').fill(totp());
+	await page.getByRole('button', { name: 'Logg inn' }).click();
+	await expect(page.getByRole('navigation', { name: 'Hovedmeny' })).toBeVisible();
+}
+
+/** Logger inn som plattformadministrator, på plattformens vertsnavn. */
+export async function loggInnPlattform(page: Page, brukernavn = 'systemeier'): Promise<void> {
+	await page.goto(`${PLATTFORM_URL}/logg-inn`);
+	await ventPaHydrering(page);
+	await page.getByLabel('Brukernavn').fill(brukernavn);
+	await page.getByLabel('Passord').fill('Testpassord1!');
 	await page.getByLabel('Engangskode').fill(totp());
 	await page.getByRole('button', { name: 'Logg inn' }).click();
 	await expect(page.getByRole('navigation', { name: 'Hovedmeny' })).toBeVisible();

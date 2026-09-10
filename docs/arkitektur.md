@@ -138,6 +138,73 @@ lege ──skjema──▶ forskriv() ──▶ SFM (HelseID-maskintoken)
                                   └── AuditEvent + rad i sfm_synk
 ```
 
+## Multitenancy
+
+Én installasjon betjener flere legekontorer. Skillet går på to steder, og det er
+med vilje to forskjellige mekanismer:
+
+**Kliniske data skilles av HAPI.** Hver virksomhet har sin egen partisjon, og med
+`URL_BASED` tenantidentifikasjon inngår partisjonsnavnet i FHIR-URL-en:
+`/fhir/legekontor-a/Patient/123`. Referanser på tvers av partisjoner er slått av
+i serverkonfigurasjonen, så en ressurs i én virksomhet kan ikke peke inn i en
+annen - heller ikke ved en feil i vår kode.
+
+**Alt annet skilles av `tenant_id`.** Brukere, roller, sesjoner, tokens,
+sikkerhetslogg, meldinger, oppgjør og signeringsnøkler har kolonnen, og den er
+`NOT NULL` på alle tabeller som kan inneholde virksomhetsdata.
+
+Virksomheten en forespørsel gjelder utledes av **vertsnavnet** i
+`hooks.server.ts`, og legges i en `AsyncLocalStorage`-kontekst for resten av
+forespørselen. Brukeren velger aldri virksomhet selv - da ville valget vært en
+angrepsflate. `krevTenant()` kaster når konteksten mangler; det er med vilje, så
+en spørring som skulle vært avgrenset feiler høylytt i test i stedet for stille
+å hente andres data.
+
+Konsekvenser som er verdt å merke seg:
+
+- Brukernavn og HelseID-identitet er unike *innenfor* virksomheten. Samme person
+  kan arbeide ved flere legekontorer og har da én konto i hvert.
+- Sikkerhetsloggens hash-kjede er per virksomhet. Hver virksomhet kan verifisere
+  sin egen kjede uten å se de andres, og tukling i én underkjenner ikke de andre.
+- Hver virksomhet har sine egne signeringsnøkler og sin egen OAuth-`issuer`.
+  `.well-known`-dokumentene svarer med virksomhetens egne adresser.
+- Ratebegrensningen nøkles med virksomheten, så én virksomhets trafikk kan ikke
+  stenge ute en annen.
+
+`/systemadmin` er det eneste grensesnittet som ser på tvers. Det gir aldri
+klinisk innsyn: rollen `systemeier` har ingen scopes, så FHIR-fasaden avviser den
+uansett hva den skulle finne på å spørre om. I produksjon ligger det på sitt eget
+vertsnavn.
+
+**Hvorfor ikke Row Level Security?** RLS i PostgreSQL ville flyttet garantien fra
+vår kode til databasen, som er sterkere. Det ble valgt bort fordi
+virksomhetsvariabelen må settes på tilkoblingen, og da må tilkoblingen holdes
+gjennom hele forespørselen - inkludert ventetiden på SFM, NHN og Helfo. Det ville
+gjort tilkoblingsbudsjettet til en funksjon av hvor treg Helsenettet er den
+dagen. Valget er derfor eksplisitt filtrering overalt, med isolasjonstester som
+skriver i én virksomhet og leter i en annen (`tests/multitenancy.test.ts`).
+Vurderingen bør tas opp igjen hvis tilkoblingsmodellen endres.
+
+## Utlevering av journal
+
+Pasienten har rett til innsyn i og kopi av egen journal, og journalen skal kunne
+overføres til en annen behandler. `journal/utlevering.ts` bygger begge deler av
+det *samme* uttrekket, slik at den lesbare og den maskinlesbare utgaven ikke kan
+si forskjellige ting:
+
+- et FHIR-dokument (`Bundle` av typen `document` med en `Composition` først),
+  delt i seksjoner med LOINC-koder der det finnes en etablert kode,
+- en lesbar utskrift i HTML eller ren tekst.
+
+Uttrekket hentes gjennom vokteren. En utlevering gir derfor aldri mer enn den som
+utleverer selv har tilgang til - sperret materiale faller bort på samme måte som
+ellers, og utskriften sier fra om at det kan ha skjedd. Hjemmelen velges i
+skjemaet og havner som `purposeOfUse` i sikkerhetsloggen, sammen med mottaker,
+periode og en telling av hva som faktisk ble utlevert.
+
+Uttrekket mellomlagres ikke. Filen bygges på nytt for hver nedlasting, så
+helseopplysninger blir aldri liggende utenfor det kliniske lageret.
+
 ## Valg som er verdt å begrunne
 
 **FHIR R5, ikke R4.** R5 har den modellen systemet trenger for `Encounter`,
@@ -187,6 +254,12 @@ src/lib/server/
     jws.ts               ES256/RS256/PS256 mot node:crypto
     totp.ts              RFC 6238
   audit/                 hash-lenket sikkerhetslogg
+  journal/
+    utlevering.ts        journalutskrift i FHIR-dokument og lesbart format
+  tenant/
+    kontekst.ts          virksomhetskontekst (AsyncLocalStorage)
+    tenant.ts            virksomhetsregisteret
+    partisjon.ts         partisjonsadministrasjon i HAPI
   integrasjoner/
     sfm/                 Sentral forskrivningsmodul
     nhn/                 hodemelding, fagmeldinger, AppRec, kø
@@ -196,5 +269,7 @@ src/routes/
   oauth/                 autorisasjon, token, introspeksjon, JWKS
   .well-known/           SMART- og OpenID-oppsett
   pasienter/[id]/        journalen
+  pasienter/[id]/utlevering/  utlevering av journal
+  systemadmin/           plattformadministrasjon, på tvers av virksomheter
   meldinger/, oppgjor/, admin/
 ```

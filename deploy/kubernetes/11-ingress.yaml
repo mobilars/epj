@@ -1,0 +1,80 @@
+# ---------------------------------------------------------------------------
+# Inngang.
+#
+# Ett vertsnavn per virksomhet. Virksomheten en forespørsel gjelder utledes av
+# vertsnavnet, aldri av noe klienten kan velge, så dette er også
+# virksomhetsavgrensningen: et vertsnavn som ikke står i virksomhetsregisteret
+# blir avvist av applikasjonen.
+#
+# Inngangskontrolleren MÅ sende videre den opprinnelige Host-headeren.
+# ingress-nginx gjør det som standard.
+# ---------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: epj
+  namespace: epj
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+    # Journalen setter sine egne sikkerhetsheadere; ingressen skal ikke
+    # overstyre dem.
+    nginx.ingress.kubernetes.io/proxy-body-size: 16m
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - legekontoret-a.example.no
+        - legekontoret-b.example.no
+      secretName: epj-tls
+  rules:
+    - host: legekontoret-a.example.no
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: epj
+                port:
+                  number: 80
+    - host: legekontoret-b.example.no
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: epj
+                port:
+                  number: 80
+---
+# Plattformadministrasjonen ligger på sitt eget vertsnavn, og bør i tillegg
+# begrenses på nettverksnivå. Den ser på tvers av virksomheter, men gir aldri
+# klinisk innsyn: rollen `systemeier` har ingen scopes.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: epj-plattform
+  namespace: epj
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+    nginx.ingress.kubernetes.io/whitelist-source-range: '10.0.0.0/8'
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - admin.example.no
+      secretName: epj-plattform-tls
+  rules:
+    - host: admin.example.no
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: epj
+                port:
+                  number: 80

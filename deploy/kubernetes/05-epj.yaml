@@ -1,0 +1,150 @@
+# ---------------------------------------------------------------------------
+# Journalen.
+#
+# Den eneste komponenten som er tilgjengelig utenfra. Den håndhever
+# tilgangskontroll, skriver sikkerhetslogg og er OAuth-server for SMART-apper.
+#
+# Applikasjonen er tilstandsløs: sesjoner, tokens og ratebegrensning ligger i
+# PostgreSQL. Den kan derfor skaleres fritt.
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: epj
+  namespace: epj
+spec:
+  type: ClusterIP
+  selector:
+    app: epj
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: epj
+  namespace: epj
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: epj
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: epj
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      # Sprer instansene, slik at én node som faller ikke tar hele journalen.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: epj
+      containers:
+        - name: epj
+          image: ghcr.io/mobilars/epj:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: epj-konfigurasjon
+          env:
+            - name: EPJ_DATA_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: epj-hemmeligheter
+                  key: EPJ_DATA_KEY
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: epj-hemmeligheter
+                  key: POSTGRES_PASSWORD
+            - name: EPJ_DATABASE_URL
+              value: postgres://epj:$(POSTGRES_PASSWORD)@postgres:5432/epj
+            - name: EPJ_HELSEID_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: epj-hemmeligheter
+                  key: EPJ_HELSEID_PRIVATE_KEY
+          ports:
+            - containerPort: 3000
+          startupProbe:
+            httpGet:
+              path: /api/helse
+              port: 3000
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /api/helse
+              port: 3000
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/helse
+              port: 3000
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: epj
+  namespace: epj
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: epj
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: epj
+  namespace: epj
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: epj
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

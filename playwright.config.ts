@@ -25,6 +25,10 @@ const miljo = {
 	EPJ_ORG_NAVN: 'Storgata Legesenter',
 	EPJ_ORG_HER_ID: '8000001',
 	EPJ_ORG_ORGNR: '994598759',
+	// Plattformadministrasjonen nås på sitt eget vertsnavn. Testene kjører mot
+	// én server, så de to navnene peker på samme adresse: virksomhetene på
+	// 127.0.0.1, plattformen på localhost.
+	EPJ_PLATTFORM_VERTSNAVN: 'localhost',
 	// Testene logger inn på nytt for hver test. Grensene heves slik at
 	// ratebegrensningen ikke slår inn - den testes for seg i enhetstestene.
 	EPJ_MAX_FAILED_LOGINS: '50',
@@ -87,14 +91,16 @@ export default defineConfig({
 			url: `http://127.0.0.1:${FHIR_PORT}/fhir/metadata`,
 			// Databasen nullstilles for hver kjøring, så serverne må starte på nytt
 			// og ikke gjenbrukes med tilkoblinger til den gamle databasen.
-			reuseExistingServer: false,
+			// E2E_GJENBRUK=1 er for feilsøking: da kan serverne startes for hånd,
+			// slik at loggen deres er synlig mens testene kjører.
+			reuseExistingServer: process.env.E2E_GJENBRUK === '1',
 			timeout: 60_000,
 			env: miljo
 		},
 		{
 			command: `npx vite dev --port ${APP_PORT} --host 127.0.0.1`,
 			url: `http://127.0.0.1:${APP_PORT}/logg-inn`,
-			reuseExistingServer: false,
+			reuseExistingServer: process.env.E2E_GJENBRUK === '1',
 			timeout: 120_000,
 			env: miljo
 		}

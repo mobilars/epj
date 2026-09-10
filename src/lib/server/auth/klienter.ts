@@ -1,5 +1,5 @@
 import { en, exec, query } from '../db';
-import { krevTenant } from '../tenant/kontekst';
+import { krevTenant, utstederFor } from '../tenant/kontekst';
 import { hashPassord, likeStrenger, tokenHash, verifiserPassord } from '../util/crypto';
 import { nyId, nyToken } from '../util/ids';
 import { verifiser as verifiserJws, dekodUtenVerifisering, type Jwk } from './jws';
@@ -144,8 +144,11 @@ export async function autentiserKlient(
 		try {
 			const payload = verifiserJws(assertion as string, nokler);
 			if (payload.iss !== clientId || payload.sub !== clientId) return { ok: false, feil: 'Ugyldig iss/sub i client_assertion' };
+			// Tokenendepunktet er virksomhetens eget. En assertion utstedt mot én
+			// virksomhet skal ikke kunne brukes mot en annen.
+			const utsteder = utstederFor(krevTenant());
 			const aud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-			if (!aud.includes(`${config.baseUrl}/oauth/token`) && !aud.includes(config.issuer)) {
+			if (!aud.includes(`${utsteder}/oauth/token`) && !aud.includes(utsteder)) {
 				return { ok: false, feil: 'Ugyldig aud i client_assertion' };
 			}
 			if (typeof payload.jti !== 'string' || await jtiBrukt(payload.jti)) {

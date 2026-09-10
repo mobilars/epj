@@ -5,6 +5,7 @@ import { opprettLaunch } from '$srv/auth/oauth';
 import { beskrivScope } from '$srv/authz/scopes';
 import { config } from '$srv/config';
 import { logg, aktorFraKontekst } from '$srv/audit';
+import { fhirBaseFor, krevTenant } from '$srv/tenant/kontekst';
 
 /**
  * SMART-apper startet fra journalen (EHR launch).
@@ -59,7 +60,9 @@ export const actions: Actions = {
 		);
 
 		const url = new URL(klient.launch_url);
-		url.searchParams.set('iss', config.fhirBaseUrl);
+		// `iss` er virksomhetens eget FHIR-endepunkt. Appen henter oppsettet
+		// derfra, og sender det tilbake som `aud` i autorisasjonen.
+		url.searchParams.set('iss', fhirBaseFor(krevTenant()));
 		url.searchParams.set('launch', launchId);
 		return { ok: true, url: url.toString(), launchId, appNavn: klient.navn };
 	}

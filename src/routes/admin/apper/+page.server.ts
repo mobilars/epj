@@ -116,7 +116,7 @@ export const actions: Actions = {
 		const launchId = await opprettLaunch({ clientId, userId: ctx.userId, patientId });
 		return {
 			ok: true,
-			launchUrl: `${config.baseUrl}/oauth/authorize?...&launch=${launchId}&aud=${encodeURIComponent(config.fhirBaseUrl)}`,
+			launchUrl: `${utstederFor(krevTenant())}/oauth/authorize?...&launch=${launchId}&aud=${encodeURIComponent(fhirBaseFor(krevTenant()))}`,
 			launchId
 		};
 	}

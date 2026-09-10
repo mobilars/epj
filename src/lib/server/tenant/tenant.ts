@@ -1,5 +1,6 @@
 import { en, exec, query, transaction } from '../db';
-import { medTenant, type Tenant } from './kontekst';
+import { medTenant, PLATTFORM_TENANT, type Tenant } from './kontekst';
+import { config } from '../config';
 import { opprettPartisjon, listPartisjoner } from './partisjon';
 import { logg, type AuditAktor } from '../audit';
 import { gyldigOrganisasjonsnummer } from '../fhir/kodeverk';
@@ -16,6 +17,73 @@ import { nyToken } from '../util/ids';
 
 const FELT = `id, navn, organisasjonsnummer, her_id, kommunenummer, vertsnavn, base_url,
 	partisjon_id, status, merknad, opprettet`;
+
+/**
+ * Holder standardvirksomheten i takt med konfigurasjonen.
+ *
+ * Migrasjonen legger inn standardvirksomheten med en plassholderadresse, siden
+ * SQL ikke kan lese miljøvariabler. Uten dette ville en installasjon på en
+ * annen adresse enn utviklingsmiljøets fått feil `issuer` i OAuth-metadata, og
+ * feil `iss` ved app-oppstart - noe som gir avvisning i `aud`-kontrollen.
+ *
+ * Synkroniseringen stopper i det øyeblikket noen redigerer virksomheten i
+ * plattformadministrasjonen: da er `oppdatert` nyere enn `opprettet`, og
+ * konfigurasjonen skal ikke overstyre et bevisst valg.
+ *
+ * Kjøres ved oppstart, etter migrasjonene.
+ */
+export async function sikreStandardvirksomhet(): Promise<void> {
+	const utsteder = config.baseUrl.replace(/\/$/, '');
+	await exec(
+		`UPDATE tenant SET
+			navn = $2, organisasjonsnummer = $3, her_id = $4, kommunenummer = $5, base_url = $6
+		 WHERE id = $1 AND oppdatert = opprettet
+		   AND (navn, organisasjonsnummer, her_id, kommunenummer, base_url)
+		       IS DISTINCT FROM ($2, $3, $4, $5, $6)`,
+		[
+			config.tenant.standard,
+			config.organisasjon.navn,
+			config.organisasjon.organisasjonsnummer,
+			config.organisasjon.herId,
+			config.organisasjon.kommunenummer,
+			utsteder
+		]
+	);
+	// Plattformadministrasjonen nås på sitt eget vertsnavn når det er satt.
+	// Porten beholdes, slik at et testmiljø på en annen port virker.
+	let plattformUrl = utsteder;
+	if (config.tenant.plattformVertsnavn) {
+		const adresse = new URL(utsteder);
+		adresse.hostname = config.tenant.plattformVertsnavn;
+		plattformUrl = adresse.origin;
+	}
+	await exec(
+		`UPDATE tenant SET base_url = $2, vertsnavn = $3
+		 WHERE id = $1 AND oppdatert = opprettet
+		   AND (base_url, vertsnavn) IS DISTINCT FROM ($2, $3)`,
+		[PLATTFORM_TENANT, plattformUrl, config.tenant.plattformVertsnavn || null]
+	);
+
+	// Standardvirksomheten trenger sin partisjon i HAPI på samme måte som
+	// virksomheter opprettet fra plattformadministrasjonen. Migrasjonen kan ikke
+	// opprette den - den ligger i en annen tjeneste.
+	//
+	// Best effort: er FHIR-serveren nede ved oppstart, skal ikke journalen nekte
+	// å starte. Avviket vises i plattformoversikten, og retter seg selv ved neste
+	// oppstart når serveren er tilbake.
+	if (config.fhirServer.multitenant) {
+		const standard = await hentTenant(config.tenant.standard);
+		if (standard?.partisjon_id) {
+			const partisjoner = await listPartisjoner();
+			if (partisjoner.ok && !partisjoner.partisjoner.some((p) => p.navn === standard.id)) {
+				const svar = await opprettPartisjon(standard.partisjon_id, standard.id, standard.navn);
+				if (!svar.ok) {
+					console.warn(`[oppstart] klarte ikke å opprette partisjonen «${standard.id}»: ${svar.feil}`);
+				}
+			}
+		}
+	}
+}
 
 export async function hentTenant(id: string): Promise<Tenant | null> {
 	return en<Tenant>(`SELECT ${FELT} FROM tenant WHERE id = $1`, [id]);

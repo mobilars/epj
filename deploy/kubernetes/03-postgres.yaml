@@ -1,0 +1,123 @@
+# ---------------------------------------------------------------------------
+# PostgreSQL.
+#
+# Et enkelt, selvdriftet oppsett med én instans. Det er nok til å komme i gang,
+# men et journalsystem i drift bør bruke en styrt database med
+# punkt-i-tid-gjenoppretting og synkron replikering - CloudNativePG,
+# Crunchy Postgres eller en driftet tjeneste. Bytt i så fall ut hele denne
+# filen; resten av oppsettet bryr seg bare om tjenestenavnet `postgres`.
+#
+# Databasen har ingen Service av typen LoadBalancer og ingen Ingress. Den nås
+# bare fra `epj` og `hapi`, håndhevet av nettverkspolicyen.
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: epj
+spec:
+  clusterIP: None
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: epj
+data:
+  10-databaser.sql: |
+    -- Kliniske data ligger i sin egen database, atskilt fra identitet,
+    -- tilgangsstyring og sikkerhetslogg. `epj` opprettes av POSTGRES_DB.
+    CREATE DATABASE hapi;
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: epj
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          args:
+            # Klientkryptering. Sertifikatet monteres av den som drifter.
+            - -c
+            - ssl=off
+          env:
+            - name: POSTGRES_USER
+              value: epj
+            - name: POSTGRES_DB
+              value: epj
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: epj-hemmeligheter
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_INITDB_ARGS
+              value: '--data-checksums'
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+          readinessProbe:
+            exec:
+              command: ['pg_isready', '-U', 'epj', '-d', 'epj']
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ['pg_isready', '-U', 'epj']
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ['ALL']
+      volumes:
+        - name: init
+          configMap:
+            name: postgres-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ['ReadWriteOnce']
+        # Bruk en lagringsklasse med kryptering i ro. Normen krever at
+        # helseopplysninger er krypterte når de lagres.
+        # storageClassName: kryptert-ssd
+        resources:
+          requests:
+            storage: 50Gi

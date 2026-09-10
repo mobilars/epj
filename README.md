@@ -4,7 +4,9 @@ Journalsystem for allmennpraksis bygget på **HL7 FHIR R5**, med **HAPI FHIR** s
 klinisk lager, **PostgreSQL** som database og **SvelteKit** som applikasjon.
 Systemet støtter **SMART on FHIR**-apper, bruker **HelseID** til pålogging, og
 har integrasjoner mot **Sentral forskrivningsmodul (SFM)**, **NHN
-meldingstjener** og **Helfo**.
+meldingstjener** og **Helfo**. Én installasjon kan betjene flere legekontorer:
+hver virksomhet har sin egen partisjon i HAPI, sine egne brukere, sin egen
+sikkerhetslogg og sine egne signeringsnøkler.
 
 > **Status:** fungerende referanseimplementasjon med fullstendig testdekning.
 > Den er *ikke* satt i klinisk drift, og flere verdier må verifiseres mot
@@ -43,9 +45,12 @@ npm run dev
 | [API](docs/api.md) | FHIR R5-endepunktet, OAuth 2.1, scopes og feilhåndtering |
 | [SMART on FHIR](docs/smart-on-fhir.md) | Hvordan en app kobles til, med fullstendig eksempel |
 | [Integrasjoner](docs/integrasjoner.md) | SFM, NHN meldingstjener og Helfo |
+| [Installasjon med Docker](docs/installasjon-docker.md) | Én maskin, tre containere, herding før produksjon |
+| [Installasjon i Kubernetes](docs/installasjon-kubernetes.md) | Manifester, nettverkspolicyer og flere virksomheter |
 | [Drift](docs/drift.md) | Oppsett, konfigurasjon, nøkkelrotasjon og sikkerhetskopi |
 | [Testing](docs/testing.md) | Teststrategi og hvordan testene kjøres |
-| [Åpne punkter](docs/apne-punkter.md) | Det som må avklares før produksjon |
+| [Åpne punkter](docs/apne-punkter.md) | Det som må avklares eller verifiseres før produksjon |
+| [Veikart og oppgaveliste](docs/todo.md) | Det som ikke er bygget ennå, og hva det vil kreve |
 
 ## Arkitektur i korte trekk
 
@@ -82,6 +87,10 @@ direkte.
   tilgjengelige som JSON på samme API som resten av journalen.
 * Søk gjøres med `POST [type]/_search`, slik at fødselsnummer ikke havner i
   URL-er og mellomliggende tilgangslogger.
+* **Utlevering av journal** gir det samme innholdet i to former: et FHIR-dokument
+  (`Bundle` av typen `document`) for overføring til et annet journalsystem, og en
+  lesbar utskrift i HTML eller ren tekst for pasienten selv. Hjemmelen velges i
+  skjemaet og havner som `purposeOfUse` i sikkerhetsloggen.
 
 ## Ingen runtime-avhengigheter utover PostgreSQL-driveren
 

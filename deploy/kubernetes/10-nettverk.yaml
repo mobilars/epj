@@ -1,0 +1,145 @@
+# ---------------------------------------------------------------------------
+# Nettverkspolicyer.
+#
+# Dette er den viktigste filen i oppsettet. Uten den er HAPI FHIR tilgjengelig
+# for alt som kjører i klyngen, og da er tilgangskontrollen i journalen i
+# praksis omgåelig: HAPI har ingen forståelse av tjenstlig behov, sperring
+# eller nødrett, og skriver ikke vår sikkerhetslogg.
+#
+# Krever en CNI som håndhever NetworkPolicy (Calico, Cilium, Antrea).
+# Kontroller det: en policy som ikke håndheves gir falsk trygghet.
+# ---------------------------------------------------------------------------
+
+# Utgangspunkt: alt er stengt, i begge retninger.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: standard-nekt
+  namespace: epj
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# Journalen tar imot trafikk fra inngangskontrolleren, og snakker med HAPI,
+# databasen, DNS og - for HelseID, SFM, NHN og Helfo - ut på internett.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: epj
+  namespace: epj
+spec:
+  podSelector:
+    matchLabels:
+      app: epj
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 3000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: hapi
+      ports:
+        - port: 8080
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - port: 5432
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Ut mot HelseID, SFM, NHN-meldingstjeneren og Helfo. Snevre inn til
+    # faktiske adresser når de er kjent; her er alt utenom klyngens eget
+    # nettverk tillatt.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - port: 443
+---
+# HAPI tar bare imot fra `epj`, og snakker bare med databasen og DNS.
+# Ingen rute ut mot internett: det kliniske lageret har ingenting der å gjøre.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hapi
+  namespace: epj
+spec:
+  podSelector:
+    matchLabels:
+      app: hapi
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: epj
+      ports:
+        - port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - port: 5432
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+# Databasen tar bare imot fra `epj` og `hapi`, og har ingen utgående trafikk
+# utover DNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres
+  namespace: epj
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: epj
+        - podSelector:
+            matchLabels:
+              app: hapi
+      ports:
+        - port: 5432
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP

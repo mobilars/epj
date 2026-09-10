@@ -1,40 +1,41 @@
 {
-  "name": "epj",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Elektronisk pasientjournal for norske fastleger - FHIR R5, SMART on FHIR, SFM, NHN meldingstjener, Helfo",
-  "type": "module",
-  "engines": {
-    "node": ">=22.6"
-  },
-  "scripts": {
-    "dev": "vite dev",
-    "build": "vite build",
-    "preview": "vite preview",
-    "start": "node build/index.js",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "seed": "vite-node -c scripts/vite.config.ts scripts/seed.ts",
-    "migrer": "vite-node -c scripts/vite.config.ts scripts/migrer.ts",
-    "fhir:test": "vite-node -c scripts/vite.config.ts scripts/test-fhir-server.ts",
-    "test:e2e": "playwright test",
-    "test:alle": "vitest run && playwright test"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.63.0",
-    "@sveltejs/adapter-node": "^5.2.12",
-    "@sveltejs/kit": "^2.20.0",
-    "@sveltejs/vite-plugin-svelte": "^5.0.3",
-    "@types/node": "^22.13.0",
-    "@types/pg": "^8.23.1",
-    "svelte": "^5.20.0",
-    "svelte-check": "^4.1.4",
-    "typescript": "^5.7.3",
-    "vite": "^6.0.11",
-    "vitest": "^3.0.5"
-  },
-  "dependencies": {
-    "pg": "^8.23.0"
-  }
+	"name": "epj",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Elektronisk pasientjournal for norske fastleger - FHIR R5, SMART on FHIR, SFM, NHN meldingstjener, Helfo",
+	"type": "module",
+	"engines": {
+		"node": ">=22.6"
+	},
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build && vite build --config scripts/vite.verktoy.config.ts",
+		"preview": "vite preview",
+		"start": "node build/index.js",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"seed": "vite-node -c scripts/vite.config.ts scripts/seed.ts",
+		"migrer": "vite-node -c scripts/vite.config.ts scripts/migrer.ts",
+		"fhir:test": "vite-node -c scripts/vite.config.ts scripts/test-fhir-server.ts",
+		"test:e2e": "playwright test",
+		"test:alle": "vitest run && playwright test",
+		"build:verktoy": "vite build --config scripts/vite.verktoy.config.ts"
+	},
+	"devDependencies": {
+		"@playwright/test": "^1.63.0",
+		"@sveltejs/adapter-node": "^5.2.12",
+		"@sveltejs/kit": "^2.20.0",
+		"@sveltejs/vite-plugin-svelte": "^5.0.3",
+		"@types/node": "^22.13.0",
+		"@types/pg": "^8.23.1",
+		"svelte": "^5.20.0",
+		"svelte-check": "^4.1.4",
+		"typescript": "^5.7.3",
+		"vite": "^6.0.11",
+		"vitest": "^3.0.5"
+	},
+	"dependencies": {
+		"pg": "^8.23.0"
+	}
 }

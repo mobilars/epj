@@ -4,6 +4,29 @@ Journalen er vert for SMART-apper etter SMART App Launch, slik Helsedirektoratet
 anbefaler i HITR 1225. Både **EHR launch** (appen startes fra journalen med
 pasienten i kontekst) og **standalone launch** støttes.
 
+## Norske implementasjonsguider
+
+Implementasjonen følger **HL7 SMART App Launch 2.2.0**. To norske dokumenter
+bygger på den og er relevante:
+
+* **«Implementasjonsguide SMART App Launch Framework»** fra Helsenorge
+  (`helsenorge.atlassian.net`), som beskriver hvordan rammeverket brukes mot
+  Helsenorge-plattformen.
+* **HL7 Norges anbefaling** om SMART App Launch.
+
+> **Ikke gjennomgått punkt for punkt.** Begge dokumentene var utilgjengelige
+> gjennom utviklingsmiljøets nettverkspolicy. Hovedpunktene som lot seg lese ut
+> av søketreffene stemmer med det som er bygget her: obligatorisk `launch`-scope
+> sammen med `launch`-parameteren ved EHR launch, `openid` og `fhirUser` for
+> identitet, og `id_token` utstedt sammen med access token. Guidene må likevel
+> gjennomgås i sin helhet før produksjon; det står også i
+> [åpne punkter](apne-punkter.md).
+
+Der de norske guidene stiller krav utover HL7-spesifikasjonen, vil det gjelde
+`auth/oauth.ts` (autorisasjonsflyten), `auth/tokens.ts` (påstandene i tokenet)
+og `.well-known/smart-configuration`. Tilgangsmodellen berøres ikke: den
+avgjøres av rolle og tjenstlig behov, ikke av hvilken guide appen følger.
+
 ## Slik kobles en app til
 
 ### 1. Appen registreres
@@ -21,16 +44,20 @@ brukeren i samtykkedialogen.
 
 ### 2. Appen finner endepunktene
 
+Metadataene er **per virksomhet**: `issuer` og endepunktene er virksomhetens
+egne adresser, og signeringsnøklene i `jwks_uri` er virksomhetens egne. En app
+som skal brukes ved flere legekontorer må hente dokumentet fra hvert av dem.
+
 ```
-GET https://epj.example/.well-known/smart-configuration
+GET https://legekontoret-a.example.no/.well-known/smart-configuration
 ```
 
 ```json
 {
-  "issuer": "https://epj.example",
-  "authorization_endpoint": "https://epj.example/oauth/authorize",
-  "token_endpoint": "https://epj.example/oauth/token",
-  "jwks_uri": "https://epj.example/oauth/jwks",
+  "issuer": "https://legekontoret-a.example.no",
+  "authorization_endpoint": "https://legekontoret-a.example.no/oauth/authorize",
+  "token_endpoint": "https://legekontoret-a.example.no/oauth/token",
+  "jwks_uri": "https://legekontoret-a.example.no/oauth/jwks",
   "code_challenge_methods_supported": ["S256"],
   "capabilities": [
     "launch-ehr", "launch-standalone", "client-public",
@@ -50,10 +77,13 @@ lager en kortlivet, engangs launch-kontekst og sender brukeren til appens
 launch-URL:
 
 ```
-https://app.example/launch?iss=https://epj.example/fhir&launch=<launch-id>
+https://app.example/launch?iss=https://legekontoret-a.example.no/fhir&launch=<launch-id>
 ```
 
-Appen henter oppsettet fra `iss` og starter autorisasjonen.
+Appen henter oppsettet fra `iss` og starter autorisasjonen. Med flere
+virksomheter peker `iss` på virksomheten appen ble startet fra, og
+partisjonsnavnet inngår ikke i adressen - fasaden gjør oversettelsen mot HAPI
+selv, slik at appen aldri trenger å vite hvilken partisjon den snakker med.
 
 ### 4. Autorisasjon
 
@@ -64,7 +94,7 @@ GET /oauth/authorize
   &redirect_uri=https://app.example/callback
   &scope=openid fhirUser launch launch/patient patient/Patient.rs patient/Observation.rs
   &state=<tilfeldig>
-  &aud=https://epj.example/fhir
+  &aud=https://legekontoret-a.example.no/fhir
   &launch=<launch-id>
   &code_challenge=<S256 av code_verifier>
   &code_challenge_method=S256
@@ -106,12 +136,16 @@ grant_type=authorization_code
   "expires_in": 600,
   "scope": "openid fhirUser launch/patient patient/Patient.rs patient/Observation.rs",
   "patient": "8a07315c-…",
-  "fhirUser": "https://epj.example/fhir/Practitioner/42",
+  "fhirUser": "https://legekontoret-a.example.no/fhir/Practitioner/42",
   "need_patient_banner": false,
-  "smart_style_url": "https://epj.example/smart-style.json",
+  "smart_style_url": "https://legekontoret-a.example.no/smart-style.json",
   "id_token": "…"
 }
 ```
+
+Access tokenet bærer i tillegg en `tenant`-påstand. Den valideres mot
+virksomheten forespørselen kommer inn på, så et token utstedt ved ett legekontor
+kan ikke brukes ved et annet.
 
 ### 6. Kall mot FHIR
 

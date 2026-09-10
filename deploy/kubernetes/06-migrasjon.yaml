@@ -1,0 +1,54 @@
+# ---------------------------------------------------------------------------
+# Migrasjonsjobb.
+#
+# Applikasjonen kjører migrasjonene selv ved oppstart, og de er idempotente.
+# Denne jobben finnes for driftsmiljøer der man vil kjøre skjemaendringen som
+# et eget, kontrollert steg *før* de nye instansene rulles ut - og se at den
+# gikk bra før trafikken flyttes.
+#
+#   kubectl -n epj apply -f 06-migrasjon.yaml
+#   kubectl -n epj wait --for=condition=complete job/epj-migrer --timeout=5m
+#
+# Jobben har generateName-oppførsel gjennom et suffiks du setter selv; kjør
+# `kubectl -n epj delete job epj-migrer` før du kjører den på nytt.
+# ---------------------------------------------------------------------------
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: epj-migrer
+  namespace: epj
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrer
+          image: ghcr.io/mobilars/epj:latest
+          command: ['node', 'build/verktoy/migrer.js']
+          envFrom:
+            - configMapRef:
+                name: epj-konfigurasjon
+          env:
+            - name: EPJ_DATA_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: epj-hemmeligheter
+                  key: EPJ_DATA_KEY
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: epj-hemmeligheter
+                  key: POSTGRES_PASSWORD
+            - name: EPJ_DATABASE_URL
+              value: postgres://epj:$(POSTGRES_PASSWORD)@postgres:5432/epj
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ['ALL']

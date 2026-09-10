@@ -14,6 +14,8 @@ ENV NODE_ENV=production
 # Kjører som ikke-privilegert bruker.
 RUN addgroup -S epj && adduser -S epj -G epj
 
+# `build/` inneholder både applikasjonen og de frittstående verktøyene
+# (build/verktoy/migrer.js, build/verktoy/seed.js).
 COPY --from=bygg --chown=epj:epj /app/build ./build
 COPY --from=bygg --chown=epj:epj /app/node_modules ./node_modules
 COPY --from=bygg --chown=epj:epj /app/package.json ./package.json

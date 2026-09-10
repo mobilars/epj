@@ -269,7 +269,37 @@ tilgang til ressursen.
 Funksjonen finnes, men er ikke koblet til grensesnittet: sletting etter
 helsepersonelloven § 43 forutsetter et dokumentert vedtak, og skal ikke være en
 knapp i journalen.
-*Realisert:* ikke eksponert. Se [åpne punkter](apne-punkter.md).
+*Realisert:* ikke eksponert. Se [veikartet](todo.md) punkt 1.1.
+
+**K-6.5 Pasienten skal kunne få kopi av journalen sin.**
+Utlevering gir det samme innholdet i to former: et FHIR-dokument (`Bundle` av
+typen `document` med en `Composition` først, seksjoner kodet med LOINC) og en
+lesbar utskrift i HTML eller ren tekst. Den lesbare utgaven er selvstendig -
+ingen skript, ingen eksterne ressurser - og har egen utskriftsstil.
+Pasient- og brukerrettighetsloven § 5-1.
+*Realisert:* `src/lib/server/journal/utlevering.ts`,
+`src/routes/pasienter/[id]/utlevering/`.
+*Testet:* `tests/utlevering.test.ts`, `e2e/utlevering.spec.ts`.
+
+**K-6.6 Journalen skal kunne overføres til en annen behandler.**
+Det samme uttrekket, med hjemmelen «overføring til annen behandler» og
+`purposeOfUse` `TREAT`. FHIR-dokumentet er formatet et annet journalsystem kan
+lese maskinelt. Utleveringen kan avgrenses i tid.
+Pasientjournalforskriften § 12.
+*Testet:* `tests/utlevering.test.ts`.
+
+**K-6.7 En utlevering skal ikke gi mer enn utleveren selv har tilgang til.**
+Uttrekket hentes gjennom vokteren. Sperret materiale faller bort på samme måte
+som ellers, og utskriften opplyser om at det kan ha skjedd.
+*Testet:* `tests/utlevering.test.ts` («nekter utlevering uten
+behandlingsrelasjon», «tar ikke med andre pasienters opplysninger»).
+
+**K-6.8 Utlevering skal være sporbar.**
+Hver utlevering loggføres med hjemmel som `purposeOfUse` (`PATRQT` ved innsyn,
+`TREAT` ved overføring, `HLEGAL` på rettslig grunnlag), mottaker, periode og en
+telling av hva som faktisk ble utlevert. Pasienten ser utleveringene i sin egen
+innsynslogg.
+*Testet:* `tests/utlevering.test.ts`, `e2e/utlevering.spec.ts`.
 
 ## 7. Legemidler og e-resept
 
@@ -394,6 +424,52 @@ Migrasjoner er versjonerte SQL-filer som kjøres idempotent ved oppstart.
 `EPJ_INTEGRASJON_MODUS=mock` gir lokale simulatorer for SFM, meldingstjeneren og
 Helfo, slik at hele flyten kan øves og testes uten oppkobling.
 
+**K-10.11 Én installasjon skal kunne betjene flere virksomheter.**
+Kliniske data skilles av HAPI FHIR sin partisjonering (`URL_BASED`), med
+referanser på tvers av partisjoner slått av. Applikasjonsdata skilles av
+`tenant_id`, som er `NOT NULL` på alle tabeller som kan inneholde
+virksomhetsdata.
+*Realisert:* `src/lib/server/tenant/`, migrasjon `003_multitenant.sql`.
+*Testet:* `tests/multitenancy.test.ts`.
+
+**K-10.12 Virksomheten skal utledes av systemet, ikke velges av klienten.**
+Virksomheten utledes av vertsnavnet i `hooks.server.ts` og legges i en
+`AsyncLocalStorage`-kontekst. `krevTenant()` kaster når konteksten mangler, slik
+at en spørring som skulle vært avgrenset feiler høylytt i stedet for stille å
+hente andres data. Access tokens bærer en `tenant`-påstand som valideres mot
+forespørselens virksomhet.
+*Realisert:* `src/lib/server/tenant/kontekst.ts`, `src/hooks.server.ts`.
+*Testet:* `tests/multitenancy.test.ts`.
+
+**K-10.13 Samme person skal kunne arbeide ved flere virksomheter.**
+Brukernavn og HelseID-identitet er unike innenfor virksomheten, ikke globalt.
+*Realisert:* per-virksomhet unike indekser i `003_multitenant.sql`.
+*Testet:* `tests/multitenancy.test.ts`.
+
+**K-10.14 Hver virksomhet skal ha sin egen sikkerhetslogg og sine egne nøkler.**
+Hash-kjeden er per virksomhet, slik at én virksomhet kan verifisere sin egen
+kjede uten å se de andres, og tukling i én ikke underkjenner de andre.
+Signeringsnøkler og OAuth-`issuer` er også per virksomhet.
+*Testet:* `tests/multitenancy.test.ts`.
+
+**K-10.15 Virksomheter skal kunne opprettes og administreres.**
+`/systemadmin` oppretter virksomheter med FHIR-partisjon og første
+systemansvarlige, suspenderer dem, og krysser registeret mot partisjonene HAPI
+faktisk har. Partisjonen opprettes før virksomheten lagres, slik at en
+virksomhet aldri peker på en partisjon som ikke finnes. Suspensjon avslutter
+sesjoner og trekker tilbake tokens umiddelbart.
+*Realisert:* `src/routes/systemadmin/`, `src/lib/server/tenant/tenant.ts`.
+*Testet:* `tests/multitenancy.test.ts`.
+
+**K-10.16 Plattformadministrasjon skal ikke gi klinisk innsyn.**
+Rollen `systemeier` har ingen scopes, så FHIR-fasaden avviser den uansett.
+Grensesnittet er bare tilgjengelig på plattformens eget vertsnavn.
+*Realisert:* `authz/roles.ts`, `src/hooks.server.ts`.
+
+**K-10.17 Installasjon skal være dokumentert for Docker og Kubernetes.**
+*Realisert:* [installasjon-docker.md](installasjon-docker.md),
+[installasjon-kubernetes.md](installasjon-kubernetes.md), `deploy/kubernetes/`.
+
 ---
 
 ## Sporing
@@ -405,6 +481,8 @@ Helfo, slik at hele flyten kan øves og testes uten oppkobling.
 | Autentisering | K-3.1 – K-3.7 | `brukere`, `totp`, `crypto`, `jws` | `palogging.spec.ts` |
 | API og apper | K-4.1 – K-4.8 | `oauth`, `scopes`, `gateway` | `smart.spec.ts` |
 | Sikkerhetslogg | K-5.1 – K-5.5 | `audit` | `tilgang.spec.ts` |
+| Retting, sletting og innsyn | K-6.1 – K-6.8 | `utlevering` | `utlevering.spec.ts` |
 | Legemidler | K-7.1 – K-7.4 | `integrasjoner` | `journal.spec.ts` |
 | Meldinger | K-8.1 – K-8.5 | `xml-meldinger`, `integrasjoner` | — |
 | Oppgjør | K-9.1 – K-9.5 | `takster`, `integrasjoner` | `oppgjor.spec.ts` |
+| Multitenancy | K-10.11 – K-10.17 | `multitenancy` | — |

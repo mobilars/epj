@@ -11,18 +11,20 @@ import type { AuthContext } from '$srv/authz/context';
 import { migrer } from '$srv/db/migrate';
 import { logg } from '$srv/audit';
 import { medTenant, PLATTFORM_TENANT, type Tenant } from '$srv/tenant/kontekst';
-import { hentTenant, hentTenantPaVertsnavn } from '$srv/tenant/tenant';
+import { hentTenant, hentTenantPaVertsnavn, sikreStandardvirksomhet } from '$srv/tenant/tenant';
 
 let migrertOk: Promise<unknown> | null = null;
 
 /** Kjører migrasjoner én gang ved oppstart. */
 function sikreSkjema(): Promise<unknown> {
 	if (!migrertOk) {
-		migrertOk = migrer().catch((err) => {
-			console.error('[oppstart] migrering feilet', err);
-			migrertOk = null;
-			throw err;
-		});
+		migrertOk = migrer()
+			.then(() => sikreStandardvirksomhet())
+			.catch((err) => {
+				console.error('[oppstart] migrering feilet', err);
+				migrertOk = null;
+				throw err;
+			});
 	}
 	return migrertOk;
 }

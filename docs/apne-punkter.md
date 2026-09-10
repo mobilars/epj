@@ -1,22 +1,13 @@
 # Åpne punkter
 
-Det som må avklares, verifiseres eller bygges ferdig før systemet kan brukes på
+Det som må avklares eller verifiseres mot en kilde før systemet kan brukes på
 ekte pasientopplysninger. Punktene står her i stedet for å være skjult i
 kravdokumentet.
 
+Arbeid som skal *gjøres* - funksjonalitet som ikke er bygget ennå - står i
+[todo.md](todo.md).
+
 ## Må avklares med oppdragsgiver
-
-### «HSPI FHIR R5»
-
-Oppdraget spesifiserte «hspi fhir R5». Forkortelsen lot seg ikke gjenfinne i
-norsk e-helsedokumentasjon, hos HL7 Norge, i Helsedirektoratets referansekatalog
-eller på Simplifier. Systemet er derfor bygget på **HL7 FHIR R5** slik den er
-publisert av HL7 International, med norske identifikatorsystemer og
-kodeverks-OID-er, og med profilaget skilt ut i `src/lib/server/fhir/` slik at en
-konkret implementasjonsguide kan legges inn uten å røre resten.
-
-Om «HSPI» viser til en bestemt implementasjonsguide, trengs navn eller URL for å
-legge den inn.
 
 ### FHIR-versjon og norske basisprofiler
 
@@ -54,6 +45,20 @@ Volven, og står i `IKKE_VERIFISERTE_SYSTEMER`:
 * meldingstyper (`urn:oid:2.16.578.1.12.4.1.1.8279`),
 * NCMP (`urn:oid:2.16.578.1.12.4.1.1.7280`).
 
+### Implementasjonsguide for SMART on FHIR
+
+Helsenorge har publisert «Implementasjonsguide SMART App Launch Framework», og
+HL7 Norge har en anbefaling om SMART App Launch. Begge var utilgjengelige
+gjennom utviklingsmiljøets nettverkspolicy, og er derfor **ikke gjennomgått
+punkt for punkt**. Implementasjonen følger HL7 SMART App Launch 2.2.0, som er
+det de norske guidene bygger på, og de hovedpunktene som lot seg lese ut av
+søketreffene stemmer: obligatorisk `launch`-scope sammen med `launch`-parameter
+ved EHR launch, `openid`/`fhirUser` for identitet, og `id_token` sammen med
+access token.
+
+Før produksjon må guidene gjennomgås i sin helhet. Se
+[smart-on-fhir.md](smart-on-fhir.md).
+
 ### Meldingsformatene
 
 Hodemelding, dialogmelding, henvisning, epikrise og applikasjonskvittering er
@@ -76,47 +81,8 @@ samsvarserklæring.
 
 ## Ikke ferdig implementert
 
-### Vedtaksflyt for endelig sletting
-
-`slettEndelig()` finnes i koden, men er bevisst ikke eksponert i grensesnittet.
-Sletting etter helsepersonelloven § 43 forutsetter et dokumentert vedtak, og
-skal ikke være en knapp i journalen. Det som mangler er registrering av
-begjæring, vurdering, vedtak og eventuell klage — og at selve slettingen
-utføres av den som har myndighet.
-
-### Automatisk sletting av logg etter oppbevaringstiden
-
-`config.audit.retentionYears` er definert, men ingen jobb sletter gamle
-innslag. Sletting må også ta hensyn til hash-kjeden: en sletting som bryter
-kjeden må skje på en måte som fortsatt lar resten verifiseres.
-
-### Jobbplanlegging
-
-Funksjonene for meldingskø, opprydding og loggverifisering finnes, men kalles
-ikke periodisk. De må kobles til en planlegger. Alle er trygge å kjøre parallelt;
-`sendKo()` bruker rådgivende lås.
-
-### Kontrasignering
-
-Rollen `turnuslege` er definert som en rolle hvis notater kan kreve
-kontrasignering, men selve flyten er ikke bygget.
-
-### Interaksjonsdatabase
-
-SFM-simulatoren har fire kjente interaksjoner, nok til å vise varslingsflyten.
-I `live`-modus kommer varslene fra SFM. Skal journalen gi egne varsler, trengs en
-klinisk vedlikeholdt kilde.
-
-### Timebok
-
-`Appointment`, `Schedule` og `Slot` er støttet på API-et, og timer vises på
-arbeidsflaten, men det finnes ingen timebok med kalendervisning og booking.
-
-### Innbyggerflate
-
-Rollen `pasient` er definert med `patient/`-scope mot egen journal og innsyn i
-egen logg, men det er ikke bygget et eget innbyggergrensesnitt. Innbyggere vil
-normalt komme via Helsenorge.
+Flyttet til [todo.md](todo.md), der de står sammen med resten av veikartet med
+en vurdering av hva som må på plass før klinisk bruk.
 
 ## Ikke verifisert i drift
 
@@ -139,11 +105,21 @@ implementerer den delen av protokollen klienten bruker.
 
 Kjør `npm test` med `EPJ_HAPI_BASE_URL` mot en ekte HAPI-instans for å bekrefte.
 
+### Multitenancy mot ekte HAPI
+
+Partisjoneringen er testet over ekte HTTP mot en partisjonsbevisst testdobbel
+som svarer på `$partition-management`-operasjonene, og isolasjonen mellom
+virksomheter er dekket av 32 tester i `tests/multitenancy.test.ts`. Det er ikke
+det samme som å ha kjørt mot HAPI selv. Kjør testsuiten med
+`EPJ_BRUK_EKTE_HAPI=1` mot en HAPI-instans med
+`hapi.fhir.tenant_identification_strategy=URL_BASED` for å bekrefte.
+
 ### Ytelse
 
 Systemet er ikke lastet. `Patient/$everything` med 400 ressurser og
 avgrensning på mange pasienter er de to stedene som først vil trenge
-oppmerksomhet.
+oppmerksomhet. Journalutleveringen henter opptil 1000 ressurser og bygger
+dokumentet i minnet.
 
 ## Krav til virksomheten
 

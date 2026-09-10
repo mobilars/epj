@@ -9,7 +9,7 @@
 import { exec, lukkPool, query } from '../src/lib/server/db/index';
 import { migrer } from '../src/lib/server/db/migrate';
 import { medTenant, PLATTFORM_TENANT, type Tenant } from '../src/lib/server/tenant/kontekst';
-import { hentTenant } from '../src/lib/server/tenant/tenant';
+import { hentTenant, sikreStandardvirksomhet } from '../src/lib/server/tenant/tenant';
 import { opprettBruker, settRoller } from '../src/lib/server/auth/brukere';
 import { registrerKlient } from '../src/lib/server/auth/klienter';
 import { fhirKlient } from '../src/lib/server/fhir/client';
@@ -89,6 +89,7 @@ async function pasientRessurs(p: DemoPasient): Promise<FhirResource> {
 
 async function main(): Promise<void> {
 	await migrer();
+	await sikreStandardvirksomhet();
 
 	// Demodata legges i standardvirksomheten. Alt under kjøres i dens kontekst,
 	// slik at spørringene avgrenses på samme måte som i applikasjonen.

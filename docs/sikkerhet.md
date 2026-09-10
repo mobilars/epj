@@ -32,10 +32,18 @@ diagnoser får ikke diagnoser, uansett hvor akutt situasjonen er.
 | Personvernombud | nei | nei | nei | nei | logg og samtykker, alle pasienter |
 | Regnskap | nei | nei | nei | nei | oppgjør |
 | Pasient | egen journal | nei | nei | nei | innbygger |
+| Systemeier | **nei** | nei | nei | nei | plattform, ingen virksomhet |
 
 At systemansvarlig ikke har klinisk innsyn er et poeng, ikke en forglemmelse.
 Den som drifter systemet trenger ikke å lese journaler, og bør derfor ikke kunne
-det.
+det. Det samme gjelder systemeier, som administrerer virksomhetene på
+plattformen: rollen har ingen scopes i det hele tatt, så FHIR-fasaden avviser
+den uansett hva den skulle spørre om.
+
+Rettigheten `journal:utlever` styrer hvem som kan lage en journalutskrift. Den
+er gitt til lege, vikarlege, jordmor, psykolog, helsesekretær, personvernombud
+og pasienten selv. Utleveringen henter innholdet gjennom den samme vokteren som
+alt annet, så den gir aldri mer enn den som utleverer selv har tilgang til.
 
 ### Tjenstlig behov
 
@@ -170,13 +178,50 @@ systemet bidrar med, og hva virksomheten fortsatt må gjøre.
 | Sikkerhetskopi og gjenoppretting | — | Sikkerhetskopi, testet gjenoppretting, oppbevaringstid |
 | Avvikshåndtering | Loggintegritetskontroll, helsesjekk | Rutine for avvik og varsling til Datatilsynet |
 
+## Skille mellom virksomheter
+
+Én installasjon betjener flere legekontorer, og skillet mellom dem er en
+sikkerhetsgrense på linje med skillet mellom pasienter.
+
+Virksomheten utledes av **vertsnavnet**, aldri av noe klienten kan velge -
+verken en parameter, en header eller et felt i tokenet. Access tokens bærer en
+`tenant`-påstand som valideres mot forespørselens virksomhet, slik at et token
+utstedt i én virksomhet ikke kan brukes i en annen selv om nøkkelen skulle
+lekke.
+
+| Det som skilles | Hvordan |
+| --- | --- |
+| Kliniske data | Egen partisjon i HAPI FHIR, referanser på tvers slått av |
+| Brukere, roller, sesjoner | `tenant_id`, `NOT NULL`, per-virksomhet unike brukernavn |
+| Sikkerhetslogg | Egen hash-kjede per virksomhet |
+| OAuth-klienter og tokens | `tenant_id`; `tenant`-påstand i tokenet |
+| Signeringsnøkler og `issuer` | Egne per virksomhet |
+| Ratebegrensning | Virksomheten inngår i nøkkelen |
+
+Suspensjon av en virksomhet virker umiddelbart: alle sesjoner avsluttes og alle
+utstedte tokens trekkes tilbake i samme transaksjon. Kliniske data røres ikke.
+
+Isolasjonen hviler på at all kode filtrerer på `tenant_id`, og på at
+`krevTenant()` kaster når konteksten mangler. Det er testet - 32 tester i
+`tests/multitenancy.test.ts` skriver data i én virksomhet gjennom de samme
+modulene applikasjonen bruker, og kontrollerer at de er usynlige fra en annen -
+men det er fortsatt disiplin, ikke en garanti fra databasen. Se
+[arkitektur.md](arkitektur.md) for hvorfor Row Level Security ble valgt bort, og
+[todo.md](todo.md) punkt 4.7.
+
 ## Kjente svakheter
 
 Ærlig oppsummert, og utdypet i [åpne punkter](apne-punkter.md):
 
 * Automatisk sletting av logg etter oppbevaringstiden er ikke implementert.
+* Sikkerhetsloggen er append-only i databasen og hash-lenket, men en som får
+  kontroll over databasen kan fjerne triggeren. Kjeden gjør at det *oppdages*,
+  ikke at det *forhindres*. Utlevering til et eksternt, skrivebeskyttet arkiv er
+  ikke bygget.
 * Endelig sletting etter helsepersonelloven § 43 er bevisst ikke eksponert i
   grensesnittet, og mangler dermed en vedtaksflyt.
+* Virksomhetsisolasjonen håndheves av applikasjonen, ikke av databasen.
+* Systemet er ikke penetrasjonstestet.
 * Interaksjonsdatabasen i SFM-simulatoren er et lite utvalg, ikke en klinisk kilde.
 * Takstbeløpene er et arbeidsgrunnlag og må oppdateres fra normaltariffen.
 * Enkelte kodeverks-OID-er er ikke verifisert mot Volven.

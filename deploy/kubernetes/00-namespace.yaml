@@ -1,0 +1,15 @@
+# ---------------------------------------------------------------------------
+# Navnerom.
+#
+# Alt som hører til journalen ligger her. Nettverkspolicyene i 10-nettverk.yaml
+# forutsetter at ingenting annet deler navnerommet.
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: epj
+  labels:
+    name: epj
+    # Pod Security Standards: journalen kjører uten privilegier.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest

@@ -1,0 +1,146 @@
+# ---------------------------------------------------------------------------
+# HAPI FHIR JPA-server.
+#
+# Det kliniske lageret. HAPI har ingen tilgangskontroll som kjenner norske krav
+# til tjenstlig behov, sperring og nødrett - derfor er den bare tilgjengelig
+# innenfra klyngen, og eneste vei inn er /fhir-fasaden i `epj`, som håndhever
+# tilgang og skriver sikkerhetslogg for hvert kall.
+#
+# Ingen Ingress. Ingen NodePort. Nettverkspolicyen i 10-nettverk.yaml slipper
+# bare `epj` inn hit.
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: hapi
+  namespace: epj
+spec:
+  type: ClusterIP
+  selector:
+    app: hapi
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hapi
+  namespace: epj
+spec:
+  # HAPI tåler flere instanser mot samme database. Start med én, og skaler når
+  # du har målt at det er FHIR-laget som er flaskehalsen.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hapi
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: hapi
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: hapi
+          image: hapiproject/hapi:v8.0.0
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgres:5432/hapi
+            - name: SPRING_DATASOURCE_USERNAME
+              value: epj
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: epj-hemmeligheter
+                  key: POSTGRES_PASSWORD
+            - name: SPRING_DATASOURCE_DRIVERCLASSNAME
+              value: org.postgresql.Driver
+            - name: SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT
+              value: ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgres94Dialect
+            - name: SPRING_JPA_PROPERTIES_HIBERNATE_SEARCH_ENABLED
+              value: 'false'
+
+            # R5 er datamodellen for hele journalen.
+            - name: HAPI_FHIR_FHIR_VERSION
+              value: R5
+            - name: HAPI_FHIR_SERVER_ADDRESS
+              value: http://hapi:8080/fhir
+
+            # --- Multitenancy ---------------------------------------------
+            # Hver virksomhet har sin egen partisjon, og partisjonsnavnet
+            # inngår i FHIR-URL-en: /fhir/<virksomhet>/Patient/123.
+            - name: HAPI_FHIR_TENANT_IDENTIFICATION_STRATEGY
+              value: URL_BASED
+            # Dette er det som gjør at en ressurs i én virksomhet ikke kan
+            # peke inn i en annen - heller ikke ved en feil i vår egen kode.
+            - name: HAPI_FHIR_PARTITIONING_ALLOW_REFERENCES_ACROSS_PARTITIONS
+              value: 'false'
+            - name: HAPI_FHIR_PARTITIONING_CROSS_PARTITION_REFERENCE_MODE
+              value: 'NOT_ALLOWED'
+            - name: HAPI_FHIR_PARTITIONING_PARTITIONING_INCLUDE_IN_SEARCH_HASHES
+              value: 'false'
+            - name: HAPI_FHIR_PARTITIONING_CONDITIONAL_CREATE_DUPLICATE_IDENTIFIERS_ENABLED
+              value: 'false'
+
+            - name: HAPI_FHIR_ALLOW_MULTIPLE_DELETE
+              value: 'true'
+            - name: HAPI_FHIR_ALLOW_EXTERNAL_REFERENCES
+              value: 'true'
+            - name: HAPI_FHIR_ALLOW_PLACEHOLDER_REFERENCES
+              value: 'true'
+            - name: HAPI_FHIR_ENFORCE_REFERENTIAL_INTEGRITY_ON_WRITE
+              value: 'false'
+            - name: HAPI_FHIR_ENFORCE_REFERENTIAL_INTEGRITY_ON_DELETE
+              value: 'false'
+            - name: HAPI_FHIR_ALLOW_CASCADING_DELETES
+              value: 'false'
+            - name: HAPI_FHIR_DEFAULT_PAGE_SIZE
+              value: '50'
+            - name: HAPI_FHIR_MAX_PAGE_SIZE
+              value: '200'
+            # HAPI nås aldri av en nettleser. Ingen CORS-opprinnelser.
+            - name: JAVA_TOOL_OPTIONS
+              value: '-Xmx2g -XX:MaxRAMPercentage=75'
+          ports:
+            - containerPort: 8080
+          startupProbe:
+            httpGet:
+              path: /fhir/metadata?_summary=true
+              port: 8080
+            # Første oppstart oppretter skjemaet og kan ta flere minutter.
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /fhir/metadata?_summary=true
+              port: 8080
+            periodSeconds: 15
+            timeoutSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              memory: 3Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ['ALL']

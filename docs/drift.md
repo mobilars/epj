@@ -1,5 +1,9 @@
 # Drift
 
+Installasjon står i [installasjon-docker.md](installasjon-docker.md) og
+[installasjon-kubernetes.md](installasjon-kubernetes.md). Dette dokumentet
+handler om det som kommer etterpå.
+
 ## Komponenter
 
 | Komponent | Rolle | Eksponert |
@@ -96,6 +100,10 @@ verdiløs.
 - [ ] Takstbeløp oppdatert fra gjeldende normaltariff
 - [ ] Databehandleravtaler for alle registrerte apper
 - [ ] Risikovurdering og personvernkonsekvensvurdering gjennomført
+- [ ] `EPJ_TILLAT_UKJENT_VERTSNAVN=false`
+- [ ] `EPJ_PLATTFORM_VERTSNAVN` satt, og `/systemadmin` begrenset på nettverksnivå
+- [ ] Virksomhetsregisteret stemmer med partisjonene i HAPI (kontrolleres i `/systemadmin`)
+- [ ] Penetrasjonstest gjennomført av noen andre enn den som bygget systemet
 
 ## Overvåking
 
@@ -125,6 +133,34 @@ logg uten journal, er begge et avvik.
 
 `EPJ_DATA_KEY` må sikres uavhengig av databasene. En sikkerhetskopi uten
 nøkkelen gir ikke tilbake totrinnsverifisering.
+
+## Flere virksomheter
+
+Én installasjon betjener flere legekontorer. Å legge til en ny:
+
+1. Sett opp vertsnavnet i inngangen (DNS, TLS-sertifikat, Ingress eller proxy).
+2. Opprett virksomheten i `/systemadmin` med det samme vertsnavnet. Partisjonen i
+   HAPI opprettes før virksomheten lagres, så en virksomhet peker aldri på en
+   partisjon som ikke finnes.
+3. Opprett den første systemansvarlige i samme skjema. Det midlertidige passordet
+   vises **én gang**.
+
+Oversikten i `/systemadmin` krysser registeret mot partisjonene HAPI faktisk har.
+Et avvik der er en driftsfeil: enten er en partisjon slettet, eller så peker en
+virksomhet på en partisjon som aldri ble opprettet. Kliniske spørringer i den
+virksomheten vil feile til det er rettet.
+
+**Suspensjon** virker umiddelbart: alle sesjoner avsluttes og alle utstedte
+tokens trekkes tilbake i samme transaksjon. Kliniske data røres ikke, så
+virksomheten kan aktiveres igjen uten tap.
+
+**Avvikling** gjør i dag det samme som suspensjon, og sletter ikke partisjonen.
+Det er med vilje: journalene skal oppbevares i mange år etter at et legekontor er
+lagt ned. En reell avviklingsflyt står i [todo.md](todo.md) punkt 4.1.
+
+Hver virksomhet har sin egen hash-kjede i sikkerhetsloggen og sine egne
+signeringsnøkler. Verifisering og nøkkelrotasjon må derfor gjøres per virksomhet;
+`/admin` viser tilstanden for den virksomheten man er pålogget.
 
 ## Nøkkelrotasjon
 
