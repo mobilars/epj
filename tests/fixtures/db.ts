@@ -4,12 +4,12 @@ import { time } from '../../src/lib/server/tenant/context';
 import { migrate } from '../../src/lib/server/db/migrate';
 
 /**
- * Oppretter en isolert PostgreSQL-database per testfil, kjører migrasjonene,
- * og river den ned etterpå. Testene kjører altså mot ekte PostgreSQL - ikke
- * mot en etterlikning - slik at triggere, transaksjoner og typer blir dekket.
+ * Creates an isolated PostgreSQL database per test file, runs the migrations,
+ * and tears it down afterwards. The tests thus run against real PostgreSQL -
+ * not an imitation - so triggers, transactions and types are covered.
  *
- * Krever at EPJ_TEST_DATABASE_URL peker på en server der testbrukeren kan
- * opprette databaser. Uten den hoppes integrasjonstestene over.
+ * Requires EPJ_TEST_DATABASE_URL to point at a server where the test user may
+ * create databases. Without it the integration tests are skipped.
  */
 
 export const TEST_DB_URL = process.env.EPJ_TEST_DATABASE_URL ?? process.env.EPJ_DATABASE_URL ?? '';
@@ -50,11 +50,11 @@ export async function createTestDatabase(prefiks = 'epjtest'): Promise<TestDatab
 }
 
 /**
- * `INSERT` for testdata, med `tenant_id` fylt ut automatisk.
+ * `INSERT` for test data, with `tenant_id` filled in automatically.
  *
- * Produksjonskoden setter kolonnen eksplisitt overalt - det er nettopp den
- * disiplinen isolasjonen hviler på. Testene bygger derimot opp tilstand med rå
- * SQL, og skal slippe å gjenta virksomheten i hver eneste setning.
+ * Production code sets the column explicitly everywhere - that discipline is
+ * exactly what the isolation rests on. The tests, however, build up state with
+ * raw SQL, and should not have to repeat the organisation in every statement.
  */
 export async function setIn(sql: string, params: unknown[] = []): Promise<number> {
 	const next = params.length + 1;
@@ -64,9 +64,9 @@ export async function setIn(sql: string, params: unknown[] = []): Promise<number
 	return exec(withValue, [...params, time()]);
 }
 
-/** Tømmer alle tabeller mellom tester, uten å kjøre migrasjonene på nytt. */
+/** Empties every table between tests, without running the migrations again. */
 export async function emptyTables(): Promise<void> {
-	// audit_event har en append-only-trigger på DELETE; TRUNCATE går klar av den.
+	// audit_event has an append-only trigger on DELETE; TRUNCATE goes clear of it.
 	await exec(`TRUNCATE TABLE
 		audit_event, user_session, oauth_token, oauth_authorization_code, smart_launch,
 		oauth_client, break_glass, record_restriction, care_relationship, role_assignment,

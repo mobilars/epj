@@ -345,7 +345,7 @@ describeIf('integrasjoner', () => {
 			const card = await getCard(response.id as string);
 			expect(card?.card.copayment_ore).toBe(0);
 			expect(card?.card.exemption_reason).toBe('barn-under-16');
-			// Refusjonen fra Helfo påvirkes ikke.
+			// The reimbursement from Helfo is unaffected.
 			expect(card?.card.reimbursement_ore).toBe(19_600 + 2 * 6_100);
 		});
 

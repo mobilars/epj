@@ -24,7 +24,7 @@ describe('takstregisteret', () => {
 	});
 
 	it('markerer alle beløp som uverifiserte inntil de er kontrollert mot tariffen', () => {
-		// Dette er en påminnelse i kode: fjern når normaltariffen er lagt inn.
+		// This is a reminder in code: remove once the full tariff is loaded.
 		expect(TARIFFS.every((t) => t.verified === false)).toBe(true);
 	});
 });
@@ -100,7 +100,7 @@ describe('fritak for egenandel', () => {
 		const b = compute([{ tariff_code: '2ad', count: 1 }], { patientAge: COPAYMENT_ALDERSGRENSE - 1 });
 		expect(b.exemption).toBe('barn-under-16');
 		expect(b.requiresCopaymentOre).toBe(0);
-		// Refusjonen fra Helfo påvirkes ikke av fritaket.
+		// The reimbursement from Helfo is unaffected by the exemption.
 		expect(b.sumReimbursementOre).toBe(19_600);
 	});
 

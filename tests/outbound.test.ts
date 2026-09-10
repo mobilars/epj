@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { checkOutboundUrl, OutboundError } from '../src/lib/server/util/outbound';
 
 /**
- * `jwks_uri` på en registrert app er en adresse journalen henter på vegne av
- * den som fylte ut skjemaet. Uten kontroll er det SSRF: en app registrert med
- * `jwks_uri` mot 169.254.169.254 eller mot HAPI ville fått journalen til å
- * hente adresser bare den selv kan nå (OWASP A10).
+ * `jwks_uri` on a registered app is an address the record fetches on behalf of
+ * whoever filled in the form. Without checks that is SSRF: an app registered
+ * with `jwks_uri` towards 169.254.169.254 or towards HAPI would make the
+ * record fetch addresses only it can reach (OWASP A10).
  */
 describe('kontroll av utgående adresser', () => {
 	const avvises = async (url: string): Promise<string> => {

@@ -106,9 +106,9 @@ describe('innsnevring mot rolle', () => {
 	});
 
 	it('lar user/-scope dekke tilsvarende patient/-scope', () => {
-		// En app som startes i pasientkontekst ber om patient/-scope. Rollen til
-		// helsepersonell er beskrevet med user/-scope, og må dekke den smalere
-		// varianten - ellers kunne ingen kliniker starte en pasientnær app.
+		// An app launched in patient context asks for a patient/ scope. The role of
+		// health personnel is described with user/ scopes, and must cover the
+		// narrower variant - otherwise no clinician could launch a patient app.
 		const out = narrowIn(
 			'patient/Observation.rs patient/Condition.rs',
 			['patient/Observation.rs', 'patient/Condition.rs'],

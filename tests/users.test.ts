@@ -16,7 +16,7 @@ import type { Cookies } from '@sveltejs/kit';
 
 const describeIf = hasTestDatabase() ? describe : describe.skip;
 
-/** Enkel cookie-butikk som oppfyller den delen av Cookies vi bruker. */
+/** A simple cookie store covering the part of Cookies we use. */
 function layerCookies(): Cookies & { store: Map<string, string> } {
 	const store = new Map<string, string>();
 	return {
@@ -144,9 +144,9 @@ describeIf('brukere, pålogging og sesjoner', () => {
 		});
 
 		/**
-		 * Telles bare feil passord, står den som allerede har passordet fritt til
-		 * å gjette seksifret engangskode så lenge den vil, og totrinnsverifiseringen
-		 * er bare et forsinkende ledd.
+		 * If only wrong passwords are counted, whoever already has the password is
+		 * free to guess the six-digit one-time code for as long as they like, and
+		 * two-factor is merely a delaying step.
 		 */
 		it('låser kontoen etter for mange feil engangskoder', async () => {
 			const user = await layerLoggedIn();
@@ -302,7 +302,7 @@ describeIf('brukere, pålogging og sesjoner', () => {
 		it('nullstiller når vinduet skifter', async () => {
 			await rateLimit('test:c', 1, 60);
 			expect((await rateLimit('test:c', 1, 60)).allowed).toBe(false);
-			// Virksomheten inngår i nøkkelen, slik at legekontorene ikke deler kvote.
+			// The organisation is part of the key, so the practices do not share a quota.
 			await exec('UPDATE rate_limit SET window_start = window_start - 600 WHERE bucket = $1', [`${time()}:test:c`]);
 			expect((await rateLimit('test:c', 1, 60)).allowed).toBe(true);
 		});

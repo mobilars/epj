@@ -68,7 +68,7 @@ describe('JWS ES256', () => {
 	it('regner kid som RFC 7638-tommelavtrykk, reproduserbart fra den offentlige nøkkelen', () => {
 		const par = generateNokkelpar();
 		expect(jwkTommelavtrykk(par.publicJwk)).toBe(par.kid);
-		// Tommelavtrykket skal ikke påvirkes av tilleggsfelt som alg og use.
+		// The thumbprint must not be affected by extra fields such as alg and use.
 		expect(jwkTommelavtrykk({ ...par.publicJwk, alg: undefined, use: undefined })).toBe(par.kid);
 	});
 });

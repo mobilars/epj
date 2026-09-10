@@ -142,7 +142,7 @@ describe('FHIR-stier', () => {
 		expect(normaliserText('Søren Ødegård')).toBe('soren odegard');
 		expect(normaliserText('  ÆRE  ')).toBe('aere');
 		expect(normaliserText('Håkon')).toBe('hakon');
-		// Alle tre bokstavene behandles likt - ingen halvveis folding.
+		// All three letters are treated alike - no half-way folding.
 		expect(normaliserText('æøå')).toBe('aeoa');
 	});
 });

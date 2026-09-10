@@ -3,12 +3,12 @@ import { clientIp } from '../src/lib/server/http';
 import type { RequestEvent } from '@sveltejs/kit';
 
 /**
- * Klient-IP-en styrer både ratebegrensningen per adresse og feltet `source_ip`
- * i sikkerhetsloggen. Kan klienten velge den selv, er begge deler verdiløse.
+ * The client IP governs both the per-address rate limit and the `source_ip`
+ * field in the security log. If the client can choose it, both are worthless.
  *
- * Inngangskontrolleren legger den ekte adressen bakerst i `X-Forwarded-For`.
- * Vi teller derfor `EPJ_TRUSTED_PROXY_HOPS` fra slutten, og ser bort fra alt
- * lenger til venstre - det kan klienten ha diktet opp.
+ * The ingress controller puts the real address last in `X-Forwarded-For`. We
+ * therefore count `EPJ_TRUSTED_PROXY_HOPS` from the end, and disregard
+ * everything further left - the client may have invented that.
  */
 function event(xff: string | null, remote = '203.0.113.9'): RequestEvent {
 	return {
@@ -23,7 +23,7 @@ describe('utledning av klient-IP', () => {
 	});
 
 	it('godtar én oppføring når det er ett betrodd hopp', () => {
-		// Klienten sendte ingen header; proxyen la inn den ekte adressen.
+		// The client sent no header; the proxy inserted the real address.
 		expect(clientIp(event('198.51.100.7'))).toBe('198.51.100.7');
 	});
 
@@ -32,10 +32,10 @@ describe('utledning av klient-IP', () => {
 	});
 
 	it('ignorerer en kjede som er kortere enn antall betrodde hopp', async () => {
-		// Med to betrodde proxyer og bare én oppføring har forespørselen ikke
-		// vært gjennom dem begge. Da er headeren klientens eget verk, og skal
-		// ikke brukes. Tidligere ble den første oppføringen brukt uansett, og
-		// hvem som helst kunne dermed velge sin egen adresse.
+		// With two trusted proxies and only one entry, the request has not been
+		// through both of them. The header is then the client's own work, and must
+		// not be used. Previously the first entry was used regardless, and anyone
+		// could thereby choose their own address.
 		vi.resetModules();
 		const previous = process.env.EPJ_TRUSTED_PROXY_HOPS;
 		process.env.EPJ_TRUSTED_PROXY_HOPS = '2';

@@ -3,7 +3,7 @@ import type { AuthContext } from '../../src/lib/server/authz/context';
 import { parseScopes } from '../../src/lib/server/authz/scopes';
 import { permissionsForRoles, scopesForRoles, type Role } from '../../src/lib/server/authz/roles';
 
-/** Bygger en tilgangskontekst for testene, med rollens fulle scope-sett. */
+/** Builds an access context for the tests, with the role's full scope set. */
 export function context(over: Partial<AuthContext> & { roles?: Role[] } = {}): AuthContext {
 	const roles = over.roles ?? (['lege'] as Role[]);
 	return {
@@ -27,7 +27,7 @@ export function context(over: Partial<AuthContext> & { roles?: Role[] } = {}): A
 	};
 }
 
-/** Kontekst for en SMART-app med et bestemt scope-sett og pasientkontekst. */
+/** Context for a SMART app with a given scope set and patient context. */
 export function appContext(scope: string, patientId?: string, roles: Role[] = ['lege']): AuthContext {
 	return context({
 		mate: 'smart-app',
@@ -41,11 +41,11 @@ export function appContext(scope: string, patientId?: string, roles: Role[] = ['
 
 
 /**
- * Virksomhetene testene kjører i.
+ * The organisations the tests run in.
  *
- * `TEST_TENANT` speiler standardvirksomheten migrasjon 003 legger inn. Den
- * andre finnes for isolasjonstestene: alt som skrives i den ene skal være
- * usynlig fra den andre.
+ * `TEST_TENANT` mirrors the default organisation migration 003 inserts. The
+ * other exists for the isolation tests: everything written in the one must be
+ * invisible from the other.
  */
 export const TEST_TENANT: Tenant = {
 	id: 'standard',

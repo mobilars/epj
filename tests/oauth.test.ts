@@ -394,7 +394,7 @@ describeIf('OAuth 2.1 og SMART App Launch', () => {
 
 	describe('PKCE-hjelper', () => {
 		it('regner ut S256-utfordringen', () => {
-			// Testvektor fra RFC 7636 appendiks B.
+			// Test vector from RFC 7636 appendix B.
 			expect(pkceChallenge('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk')).toBe('E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM');
 		});
 	});

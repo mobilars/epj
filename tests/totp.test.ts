@@ -17,7 +17,7 @@ describe('base32', () => {
 });
 
 describe('TOTP (RFC 6238)', () => {
-	// RFC 6238 bruker hemmeligheten "12345678901234567890" (SHA-1).
+	// RFC 6238 uses the secret "12345678901234567890" (SHA-1).
 	const rfcSecret = base32Encode(Buffer.from('12345678901234567890'));
 
 	it('gjengir testvektorene fra RFC 6238', () => {

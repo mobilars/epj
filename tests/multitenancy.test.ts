@@ -29,19 +29,19 @@ const actor: AuditActor = {
 /**
  * Multitenancy.
  *
- * Isolasjon er en påstand helt til den er prøvd. Testene her skriver data i én
- * virksomhet og kontrollerer at de er usynlige fra en annen - gjennom de samme
- * modulene applikasjonen selv bruker, ikke gjennom rå SQL.
+ * Isolation is a claim until it has been tried. The tests here write data in
+ * one organisation and check that it is invisible from another - through the
+ * same modules the application itself uses, not through raw SQL.
  *
- * Kliniske data skilles av HAPI sin partisjonering, og prøves derfor over ekte
- * HTTP mot en partisjonsbevisst FHIR-server.
+ * Clinical data is separated by HAPI's partitioning, and is therefore tried
+ * over real HTTP against a partition-aware FHIR server.
  */
 describeIf('multitenancy', () => {
 	let db: TestDatabase;
 	let fhir: TestFhirServer;
-	/** Virksomhet A er standardvirksomheten migrasjonen legger inn. */
+	/** Organisation A is the default organisation the migration inserts. */
 	let a: Tenant;
-	/** Virksomhet B opprettes av testen, med egen partisjon. */
+	/** Organisation B is created by the test, with its own partition. */
 	let b: Tenant;
 
 	beforeAll(async () => {
@@ -84,7 +84,7 @@ describeIf('multitenancy', () => {
 			await withTenant(a, async () => {
 				expect(requireTenant().id).toBe(a.id);
 				await withTenant(b, async () => expect(requireTenant().id).toBe(b.id));
-				// Den indre konteksten lekker ikke ut igjen.
+				// The inner context does not leak back out.
 				expect(requireTenant().id).toBe(a.id);
 			});
 			expect(currentTenant()?.id).toBe(TEST_TENANT.id);
@@ -96,7 +96,7 @@ describeIf('multitenancy', () => {
 					await new Promise((r) => setTimeout(r, ms));
 					return time();
 				});
-			// B starter sist og blir ferdig først; A skal likevel se sin egen.
+			// B starts last and finishes first; A must still see its own.
 			const [iA, iB] = await Promise.all([treg(a, 20), treg(b, 1)]);
 			expect([iA, iB]).toEqual([a.id, b.id]);
 		});
@@ -184,7 +184,7 @@ describeIf('multitenancy', () => {
 			const iD = await withTenant(d, () => getUserAtUsername('sjefen'));
 			expect(iD?.name).toBe('Dagny Sjef');
 
-			// Den samme brukeren finnes ikke i de andre virksomhetene.
+			// The same user does not exist in the other organisations.
 			expect(await withTenant(a, () => getUserAtUsername('sjefen'))).toBeNull();
 			expect(await withTenant(b, () => getUserAtUsername('sjefen'))).toBeNull();
 		});
@@ -210,7 +210,7 @@ describeIf('multitenancy', () => {
 			expect((await withTenant(a, () => listUsers())).map((u) => u.name)).toEqual(['Lege A']);
 			expect((await withTenant(b, () => listUsers())).map((u) => u.name)).toEqual(['Lege B']);
 
-			// Oppslag på id fra feil virksomhet gir ingenting.
+			// A lookup by id from the wrong organisation yields nothing.
 			expect(await withTenant(b, () => getUser(iA.id))).toBeNull();
 			expect(await withTenant(a, () => getUser(iB.id))).toBeNull();
 		});
@@ -237,9 +237,9 @@ describeIf('multitenancy', () => {
 
 		it('nekter pålogging med et brukernavn som hører hjemme i en annen virksomhet', async () => {
 			await withTenant(a, () => createUser({ username: 'lege', name: 'Lege A', password: 'Testpassord1!', roles: ['lege'] }));
-			// I egen virksomhet kjenner systemet brukeren (og går videre til MFA).
+			// In its own organisation the system knows the user (and goes on to MFA).
 			expect((await withTenant(a, () => logIn('lege', 'Testpassord1!'))).outcome).not.toBe('ukjent-bruker');
-			// I nabovirksomheten finnes brukernavnet rett og slett ikke.
+			// In the neighbouring organisation the username simply does not exist.
 			expect((await withTenant(b, () => logIn('lege', 'Testpassord1!'))).outcome).toBe('ukjent-bruker');
 		});
 	});
@@ -261,7 +261,7 @@ describeIf('multitenancy', () => {
 				})
 			);
 
-			// Søk i A ser bare A sin pasient.
+			// A search in A sees only A's patient.
 			const searchA = await withTenant(a, () => fhirClient.search('Patient', new URLSearchParams()));
 			expect((searchA.entry ?? []).map((e) => (e.resource as { id: string }).id)).toEqual([pA.resource.id]);
 
@@ -295,14 +295,14 @@ describeIf('multitenancy', () => {
 
 			const iA = await withTenant(a, () => getLog({ limit: 50 }));
 			const iB = await withTenant(b, () => getLog({ limit: 50 }));
-			// Hver virksomhet ser sine egne innslag, og ingen av naboens.
+			// Each organisation sees its own entries, and none of the neighbour's.
 			expect(iA.rows.filter((r) => r.subtype?.startsWith('a-'))).toHaveLength(3);
 			expect(iA.rows.some((r) => r.subtype?.startsWith('b-'))).toBe(false);
 			expect(iB.rows.filter((r) => r.subtype?.startsWith('b-'))).toHaveLength(3);
 			expect(iB.rows.some((r) => r.subtype?.startsWith('a-'))).toBe(false);
 
-			// Begge kjedene verifiserer hver for seg, selv om radene ligger om
-			// hverandre i tabellen.
+			// Both chains verify separately, even though the rows lie interleaved
+			// in the table.
 			expect((await withTenant(a, () => verifyLogChain())).valid).toBe(true);
 			expect((await withTenant(b, () => verifyLogChain())).valid).toBe(true);
 		});
@@ -315,7 +315,7 @@ describeIf('multitenancy', () => {
 			const row = await one<{ seq: number }>(
 				"SELECT seq FROM audit_event WHERE tenant_id = 'standard' AND subtype = 'a-1' ORDER BY seq LIMIT 1"
 			);
-			// Triggeren må kobles fra for å simulere et angrep på databasenivå.
+			// The trigger must be detached to simulate an attack at the database level.
 			await exec('ALTER TABLE audit_event DISABLE TRIGGER trg_audit_append_only');
 			await exec(`UPDATE audit_event SET content = jsonb_set(content, '{action}', '"C"') WHERE seq = $1`, [row?.seq]);
 			await exec('ALTER TABLE audit_event ENABLE TRIGGER trg_audit_append_only');
@@ -337,7 +337,7 @@ describeIf('multitenancy', () => {
 			expect((await withTenant(a, () => listClients())).map((k) => k.name)).toEqual(['App A']);
 			expect((await withTenant(b, () => listClients())).map((k) => k.name)).toEqual(['App B']);
 
-			// En client_id fra A finnes ikke i B, selv om den er gyldig i A.
+			// A client_id from A does not exist in B, even though it is valid in A.
 			expect(await withTenant(b, () => getClient(kA.client.client_id))).toBeNull();
 		});
 

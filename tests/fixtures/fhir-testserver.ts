@@ -2,16 +2,16 @@ import { createServer, type Server } from 'node:http';
 import { randomUUID } from 'node:crypto';
 
 /**
- * Testdobbel for HAPI FHIR.
+ * Test double for HAPI FHIR.
  *
- * Dette er IKKE en FHIR-server for produksjon - den finnes bare for at testene
- * skal kunne kjøre uten Docker. Den snakker den delen av FHIR REST-protokollen
- * som `fhir/client.ts` faktisk bruker (les, vread, søk via POST /_search,
- * opprett, oppdater, slett, transaksjon, $everything, $validate, metadata),
- * slik at vokteren i `fhir/gateway.ts` kan testes over ekte HTTP.
+ * This is NOT a FHIR server for production - it exists only so the tests can
+ * run without Docker. It speaks the part of the FHIR REST protocol that
+ * `fhir/client.ts` actually uses (read, vread, search via POST /_search,
+ * create, update, delete, transaction, $everything, $validate, metadata), so
+ * the guard in `fhir/gateway.ts` can be tested over real HTTP.
  *
- * Den ekte HAPI-serveren kjøres i docker-compose og i CI-jobben
- * `integrasjon-hapi`, som kjører den samme testsuiten mot hapiproject/hapi.
+ * The real HAPI server is run in docker-compose and in the CI job
+ * `integrasjon-hapi`, which runs the same test suite against hapiproject/hapi.
  */
 
 export type ResourceStore = Map<string, Map<string, Record<string, unknown>>>;
@@ -19,13 +19,13 @@ export type ResourceStore = Map<string, Map<string, Record<string, unknown>>>;
 export interface TestFhirServer {
 	url: string;
 	server: Server | null;
-	/** True når testene kjører mot en ekte HAPI-server i stedet for dobbelen. */
+	/** True when the tests run against a real HAPI server instead of the double. */
 	isEkte: boolean;
-	/** Innholdet i den upartisjonerte roten. Se `lagerFor` for partisjonene. */
+	/** The contents of the unpartitioned root. See `lagerFor` for the partitions. */
 	store: ResourceStore;
-	/** Innholdet i én partisjon. Tomt kart hvis partisjonen ikke er tatt i bruk. */
+	/** The contents of one partition. An empty map if the partition is unused. */
 	storeFor(partition: string): ResourceStore;
-	/** Partisjonene serveren kjenner, slik $partition-management-list-partitions svarer. */
+	/** The partitions the server knows, as $partition-management-list-partitions answers. */
 	partitions(): { id: number; name: string }[];
 	call: { method: string; path: string; partition: string }[];
 	close(): Promise<void>;
@@ -73,11 +73,11 @@ function codeValues(v: unknown): string[] {
 }
 
 /**
- * Gir en FHIR-server til testene.
+ * Provides a FHIR server to the tests.
  *
- * Med EPJ_BRUK_EKTE_HAPI=1 pekes testene mot en ekte HAPI-server i stedet for
- * dobbelen. Da kjøres den samme testsuiten mot den virkelige implementasjonen,
- * slik CI-jobben `integrasjon-hapi` gjør.
+ * With EPJ_BRUK_EKTE_HAPI=1 the tests are pointed at a real HAPI server rather
+ * than the double. The same test suite then runs against the real
+ * implementation, as the CI job `integrasjon-hapi` does.
  */
 export async function fhirForTest(): Promise<TestFhirServer> {
 	if (process.env.EPJ_BRUK_EKTE_HAPI === '1') {
@@ -92,7 +92,7 @@ export async function fhirForTest(): Promise<TestFhirServer> {
 			partitions: () => [],
 			call: [],
 			nullstill() {
-				/* En ekte server tømmes ikke mellom tester; testene lager egne pasienter. */
+				/* A real server is not emptied between tests; the tests make their own patients. */
 			},
 			close: async () => undefined
 		};
@@ -101,15 +101,15 @@ export async function fhirForTest(): Promise<TestFhirServer> {
 }
 
 /**
- * Partisjonering.
+ * Partitioning.
  *
- * HAPI med `URL_BASED` tenantidentifikasjon legger partisjonsnavnet foran
- * ressurstypen: /fhir/<partisjon>/Patient/123. Dobbelen gjør det samme, og
- * holder ett lager per partisjon. Det er nettopp den isolasjonen
- * multitenancy hviler på, så den må testes - ikke antas.
+ * HAPI with `URL_BASED` tenant identification puts the partition name in front
+ * of the resource type: /fhir/<partition>/Patient/123. The double does the
+ * same, and keeps one store per partition. That isolation is exactly what
+ * multitenancy rests on, so it must be tested - not assumed.
  *
- * Ressurstyper i FHIR begynner alltid med stor bokstav, og partisjonsnavn er
- * små bokstaver (eller `DEFAULT`). Segmentene kan derfor ikke forveksles.
+ * Resource types in FHIR always begin with a capital letter, and partition
+ * names are lower case (or `DEFAULT`). The segments cannot be confused.
  */
 const PARTISJONSNAVN = /^(DEFAULT|[a-z][a-z0-9-]{1,30})$/;
 
@@ -118,7 +118,7 @@ function isPartisjonssegment(segment: string): boolean {
 }
 
 export async function startTestFhirServer(): Promise<TestFhirServer> {
-	// '' er roten: den brukes når serveren kjøres uten partisjonering.
+	// '' is the root: it is used when the server runs without partitioning.
 	const partitionStores = new Map<string, ResourceStore>([['', new Map()]]);
 	const partitionRegistry = new Map<string, { id: number; name: string; description?: string }>([
 		['DEFAULT', { id: 0, name: 'DEFAULT', description: 'Standardpartisjon' }]
@@ -184,7 +184,7 @@ export async function startTestFhirServer(): Promise<TestFhirServer> {
 			const helPath = url.pathname.replace(/^\/fhir\/?/, '');
 			const body = Buffer.concat(biter).toString('utf8');
 
-			// Skill partisjonssegmentet fra resten, slik HAPI gjør med URL_BASED.
+			// Separate the partition segment from the rest, as HAPI does with URL_BASED.
 			const allParts = helPath.split('/').filter(Boolean);
 			const partition = allParts.length && isPartisjonssegment(allParts[0]) ? allParts[0] : '';
 			const path = partition ? allParts.slice(1).join('/') : helPath;
@@ -199,7 +199,7 @@ export async function startTestFhirServer(): Promise<TestFhirServer> {
 
 			const parts = path.split('/').filter(Boolean);
 
-			// --- Partisjonsadministrasjon (kalles på standardpartisjonen) -----
+			// --- Partition administration (called on the default partition) ---
 			if (parts.length === 1 && parts[0].startsWith('$partition-management-')) {
 				const operation = parts[0].slice('$partition-management-'.length);
 				const inValue = body ? (JSON.parse(body) as { parameter?: { name: string; valueInteger?: number; valueString?: string }[] }) : {};

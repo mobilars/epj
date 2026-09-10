@@ -13,11 +13,11 @@ import type { Bundle } from '../src/lib/server/fhir/types';
 const describeIf = hasTestDatabase() ? describe : describe.skip;
 
 /**
- * Integrasjonstest av vokteren foran FHIR-serveren.
+ * Integration test of the guard in front of the FHIR server.
  *
- * Kjører mot ekte PostgreSQL og over ekte HTTP mot en FHIR-server, slik at
- * hele kjeden testes: tilgangsbeslutning, videresending, etterfiltrering av
- * sperrede pasienter og skriving til sikkerhetsloggen.
+ * Runs against real PostgreSQL and over real HTTP towards a FHIR server, so
+ * the whole chain is tested: the access decision, forwarding, post-filtering
+ * of restricted patients and writing to the security log.
  */
 describeIf('FHIR-vokteren', () => {
 	let db: TestDatabase;
@@ -125,7 +125,7 @@ describeIf('FHIR-vokteren', () => {
 		it('gir tomt resultat når brukeren ikke har noen pasienter', async () => {
 			const response = await execute({ ctx: context(), method: 'POST', path: 'Observation/_search', search: new URLSearchParams(), body: new URLSearchParams() });
 			expect((response.resource as Bundle).entry).toHaveLength(0);
-			// Ingen kall skal ha gått videre til FHIR-serveren.
+			// No call must have gone on to the FHIR server.
 			if (!fhir.isEkte) {
 				expect(fhir.call.filter((k) => k.path.startsWith('Observation/_search'))).toHaveLength(0);
 			}
@@ -152,7 +152,7 @@ describeIf('FHIR-vokteren', () => {
 			await givesRelationship('bruker-1', pasient1);
 			const app = appContext('patient/Observation.rs?category=vital-signs', pasient1);
 			await execute({ ctx: app, method: 'POST', path: 'Observation/_search', search: new URLSearchParams(), body: new URLSearchParams() });
-			// Begrensningen skal ha nådd fram til serveren.
+			// The narrowing must have reached the server.
 			if (!fhir.isEkte) {
 				expect(fhir.call.some((k) => k.path === 'Observation/_search')).toBe(true);
 			}
@@ -203,7 +203,7 @@ describeIf('FHIR-vokteren', () => {
 				code: { text: 'Skjult' },
 				subject: { reference: `Patient/${pasient2}` }
 			});
-			// Ny versjon peker på «min» pasient, men den eksisterende gjør ikke det.
+			// The new version points at "my" patient, but the existing one does not.
 			await expect(
 				execute({
 					ctx: context(), method: 'PUT', path: `Condition/${fremmed.resource.id}`, search: new URLSearchParams(),
@@ -236,7 +236,7 @@ describeIf('FHIR-vokteren', () => {
 				execute({ ctx: context(), method: 'POST', path: '', search: new URLSearchParams(), body: bundle })
 			).rejects.toMatchObject({ status: 403 });
 
-			// Hele transaksjonen skal være stoppet før den nådde serveren.
+			// The whole transaction must have been stopped before it reached the server.
 			if (!fhir.isEkte) {
 				expect(fhir.call.some((k) => k.method === 'POST' && k.path === '')).toBe(false);
 			}
