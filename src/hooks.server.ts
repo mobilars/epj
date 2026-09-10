@@ -1,3 +1,4 @@
+import { redirect } from '@sveltejs/kit';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
 import { config } from '$srv/config';
@@ -134,6 +135,27 @@ async function handleIContext(
 	const isFhirApi =
 		(path.startsWith('/fhir') || path.startsWith('/api') || path.startsWith('/oauth')) &&
 		!oauthPages.some((p) => path.startsWith(p));
+
+	/**
+	 * The developer portal has a hostname of its own, and only the portal is on
+	 * it.
+	 *
+	 * A developer account holds no role and no organisation, and the portal
+	 * shows nothing about patients. Separating them by hostname means a
+	 * developer session cannot reach a record page even if something later goes
+	 * wrong with the checks inside the pages themselves.
+	 */
+	const isDeveloperPortal =
+		Boolean(config.tenant.developerHostname) && event.url.hostname === config.tenant.developerHostname;
+	if (config.tenant.developerHostname) {
+		if (path.startsWith('/utvikler') && !isDeveloperPortal) {
+			return new Response('Utviklerportalen nås på et eget vertsnavn.', { status: 404 });
+		}
+		if (isDeveloperPortal && !path.startsWith('/utvikler') && path !== '/') {
+			return new Response('Denne adressen er forbeholdt utviklerportalen.', { status: 404 });
+		}
+		if (isDeveloperPortal && path === '/') redirect(303, '/utvikler');
+	}
 
 	// Platform administration is reached only on the platform's own hostname,
 	// and the organisation's pages are not reachable from there.

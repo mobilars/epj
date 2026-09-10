@@ -184,6 +184,15 @@ export const config = {
 	tenant: {
 		/** The organisation requests fall back on when the hostname is unknown. */
 		defaultValue: env.EPJ_DEFAULT_TENANT ?? 'standard',
+		/**
+		 * The hostname the developer portal is reached on.
+		 *
+		 * Its own name, and nothing else on it. A developer account has no role,
+		 * no organisation and no patient access at all, and keeping the portal on
+		 * a separate origin means there is no path from one into the other however
+		 * badly something is configured later.
+		 */
+		developerHostname: env.EPJ_DEVELOPER_HOSTNAME ?? '',
 		/** The hostname platform administration is reached on. */
 		platformHostname: env.EPJ_PLATFORM_HOSTNAME ?? '',
 		/** Accept an unknown hostname and use the default organisation. Off in production. */

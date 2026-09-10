@@ -79,6 +79,15 @@ spec:
                 secretKeyRef:
                   name: epj-hemmeligheter
                   key: EPJ_HELSEID_PRIVATE_KEY
+            # Sending av påloggingskoder i utviklerportalen. Optional, slik at
+            # en installasjon uten e-post fortsatt starter - portalen sier fra
+            # om at koden ikke kunne sendes i stedet for å feile ved oppstart.
+            - name: EPJ_SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: epj-hemmeligheter
+                  key: EPJ_SMTP_PASSWORD
+                  optional: true
           ports:
             - containerPort: 3000
           # Startup venter på at prosessen lytter, ikke på at HAPI er oppe. HAPI

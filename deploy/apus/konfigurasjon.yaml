@@ -28,6 +28,18 @@ data:
   # there, and the practice's own name never exposes it.
   EPJ_PLATFORM_HOSTNAME: epj-admin.apps.apus.no
 
+  # The developer portal has a hostname of its own, and only the portal is on
+  # it. A developer account holds no role and no organisation - keeping it on
+  # a separate origin means there is no path from one into the other.
+  EPJ_DEVELOPER_HOSTNAME: utvikler.apps.apus.no
+
+  # Sign-in codes for the portal. The key lives in `epj-hemmeligheter`.
+  EPJ_SMTP_HOST: smtp-relay.brevo.com
+  EPJ_SMTP_PORT: '587'
+  EPJ_SMTP_USER: lars@roland.bz
+  EPJ_SMTP_FROM: lars@roland.bz
+  EPJ_SMTP_FROM_NAME: EPJ utviklerportal
+
   # CloudNativePG signs the server certificate with the cluster's own CA.
   EPJ_DB_SSL: 'true'
   NODE_EXTRA_CA_CERTS: /etc/epj/postgres-ca/ca.crt

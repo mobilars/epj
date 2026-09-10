@@ -5,6 +5,7 @@
 
 <div class="rad-mellom">
 	<h2>SMART-apper og tjenester</h2>
+	<a class="knapp" href="/admin/apper/galleri">Appgalleri</a>
 </div>
 
 <div class="varsel varsel-info">
