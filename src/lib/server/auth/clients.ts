@@ -64,6 +64,15 @@ export interface NewClient {
 	launchUrl?: string;
 	inMainMenu?: boolean;
 	placement?: Placement;
+	/**
+	 * Whether the user is asked before the app is given access.
+	 *
+	 * On by default, and it should stay on for anything a user starts. An app
+	 * the practice has placed as part of the record's own surface is the
+	 * exception: it opens on every patient, and a dialog on every patient is not
+	 * a decision anyone makes - it is a thing people click past.
+	 */
+	requireConsent?: boolean;
 	createdOf?: string;
 }
 
@@ -72,15 +81,15 @@ export async function registerClient(inValue: NewClient): Promise<{ client: OAut
 	const secret = inValue.type === 'confidential' && !inValue.jwks && !inValue.jwksUri ? newToken(32) : undefined;
 	await exec(
 		`INSERT INTO oauth_client (client_id, tenant_id, name, type, client_category, secret_hash, jwks, jwks_uri,
-			redirect_uris, allowed_scopes, grant_types, require_pkce, logo_url, databehandleravtale, launch_url,
-			in_main_menu, placement, created_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+			redirect_uris, allowed_scopes, grant_types, require_pkce, require_consent, logo_url, databehandleravtale,
+			launch_url, in_main_menu, placement, created_by)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
 		[
 			clientId, requireTenant().id, inValue.name, inValue.type, inValue.category, secret ? hashPassword(secret) : null,
 			inValue.jwks ? JSON.stringify(inValue.jwks) : null, inValue.jwksUri ?? null,
 			JSON.stringify(inValue.redirectUris), JSON.stringify(inValue.scopes),
 			JSON.stringify(inValue.grantTypes ?? (inValue.category === 'backend' ? ['client_credentials'] : ['authorization_code', 'refresh_token'])),
-			inValue.type === 'public', inValue.logoUrl ?? null, inValue.databehandleravtale ?? null, inValue.launchUrl ?? null,
+			inValue.type === 'public', inValue.requireConsent ?? true, inValue.logoUrl ?? null, inValue.databehandleravtale ?? null, inValue.launchUrl ?? null,
 			inValue.inMainMenu ?? false, inValue.placement ?? 'ingen', inValue.createdOf ?? null
 		]
 	);
@@ -98,6 +107,14 @@ export async function registerClient(inValue: NewClient): Promise<{ client: OAut
  * whoever had it.
  */
 export type Placement = 'ingen' | 'hoved' | 'side';
+
+export async function setRequireConsent(clientId: string, requireConsent: boolean): Promise<void> {
+	await exec('UPDATE oauth_client SET require_consent = $2 WHERE client_id = $1 AND tenant_id = $3', [
+		clientId,
+		requireConsent,
+		requireTenant().id
+	]);
+}
 
 export async function setPlacement(clientId: string, placement: Placement): Promise<void> {
 	const tenantId = requireTenant().id;

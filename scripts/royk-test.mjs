@@ -55,6 +55,14 @@ try {
 
 	if ((await frameElement.count()) > 0) {
 		const frame = await frameElement.first().contentFrame();
+
+		// An app the practice has not placed asks for consent first. Approving it
+		// here means the consent path is exercised too, rather than skipped.
+		await frame
+			.getByRole('button', { name: /Gi tilgang|Godkjenn/ })
+			.click({ timeout: 8000 })
+			.then(() => check('samtykkedialogen ble vist og godkjent', true))
+			.catch(() => check('appen slapp inn uten samtykkedialog (plassert av virksomheten)', true));
 		// The app runs discovery, PKCE and the token exchange inside the frame,
 		// with two redirects, so give it room.
 		await frame

@@ -139,7 +139,10 @@ export const actions: Actions = {
 		const url = new URL(redirectUri);
 		url.searchParams.set('code', code);
 		url.searchParams.set('state', state);
-		redirect(303, url.toString());
+		// Back to the app by way of this origin: a form submission that redirects
+		// to another origin is blocked by form-action, so the browser leaves for
+		// the app by an ordinary navigation instead. See /oauth/videresend.
+		redirect(303, `/oauth/videresend?til=${encodeURIComponent(url.toString())}`);
 	},
 
 	avslaa: async (event) => {

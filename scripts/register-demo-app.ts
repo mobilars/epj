@@ -15,7 +15,7 @@
 import { exec } from '../src/lib/server/db';
 import { getTenant } from '../src/lib/server/tenant/tenant';
 import { requireTenant, withTenant } from '../src/lib/server/tenant/context';
-import { listClients, registerClient, setPlacement, type Placement } from '../src/lib/server/auth/clients';
+import { listClients, registerClient, setPlacement, setRequireConsent, type Placement } from '../src/lib/server/auth/clients';
 
 const READ = 'openid fhirUser launch launch/patient online_access patient/Patient.rs';
 
@@ -80,6 +80,9 @@ async function ensure(app: App): Promise<string> {
 			]
 		);
 		await setPlacement(clientId, app.placement);
+		// An app the practice has placed opens on every patient. A consent dialog
+		// on every patient is not a decision anyone makes.
+		await setRequireConsent(clientId, app.placement === 'ingen');
 		return `oppdatert  ${clientId}`;
 	}
 
@@ -100,6 +103,7 @@ async function ensure(app: App): Promise<string> {
 		tenantId
 	]);
 	await setPlacement(client.client_id, app.placement);
+	await setRequireConsent(client.client_id, app.placement === 'ingen');
 	return `registrert ${client.client_id}`;
 }
 
