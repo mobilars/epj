@@ -23,7 +23,11 @@ spec:
   template:
     metadata:
       labels:
-        app: epj
+        # Ikke `app: epj`. Tjenesten `epj` velger nettopp den merkelappen, så en
+        # jobb med den havner blant endepunktene bak lastbalansereren mens den
+        # kjører - og trafikk sendes til en pod som ikke lytter på 3000.
+        # Nettverkstilgangen er i stedet gitt av `epj-seed` i nettverk-apus.yaml.
+        app: epj-seed
     spec:
       restartPolicy: Never
       securityContext:

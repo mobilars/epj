@@ -67,3 +67,39 @@ spec:
               app: postgres
       ports:
         - port: 5432
+---
+# Demodatajobben trenger de samme veiene ut som journalen selv - databasen, HAPI
+# og DNS - men skal ikke ha journalens merkelapp, siden tjenesten `epj` velger
+# den. Den får derfor sin egen regel.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: epj-seed
+  namespace: epj
+spec:
+  podSelector:
+    matchLabels:
+      app: epj-seed
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app: hapi
+      ports:
+        - port: 8080
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
