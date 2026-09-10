@@ -5,11 +5,11 @@ import { prescribe, fornye, getMedicationList, discontinue, synkHistory } from '
 import { config } from '$srv/config';
 
 /**
- * Legemiddelliste og forskrivning gjennom Sentral forskrivningsmodul.
+ * Medication list and prescribing through Sentral forskrivningsmodul.
  *
- * Journalen viser listen fra SFM (Pasientens legemiddelliste) som kilden, og
- * markerer avvik som legen må ta stilling til. Forskrivning krever rettigheten
- * `resept:forskriv`.
+ * The record shows the list from SFM (the patient's medication list) as the
+ * source, and marks discrepancies the doctor must consider. Prescribing
+ * requires the `resept:forskriv` permission.
  */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;

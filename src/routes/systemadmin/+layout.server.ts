@@ -3,11 +3,11 @@ import type { LayoutServerLoad } from './$types';
 import { config } from '$srv/config';
 
 /**
- * Plattformadministrasjon.
+ * Platform administration.
  *
- * Dette er det eneste grensesnittet som ser på tvers av virksomheter. Det gir
- * ingen klinisk tilgang: rollen `systemeier` har ingen scopes, så FHIR-porten
- * avviser den uansett hva som skulle stå her.
+ * This is the only interface that looks across organisations. It grants no
+ * clinical access: the `systemeier` role has no scopes, so the FHIR gate
+ * refuses it whatever might be written here.
  */
 export const load: LayoutServerLoad = async (event) => {
 	const ctx = event.locals.auth;

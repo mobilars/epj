@@ -7,7 +7,7 @@ import { listCard, createBillingCard, getCard } from '$srv/integrations/helfo/bi
 import { getCopaymentStatus } from '$srv/integrations/helfo/copayment';
 import { oreToKroner, TARIFFS, TAKSTREGISTER_VALID_FROM } from '$srv/integrations/helfo/tariffs';
 
-/** Regningskort for én pasient, med frikortstatus og takstvalg. */
+/** Billing card for one patient, with exemption status and tariff choice. */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	const parent = await event.parent();
@@ -63,8 +63,8 @@ export const actions: Actions = {
 		const takstkoder = form.getAll('takst').map(String).filter(Boolean);
 		if (takstkoder.length === 0) return fail(400, { error: 'Velg minst én takst.' });
 
-		// Handlinger har ikke tilgang til forelderens data; pasienten hentes på nytt
-		// gjennom vokteren, som samtidig kontrollerer at brukeren har tilgang.
+		// Actions have no access to the parent's data; the patient is fetched again
+		// through the guard, which at the same time checks that the user has access.
 		const patient = await readResourceHvisExists(ctx, 'Patient', event.params.id);
 		const age = patient?.birthDate ? ageFrom(patient.birthDate as string) : undefined;
 

@@ -7,11 +7,11 @@ import { config } from '$srv/config';
 import { PLATFORM_TENANT } from '$srv/tenant/context';
 
 /**
- * Virksomhetsregisteret sett fra plattformen.
+ * The organisation register seen from the platform.
  *
- * Oversikten teller brukere og loggeinnslag per virksomhet, og krysser av mot
- * partisjonene HAPI faktisk har. Avvik mellom de to registrene er en driftsfeil
- * som må synes, ikke skjules.
+ * The overview counts users and log entries per organisation, and checks them
+ * against the partitions HAPI actually has. A discrepancy between the two
+ * registers is an operational fault that must show, not be hidden.
  */
 export const load: PageServerLoad = async () => {
 	const [overview, partitioning] = await Promise.all([

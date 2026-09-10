@@ -9,7 +9,7 @@ import { toPatientDisplay } from '$srv/fhir/display';
 import { newId } from '$srv/util/ids';
 import { SYSTEM } from '$srv/fhir/codesystems';
 
-/** Meldinger knyttet til én pasient, og skjema for å sende dialogmelding eller henvisning. */
+/** Messages tied to one patient, and a form for sending a dialogue message or referral. */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	const parent = await event.parent();

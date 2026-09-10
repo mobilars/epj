@@ -12,12 +12,12 @@ import type { FhirResource } from '../src/lib/server/fhir/types';
 const describeIf = hasTestDatabase() ? describe : describe.skip;
 
 /**
- * Utlevering av journal.
+ * Disclosure of the record.
  *
- * Testene kontrollerer det som faktisk betyr noe juridisk: at uttrekket går
- * gjennom tilgangskontrollen, at det som utleveres er det som står i
- * kvitteringen, at hjemmelen havner i sikkerhetsloggen, og at den lesbare og
- * den maskinlesbare utgaven sier det samme.
+ * The tests check what actually matters legally: that the extract goes through
+ * access control, that what is disclosed is what the receipt says, that the
+ * legal basis ends up in the security log, and that the readable and the
+ * machine-readable version say the same thing.
  */
 describeIf('utlevering av journal', () => {
 	let db: TestDatabase;
@@ -107,7 +107,7 @@ describeIf('utlevering av journal', () => {
 			section: [{ text: { status: 'generated', div: '<div>Blodtrykk noe høyt. Fortsetter Ramipril.</div>' } }]
 		});
 
-		// Denne skal aldri komme med i uttrekket for vår pasient.
+		// This must never end up in the extract for our patient.
 		await fhirClient.create({
 			resourceType: 'Condition',
 			clinicalStatus: { coding: [{ code: 'active' }] },

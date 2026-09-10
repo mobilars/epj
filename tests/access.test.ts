@@ -100,7 +100,7 @@ describeIf('tilgangsbeslutning', () => {
 			expect(b.allowed).toBe(false);
 			expect(b.reason).toMatch(/sperret/);
 
-			// Legen er ikke omfattet av sperringen.
+			// The doctor is not covered by the restriction.
 			expect((await evaluate({ ctx: context(), resourceType: 'Observation', operation: 'r', resource: observation(PATIENT) })).allowed).toBe(true);
 		});
 
@@ -119,7 +119,7 @@ describeIf('tilgangsbeslutning', () => {
 				[newId(), PATIENT]
 			);
 			expect((await evaluate({ ctx: context(), resourceType: 'Observation', operation: 'r', resource: observation(PATIENT) })).allowed).toBe(false);
-			// En annen observasjon er ikke sperret.
+			// Another observation is not restricted.
 			expect(
 				(await evaluate({ ctx: context(), resourceType: 'Observation', operation: 'r', resource: { ...observation(PATIENT), id: 'obs-2' } })).allowed
 			).toBe(true);
@@ -257,10 +257,10 @@ describeIf('tilgangsbeslutning', () => {
 
 	describe('ressurser der pasienten ikke kan avgjøres', () => {
 		/**
-		 * Tjenstlig behov og sperring forutsetter begge at vi vet hvilken pasient
-		 * opplysningen gjelder. Før dette slapp et oppslag der pasienten ikke lot
-		 * seg utlede rett gjennom - `Binary` var en slik type, og den bærer
-		 * vedlegg: skannede dokumenter, prøvesvar, bilder.
+		 * Legitimate need and restriction both presuppose that we know which
+		 * patient the information concerns. Before this, a lookup where the
+		 * patient could not be derived passed straight through - `Binary` was
+		 * such a type, and it carries attachments: scans, results, images.
 		 */
 		it('nekter oppslag på en pasientnær type uten pasientreferanse', async () => {
 			await givesRelationship('bruker-1', PATIENT);
@@ -288,9 +288,9 @@ describeIf('tilgangsbeslutning', () => {
 		});
 
 		/**
-		 * Strukturell kontroll, ikke en liste å vedlikeholde: legger noen til en
-		 * ressurstype uten `patient`/`subject`-parameter, skal den enten unntas
-		 * eksplisitt som ikke-pasientnær, eller feile her.
+		 * A structural check, not a list to maintain: if someone adds a resource
+		 * type without a `patient`/`subject` parameter, it must either be exempted
+		 * explicitly as non-patient data, or fail here.
 		 */
 		it('alle støttede pasientnære typer har en pasientreferanse å avgrense på', () => {
 			const uavklarte = STOTTEDE_RESSURSTYPER.filter((t) => isPatientRelated(t) && !canDeterminePatient(t));

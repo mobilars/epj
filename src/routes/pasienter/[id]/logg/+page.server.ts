@@ -3,11 +3,11 @@ import type { PageServerLoad } from './$types';
 import { getLog, log, actorFromContext } from '$srv/audit';
 
 /**
- * Innsynslogg.
+ * Access log.
  *
- * Pasienten har rett til å få vite hvem som har hatt tilgang til journalen
- * (pasientjournalloven § 18). Loggen vises her, og selve oppslaget i loggen
- * blir også loggført.
+ * The patient has a right to know who has had access to the record (the
+ * Patient Records Act section 18). The log is shown here, and the lookup in
+ * the log is itself logged.
  */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;

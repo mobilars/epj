@@ -2,9 +2,9 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
 /**
- * SMART styling. Apper som støtter «context-style» henter denne og tilpasser
- * seg journalens utseende, slik at de ikke føles som et fremmedelement midt i
- * en konsultasjon.
+ * SMART styling. Apps supporting "context-style" fetch this and adapt to the
+ * record's appearance, so they do not feel like a foreign element in the
+ * middle of a consultation.
  */
 export const GET: RequestHandler = () =>
 	json(

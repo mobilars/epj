@@ -6,7 +6,7 @@ import { actorFromContext } from '$srv/audit';
 import { query } from '$srv/db';
 import { PLATFORM_TENANT, fhirBaseFor, issuerFor } from '$srv/tenant/context';
 
-/** Detaljer om én virksomhet, med de tallene som trengs for å drifte den. */
+/** Details of one organisation, with the numbers needed to operate it. */
 export const load: PageServerLoad = async (event) => {
 	const tenant = await getTenant(event.params.id);
 	if (!tenant) error(404, 'Ukjent virksomhet.');

@@ -6,12 +6,12 @@ import { SYSTEM } from '$srv/fhir/codesystems';
 import type { FhirResource } from '$srv/fhir/types';
 
 /**
- * Journalnotater.
+ * Record notes.
  *
- * Notatet lagres som FHIR Composition med seksjonene subjektivt, objektivt,
- * vurdering og plan. Notater endres ikke i etterkant: en retting lagres som ny
- * versjon, og HAPI beholder den forrige. Feilføringer merkes
- * `entered-in-error` framfor å slettes, slik pasientjournalforskriften krever.
+ * The note is stored as a FHIR Composition with the sections subjective,
+ * objective, assessment and plan. Notes are not changed afterwards: a
+ * correction is stored as a new version and HAPI keeps the previous one.
+ * Mistakes are marked `entered-in-error` rather than deleted, as required.
  */
 
 interface Section {
@@ -77,7 +77,7 @@ export const actions: Actions = {
 		const patientId = event.params.id;
 		const now = new Date().toISOString();
 
-		// Kontakten (Encounter) knytter notat, diagnose og oppgjør sammen.
+		// The Encounter ties note, diagnosis and settlement together.
 		const encounter = await writeResource(ctx, {
 			resourceType: 'Encounter',
 			status: 'completed',
@@ -133,7 +133,7 @@ export const actions: Actions = {
 		const note = resources(bundle)[0];
 		if (!note) return fail(404, { error: 'Fant ikke notatet.' });
 
-		// Notatet slettes ikke, men merkes som feilført, med begrunnelsen bevart.
+		// The note is not deleted, but marked as erroneous, with the reason kept.
 		await writeResource(
 			ctx,
 			{

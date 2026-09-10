@@ -4,11 +4,11 @@ import { UTLEVERINGSGRUNNER } from '$srv/journal/disclosure';
 import { getLog } from '$srv/audit';
 
 /**
- * Utlevering av journal.
+ * Disclosure of the record.
  *
- * Siden viser hva som skal til for en utlevering, og hvilke utleveringer som
- * allerede er gjort på denne pasienten. Utleveringshistorikken er en del av
- * pasientens innsynsrett: hun skal kunne se hvem journalen hennes har gått til.
+ * The page shows what a disclosure requires, and which disclosures have
+ * already been made for this patient. The disclosure history is part of the
+ * patient's right of access: they can see where their record has gone.
  */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;

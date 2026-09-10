@@ -62,7 +62,7 @@ describeIf('sikkerhetslogg', () => {
 
 	it('oppdager at en rad er fjernet', async () => {
 		for (let i = 0; i < 5; i++) await log({ type: 'rest', action: 'R', outcome: '0', patientId: `p${i}` }, actor);
-		// Triggeren må kobles fra for å simulere et angrep på databasenivå.
+		// The trigger must be detached to simulate an attack at the database level.
 		await exec('ALTER TABLE audit_event DISABLE TRIGGER trg_audit_append_only');
 		await exec('DELETE FROM audit_event WHERE seq = (SELECT min(seq) + 2 FROM audit_event)');
 		await exec('ALTER TABLE audit_event ENABLE TRIGGER trg_audit_append_only');

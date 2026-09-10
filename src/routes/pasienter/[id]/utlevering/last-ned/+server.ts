@@ -10,12 +10,12 @@ import {
 } from '$srv/journal/disclosure';
 
 /**
- * Selve utleveringen.
+ * The disclosure itself.
  *
- * Et GET-endepunkt, slik at nettleseren laster ned filen direkte og skjemaet
- * virker uten JavaScript. Uttrekket bygges på nytt for hver nedlasting - det
- * mellomlagres ikke noe sted, så en journal med helseopplysninger blir aldri
- * liggende utenfor det kliniske lageret.
+ * A GET endpoint, so the browser downloads the file directly and the form
+ * works without JavaScript. The extract is rebuilt for every download - it is
+ * not cached anywhere, so a record with health data is never left lying
+ * outside the clinical store.
  */
 export const GET: RequestHandler = async (event) => {
 	const ctx = event.locals.auth;
@@ -52,9 +52,9 @@ export const GET: RequestHandler = async (event) => {
 	return new Response(body, {
 		headers: {
 			'content-type': type,
-			// Journalen skal lagres som fil, ikke vises i en ramme et sted.
+			// The record is to be saved as a file, not displayed in a frame somewhere.
 			'content-disposition': `attachment; filename="${filnavn(extract, extension)}"`,
-			// Helseopplysninger skal ikke ligge i noen mellomlagring.
+			// Health data must not sit in any intermediate cache.
 			'cache-control': 'no-store, private',
 			'x-utlevering': extract.disclosureId
 		}

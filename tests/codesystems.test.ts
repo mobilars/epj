@@ -30,7 +30,7 @@ describe('fødselsnummer', () => {
 	});
 
 	it('avviser ugyldig datodel', () => {
-		// 32. januar finnes ikke, uansett kontrollsiffer.
+		// 32 January does not exist, whatever the check digits.
 		expect(validNorwegianNationalId('32016510035')).toBe(false);
 	});
 
@@ -41,12 +41,12 @@ describe('fødselsnummer', () => {
 
 	it('utleder fødselsdato med riktig århundre', () => {
 		expect(validDateDel('13086510035')).toBe('1965-08-13');
-		// Individsiffer 501 med årstall 15 gir 2015, ikke 1915.
+		// Individual digits 501 with year 15 gives 2015, not 1915.
 		expect(validDateDel('11061550188')).toBe('2015-06-11');
 	});
 
 	it('utleder kjønn fra individsifferet (partall = kvinne)', () => {
-		// Individsifferet er niende siffer: 1 -> mann, 2 -> kvinne.
+		// The individual digit is the ninth: 1 -> man, 2 -> woman.
 		expect(genderFromNationalId('21129410180')).toBe('male');
 		expect(genderFromNationalId('24035810281')).toBe('female');
 		expect(genderFromNationalId('tull')).toBe('unknown');
@@ -60,7 +60,7 @@ describe('fødselsnummer', () => {
 
 describe('organisasjonsnummer', () => {
 	it('godtar gyldige numre', () => {
-		// Enhetsregisteret: Norsk helsenett SF og Helsedirektoratet.
+		// The Central Coordinating Register: Norsk helsenett SF and the Directorate of Health.
 		expect(validOrganisationNumber('994598759')).toBe(true);
 		expect(validOrganisationNumber('983544622')).toBe(true);
 	});

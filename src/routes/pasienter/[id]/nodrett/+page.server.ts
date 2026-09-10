@@ -9,10 +9,10 @@ import { config } from '$srv/config';
 import { canEmergencyAccess } from '$srv/authz/roles';
 
 /**
- * Nødrettstilgang ("break the glass").
+ * Emergency access ("break the glass").
  *
- * Egen rute fordi handlingene skal kunne utløses fra alle fanene i journalen.
- * Siden har ingen egen visning - den sender brukeren tilbake til journalen.
+ * A route of its own, because the actions must be reachable from every tab in
+ * the record. The page has no view - it sends the user back to the record.
  */
 export const load: PageServerLoad = async (event) => {
 	redirect(303, `/pasienter/${event.params.id}`);
@@ -20,9 +20,9 @@ export const load: PageServerLoad = async (event) => {
 
 export const actions: Actions = {
 	/**
-	 * Nødrettstilgang. Krever begrunnelse, bekreftelse av identitet, og gir
-	 * tidsbegrenset tilgang. Både forespørselen og selve tilgangen logges,
-	 * og oppslaget legges i kø for gjennomgang.
+	 * Emergency access. Requires a justification and confirmation of identity,
+	 * and grants time-limited access. Both the request and the access itself are
+	 * logged, and the lookup is queued for review.
 	 */
 	emergencyAccess: async (event) => {
 		const ctx = event.locals.auth;
@@ -40,7 +40,7 @@ export const actions: Actions = {
 
 		if (justification.length < 15) back('Skriv en konkret begrunnelse på minst 15 tegn.');
 
-		// Reautentisering før nødrett, når kontoen har totrinnsverifisering.
+		// Re-authentication before emergency access, when the account has two-factor.
 		if (config.security.requireMfa && ctx.amr !== 'helseid') {
 			if (!oneTimeCode || !(await confirmTotp(ctx.userId, oneTimeCode))) {
 				back('Feil eller manglende engangskode.');
