@@ -211,8 +211,17 @@ export const config = {
 			enabled: bool('EPJ_HELSEID_ENABLED', false),
 			issuer: (env.EPJ_HELSEID_ISSUER ?? 'https://helseid-sts.test.nhn.no').replace(/\/$/, ''),
 			clientId: env.EPJ_HELSEID_CLIENT_ID ?? '',
-			/** Private key (PEM, PKCS#8) for client assertions. */
+			/**
+			 * Client key for the assertions, as a base64-encoded JWK (or a JSON
+			 * array of them, in which case the first is used). This is the form
+			 * HelseID hands the key out in, and it carries `kid` and `alg` with
+			 * it - which matters, because HelseID matches the assertion against
+			 * the registered key by `kid`.
+			 */
+			privateJwkBase64: env.EPJ_HELSEID_PRIVATE_JWK ?? '',
+			/** The same key as PKCS#8 PEM. Used when no JWK is configured. */
 			privateKeyPem: env.EPJ_HELSEID_PRIVATE_KEY ?? '',
+			/** Only consulted alongside the PEM; a JWK brings its own `kid`. */
 			keyId: env.EPJ_HELSEID_KEY_ID ?? '',
 			signingAlgorithm: (env.EPJ_HELSEID_ALG ?? 'RS256') as 'RS256' | 'PS256' | 'ES256',
 			scopes: (env.EPJ_HELSEID_SCOPES ??

@@ -1,6 +1,6 @@
 import type { Cookies } from '@sveltejs/kit';
 import * as oidc from 'openid-client';
-import { importPKCS8 } from 'jose';
+import { importJWK, importPKCS8, type JWK } from 'jose';
 import { config } from '../config';
 import { decrypt, encrypt } from '../util/crypto';
 import { one, exec, transaction } from '../db';
@@ -43,6 +43,9 @@ export const CLAIM = {
 	ORGNR_PARENT: 'helseid://claims/client/claims/orgnr_parent'
 } as const;
 
+/** HelseID refuses a client assertion valid for more than ten seconds. */
+const HELSEID_ASSERTION_LIFETIME = 10;
+
 let cachedConfiguration: { value: oidc.Configuration; expiresAt: number } | null = null;
 
 /**
@@ -54,19 +57,61 @@ let cachedConfiguration: { value: oidc.Configuration; expiresAt: number } | null
  */
 export async function helseIdConfiguration(): Promise<oidc.Configuration> {
 	if (cachedConfiguration && Date.now() < cachedConfiguration.expiresAt) return cachedConfiguration.value;
-	const { issuer, clientId, privateKeyPem, keyId, signingAlgorithm } = config.integrations.healthId;
+	const { issuer, clientId } = config.integrations.healthId;
 	if (!clientId) throw new Error('HelseID client id is missing (EPJ_HELSEID_CLIENT_ID)');
-	if (!privateKeyPem) throw new Error('HelseID client key is missing (EPJ_HELSEID_PRIVATE_KEY)');
 
-	const key = await importPKCS8(privateKeyPem, signingAlgorithm);
-	const value = await oidc.discovery(
-		new URL(issuer),
-		clientId,
-		undefined,
-		oidc.PrivateKeyJwt({ key, kid: keyId || undefined })
-	);
+	const value = await oidc.discovery(new URL(issuer), clientId, undefined, oidc.PrivateKeyJwt(await clientKey(), {
+		/**
+		 * HelseID's own requirements on the client assertion, beyond RFC 7523:
+		 *
+		 *   - `typ` must be `client-authentication+jwt`. With a plain `JWT` the
+		 *     assertion is refused as invalid_client.
+		 *   - `exp` must be at most ten seconds ahead. openid-client's default of
+		 *     one minute is accepted for now, but logged as deprecated.
+		 *
+		 * `aud` is the issuer identifier, which is what openid-client already
+		 * sends - not the token endpoint.
+		 *
+		 * https://utviklerportal.nhn.no/informasjonstjenester/helseid/bruksmoenstre-og-eksempelkode/bruk-av-helseid/docs/tekniske-mekanismer/bruk_av_client_assertion_no_nbmd
+		 */
+		[oidc.modifyAssertion]: (header, payload) => {
+			header.typ = 'client-authentication+jwt';
+			payload.exp = (payload.iat as number) + HELSEID_ASSERTION_LIFETIME;
+		}
+	}));
 	cachedConfiguration = { value, expiresAt: Date.now() + 3600_000 };
 	return value;
+}
+
+/**
+ * The key the client assertions are signed with.
+ *
+ * A JWK is preferred: it carries its own `kid` and `alg`, and HelseID picks the
+ * registered key to check the assertion against by `kid`. Deriving the `kid`
+ * ourselves - as an RFC 7638 thumbprint, say - only works if HelseID happened to
+ * register the key under that same id. The PEM form remains for environments
+ * configured before the JWK was available.
+ */
+async function clientKey(): Promise<oidc.CryptoKey | oidc.PrivateKey> {
+	const { privateJwkBase64, privateKeyPem, keyId, signingAlgorithm } = config.integrations.healthId;
+	if (privateJwkBase64) {
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(Buffer.from(privateJwkBase64, 'base64').toString('utf8'));
+		} catch (err) {
+			throw new Error(`EPJ_HELSEID_PRIVATE_JWK is not base64-encoded JSON: ${(err as Error).message}`);
+		}
+		const jwk = (Array.isArray(parsed) ? parsed[0] : parsed) as JWK | undefined;
+		if (!jwk?.kty) throw new Error('EPJ_HELSEID_PRIVATE_JWK holds no JWK');
+		const alg = jwk.alg ?? signingAlgorithm;
+		const key = await importJWK(jwk, alg);
+		if (!('type' in key)) throw new Error('EPJ_HELSEID_PRIVATE_JWK is a symmetric key, not a signing key');
+		return { key: key as oidc.CryptoKey, kid: jwk.kid };
+	}
+	if (!privateKeyPem) {
+		throw new Error('HelseID client key is missing (EPJ_HELSEID_PRIVATE_JWK or EPJ_HELSEID_PRIVATE_KEY)');
+	}
+	return { key: await importPKCS8(privateKeyPem, signingAlgorithm), kid: keyId || undefined };
 }
 
 /** Used by the tests, and after a configuration change. */
@@ -177,7 +222,20 @@ export async function completeLogin(cookies: Cookies, currentUrl: URL): Promise<
 		});
 		const verified = tokens.claims();
 		if (!verified) return { ok: false, error: 'HelseID returnerte ikke id_token' };
-		claims = verified as unknown as Record<string, unknown>;
+		// HelseID does not necessarily put pid, HPR number and security level in
+		// the id_token - which ones appear there depends on how the client is
+		// registered. Userinfo is asked as well and fills the gaps; the id_token
+		// still wins where the two overlap, since that is the signed document.
+		let fromUserinfo: Record<string, unknown> = {};
+		try {
+			fromUserinfo = (await oidc.fetchUserInfo(configuration, tokens.access_token, verified.sub)) as unknown as Record<
+				string,
+				unknown
+			>;
+		} catch {
+			/* userinfo is a bonus; the id_token is what authenticates */
+		}
+		claims = { ...fromUserinfo, ...(verified as unknown as Record<string, unknown>) };
 	} catch (err) {
 		return { ok: false, error: `HelseID avviste innloggingen: ${(err as Error).message}` };
 	}
@@ -249,5 +307,5 @@ export async function linkToLocalUser(
 
 export function isConfigured(): boolean {
 	const h = config.integrations.healthId;
-	return h.enabled && Boolean(h.clientId) && Boolean(h.privateKeyPem);
+	return h.enabled && Boolean(h.clientId) && Boolean(h.privateJwkBase64 || h.privateKeyPem);
 }
