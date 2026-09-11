@@ -84,6 +84,7 @@
 				<span class="merke" class:merke-ok={a.status === 'aktiv'} class:merke-fare={a.status !== 'aktiv'}>{a.status}</span>
 				{#if a.inMainMenu}<span class="merke merke-info">I hovedmenyen</span>{/if}
 				{#if a.inPatientTabs}<span class="merke merke-info">Egen fane i journalen</span>{/if}
+				{#if a.openInNewTab}<span class="merke merke-info">Eget vindu</span>{/if}
 				{#if !a.requireConsent}<span class="merke merke-ok">Godkjent av virksomheten</span>{/if}
 			</span>
 		</div>
@@ -185,6 +186,16 @@
 					<input type="hidden" name="iPasientfaner" value={a.inPatientTabs ? 'nei' : 'ja'} />
 					<button type="submit" class="liten">
 						{a.inPatientTabs ? 'Flytt tilbake under «Apper»' : 'Vis som egen fane i journalen'}
+					</button>
+				</form>
+				<!-- A framed app is a third-party context, so the browser blocks the
+				     cookies it sets during its own launch. Apps that carry a session
+				     through the handshake need to be their own top-level document. -->
+				<form method="POST" action="?/ownWindow">
+					<input type="hidden" name="clientId" value={a.clientId} />
+					<input type="hidden" name="iEgetVindu" value={a.openInNewTab ? 'nei' : 'ja'} />
+					<button type="submit" class="liten">
+						{a.openInNewTab ? 'Vis i ramme i journalen' : 'Åpne i eget vindu'}
 					</button>
 				</form>
 				<!-- The main menu is for apps that work across patients and start

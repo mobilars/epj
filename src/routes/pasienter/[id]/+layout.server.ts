@@ -80,7 +80,13 @@ export const load: LayoutServerLoad = async (event) => {
 	const sideApp =
 		chosen === 'journal' ? null : chosen ? (await listClients()).find((c) => c.client_id === chosen && c.status === 'aktiv') ?? sideDefault : sideDefault;
 
-	const launchFor = async (client: { client_id: string; launch_url: string | null } | null | undefined) => {
+	const launchFor = async (
+		client: { client_id: string; launch_url: string | null; open_in_new_tab?: boolean } | null | undefined
+	) => {
+		// An app that needs its own window gets a button rather than a frame, and
+		// the launch is minted when that button is pressed. Minting one here would
+		// spend a single-use context on a frame that is never rendered.
+		if (client?.open_in_new_tab) return null;
 		if (!client?.launch_url || !ctx.userId || !patient) return null;
 		const launchId = await createLaunch({ clientId: client.client_id, userId: ctx.userId, patientId, encounterId: null });
 		const url = new URL(client.launch_url);
@@ -97,8 +103,12 @@ export const load: LayoutServerLoad = async (event) => {
 		// A tab an app has taken over links to the app instead of the record's own
 		// page. The record keeps its page for whichever tabs no app answers for.
 		tabApps: Object.fromEntries([...tabApps].map(([tab, c]) => [tab, { name: c.name, clientId: c.client_id }])),
-		sidePanel: sideApp && sideUrl ? { name: sideApp.name, clientId: sideApp.client_id, url: sideUrl } : null,
-		widePanel: wideApp && wideUrl ? { name: wideApp.name, clientId: wideApp.client_id, url: wideUrl } : null,
+		sidePanel: sideApp
+			? { name: sideApp.name, clientId: sideApp.client_id, url: sideUrl, openInNewTab: sideApp.open_in_new_tab }
+			: null,
+		widePanel: wideApp
+			? { name: wideApp.name, clientId: wideApp.client_id, url: wideUrl, openInNewTab: wideApp.open_in_new_tab }
+			: null,
 		nektet,
 		minimaltName,
 		emergencyAccess,

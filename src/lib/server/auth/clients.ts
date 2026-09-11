@@ -30,6 +30,8 @@ export interface OAuthClient {
 	in_main_menu: boolean;
 	/** Has a tab of its own in the patient record rather than sitting under Apper. */
 	in_patient_tabs: boolean;
+	/** Launch as its own top-level document, so the app's cookies are first-party. */
+	open_in_new_tab: boolean;
 	/** `ingen`, `hoved` (the wide surface) or `side` (the narrow panel). */
 	placement: string;
 	/** Route segment of the record tab this app answers for, or null. */
@@ -40,7 +42,7 @@ export interface OAuthClient {
 
 const FIELD = `client_id, tenant_id, name, type, client_category, secret_hash, jwks, jwks_uri, redirect_uris,
 	allowed_scopes, grant_types, require_pkce, require_consent, logo_url, databehandleravtale, launch_url,
-	in_main_menu, in_patient_tabs, placement, replaces_tab, status, created_at`;
+	in_main_menu, in_patient_tabs, open_in_new_tab, placement, replaces_tab, status, created_at`;
 
 export async function getClient(clientId: string): Promise<OAuthClient | null> {
 	return one<OAuthClient>(`SELECT ${FIELD} FROM oauth_client WHERE client_id = $1 AND tenant_id = $2`, [
@@ -229,6 +231,20 @@ export async function setInMainMenu(clientId: string, inMainMenu: boolean): Prom
 export async function setInPatientTabs(clientId: string, inPatientTabs: boolean): Promise<void> {
 	await exec('UPDATE oauth_client SET in_patient_tabs = $2 WHERE client_id = $1 AND tenant_id = $3', [
 		clientId, inPatientTabs, requireTenant().id
+	]);
+}
+
+/**
+ * Whether the app gets its own window.
+ *
+ * A frame puts the app in a third-party context, where the browser blocks the
+ * cookies it sets during its own launch. Apps that carry a session between
+ * their launch endpoint and their redirect target need to be their own
+ * top-level document for that to work.
+ */
+export async function setOpenInNewTab(clientId: string, openInNewTab: boolean): Promise<void> {
+	await exec('UPDATE oauth_client SET open_in_new_tab = $2 WHERE client_id = $1 AND tenant_id = $3', [
+		clientId, openInNewTab, requireTenant().id
 	]);
 }
 

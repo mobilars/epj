@@ -29,6 +29,18 @@ export const load: PageServerLoad = async (event) => {
 	if (!client) error(404, 'Ukjent app.');
 	if (!client.launch_url) error(400, 'Appen har ingen launch-URL og kan ikke startes fra journalen.');
 
+	// An app that opens in its own window is launched from the button, not from
+	// this page, so there is no launch to mint here - and minting one would spend
+	// a single-use context nothing ever redeems.
+	if (client.open_in_new_tab) {
+		return {
+			app: { name: client.name, clientId: client.client_id },
+			launchUrl: null,
+			openInNewTab: true,
+			patientId: event.params.id
+		};
+	}
+
 	const launchId = await createLaunch({
 		clientId: client.client_id,
 		userId: ctx.userId,
@@ -55,7 +67,8 @@ export const load: PageServerLoad = async (event) => {
 
 	return {
 		app: { name: client.name, clientId: client.client_id },
-		launchUrl: url.toString(),
+		launchUrl: url.toString() as string | null,
+		openInNewTab: false,
 		patientId: event.params.id
 	};
 };

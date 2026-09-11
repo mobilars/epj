@@ -1,6 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { listClients, registerClient, setKlientstatus, type ClientCategory , setInMainMenu, setInPatientTabs, updateClient, setPlacement, setRequireConsent, type Placement } from '$srv/auth/clients';
+import { listClients, registerClient, setKlientstatus, type ClientCategory , setInMainMenu, setInPatientTabs, setOpenInNewTab, updateClient, setPlacement, setRequireConsent, type Placement } from '$srv/auth/clients';
 import { createLaunch } from '$srv/auth/oauth';
 import { describeScope } from '$srv/authz/scopes';
 import { log, actorFromContext } from '$srv/audit';
@@ -44,6 +44,7 @@ export const load: PageServerLoad = async (event) => {
 			launchUrl: k.launch_url,
 			inMainMenu: k.in_main_menu,
 			inPatientTabs: k.in_patient_tabs,
+			openInNewTab: k.open_in_new_tab,
 			placement: k.placement,
 			requireConsent: k.require_consent,
 			hasKeys: Boolean(k.jwks || k.jwks_uri),
@@ -191,6 +192,20 @@ export const actions: Actions = {
 		await setInPatientTabs(clientId, inPatientTabs);
 		await log(
 			{ type: 'admin', subtype: 'app:pasientfane', action: 'U', outcome: '0', entityRef: `Device/${clientId}`, details: { inPatientTabs } },
+			actorFromContext(ctx)
+		);
+		redirect(303, '/admin/apper');
+	},
+
+	ownWindow: async (event) => {
+		const ctx = event.locals.auth;
+		if (!ctx?.permissions.has('admin:apper')) return fail(403, { error: 'Ingen tilgang.' });
+		const form = await event.request.formData();
+		const clientId = String(form.get('clientId') ?? '');
+		const openInNewTab = form.get('iEgetVindu') === 'ja';
+		await setOpenInNewTab(clientId, openInNewTab);
+		await log(
+			{ type: 'admin', subtype: 'app:eget-vindu', action: 'U', outcome: '0', entityRef: `Device/${clientId}`, details: { openInNewTab } },
 			actorFromContext(ctx)
 		);
 		redirect(303, '/admin/apper');

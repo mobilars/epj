@@ -3,7 +3,7 @@
 	import type { Snippet } from 'svelte';
 	let { data, children }: { data: PatientLayoutData; children: Snippet } = $props();
 
-	type PanelApp = { name: string; clientId: string; url: string };
+	type PanelApp = { name: string; clientId: string; url: string | null; openInNewTab: boolean };
 
 	type PatientLayoutData = {
 		patientId: string;
@@ -137,7 +137,16 @@
 						<h2>{data.widePanel.name}</h2>
 						<a class="svak" href="/pasienter/{data.patientId}/apper/{data.widePanel.clientId}">Åpne stor</a>
 					</div>
-					<iframe class="appramme appramme-hoved" src={data.widePanel.url} title={data.widePanel.name}></iframe>
+					{#if data.widePanel.openInNewTab}
+						<p class="svak">
+							Appen trenger sine egne informasjonskapsler og må være sitt eget vindu.
+						</p>
+						<a class="knapp-primar" href="/pasienter/{data.patientId}/apper/{data.widePanel.clientId}/start" target="_blank" rel="noopener">
+							Åpne {data.widePanel.name}
+						</a>
+					{:else if data.widePanel.url}
+						<iframe class="appramme appramme-hoved" src={data.widePanel.url} title={data.widePanel.name}></iframe>
+					{/if}
 				</section>
 			{/if}
 			{@render children()}
@@ -160,7 +169,16 @@
 						<h2>{data.sidePanel.name}</h2>
 						<a class="svak" href="/innstillinger">Bytt</a>
 					</div>
-					<iframe class="appramme appramme-side" src={data.sidePanel.url} title={data.sidePanel.name}></iframe>
+					{#if data.sidePanel.openInNewTab}
+						<p class="svak">
+							Appen trenger sine egne informasjonskapsler og må være sitt eget vindu.
+						</p>
+						<a class="knapp-primar" href="/pasienter/{data.patientId}/apper/{data.sidePanel.clientId}/start" target="_blank" rel="noopener">
+							Åpne {data.sidePanel.name}
+						</a>
+					{:else if data.sidePanel.url}
+						<iframe class="appramme appramme-side" src={data.sidePanel.url} title={data.sidePanel.name}></iframe>
+					{/if}
 				</section>
 			{:else if data.canSkrive}
 				<section class="kort">
