@@ -57,4 +57,4 @@ patches:
 images:
   - name: ghcr.io/mobilars/epj
     newName: localhost:32000/epj
-    newTag: 3191e2f2fbd0
+    newTag: 9e30a6b399a9
