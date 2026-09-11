@@ -29,6 +29,7 @@ export const load: PageServerLoad = async (event) => {
 
 	return {
 		fhirBaseUrl: fhirBaseFor(requireTenant()),
+		issuerUrl: issuerFor(requireTenant()),
 		wellKnown: `${issuerFor(requireTenant())}/.well-known/smart-configuration`,
 		apper: (await listClients()).map((k) => ({
 			clientId: k.client_id,

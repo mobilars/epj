@@ -10,6 +10,9 @@
 
 <div class="varsel varsel-info">
 	FHIR-endepunkt: <span class="mono">{data.fhirBaseUrl}</span><br />
+	Appen må sende dette som <span class="mono">aud</span>, og får det samme som
+	<span class="mono">iss</span> ved oppstart fra journalen. Adressen til nettstedet alene
+	(<span class="mono">{data.issuerUrl}</span>) er utstederen, ikke FHIR-endepunktet.<br />
 	Oppsettdokument: <a href={data.wellKnown} class="mono">/.well-known/smart-configuration</a>
 </div>
 

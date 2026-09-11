@@ -189,7 +189,11 @@ export function validateAuthorisationRequest(
 	// Exact, with or without a trailing slash. A prefix match would accept
 	// `.../fhir.example.com`, which is another server entirely.
 	if (f.aud && f.aud.replace(/\/+$/, '') !== fhirBase.replace(/\/+$/, '')) {
-		return reject('invalid_request', `aud må være ${fhirBase}`);
+		// Say what came as well as what was wanted. The usual mistake is sending
+		// the issuer instead of the FHIR base - both answer on the same host, and
+		// both serve a smart-configuration - so an app that only sees what the
+		// value must be has no way to tell how near it was.
+		return reject('invalid_request', `aud må være ${fhirBase}, ikke ${f.aud.slice(0, 200)}`);
 	}
 	if (f.scope.split(/\s+/).includes('launch') && !f.launch) {
 		return reject('invalid_request', 'scope «launch» krever parameteren launch');
