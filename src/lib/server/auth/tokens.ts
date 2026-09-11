@@ -53,9 +53,16 @@ export async function issueTokens(inValue: UtstedelseIn): Promise<IssuedToken> {
 
 	const roles = inValue.userId ? await rolesFor(inValue.userId) : [];
 	const user = inValue.userId ? await getUser(inValue.userId) : null;
-	const fhirUser = user?.practitioner_id
-		? `${fhirBaseFor(tenant)}/Practitioner/${user.practitioner_id}`
-		: undefined;
+	// SMART ties the clinician's identity to the `fhirUser` scope, and the tie has
+	// to hold: an app that asked only to read a patient would otherwise also learn
+	// which clinician is sitting at the record, and which Practitioner resource is
+	// theirs, without ever asking for it. Gated here rather than at each use, so
+	// the access token, the id_token, the token response and introspection all
+	// answer the same way.
+	const fhirUser =
+		inValue.scope.split(/\s+/).includes('fhirUser') && user?.practitioner_id
+			? `${fhirBaseFor(tenant)}/Practitioner/${user.practitioner_id}`
+			: undefined;
 
 	const payload = {
 		iss: issuerFor(tenant),

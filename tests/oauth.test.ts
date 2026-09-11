@@ -161,6 +161,27 @@ describeIf('OAuth 2.1 og SMART App Launch', () => {
 			expect(result.tokens.smart_style_url).toContain('/smart-style.json');
 		});
 
+		// An app that never asked for `fhirUser` must not be told which clinician is
+		// at the record. Every app but one requests the scope, so the leak was
+		// invisible until an app turned up that did not.
+		it('holder fhirUser tilbake når appen ikke har bedt om scopet', async () => {
+			const { verifier, challenge } = pkce();
+			const code = await createAuthorisationCode({
+				clientId, userId: 'bruker-1', redirectUri: REDIRECT,
+				scope: 'openid patient/Patient.rs',
+				codeChallenge: challenge, codeChallengeMethod: 'S256',
+				launch: { patientId: 'pas-1' }
+			});
+			const result = await exchangeInCode(code, await getClientRow(), REDIRECT, verifier);
+			expect(result.ok).toBe(true);
+			if (!result.ok) return;
+			expect(result.tokens.fhirUser).toBeUndefined();
+			const claims = JSON.parse(Buffer.from(result.tokens.access_token.split('.')[1], 'base64url').toString());
+			expect(claims.fhirUser).toBeUndefined();
+			// The patient context is unaffected: it rides on the launch, not the scope.
+			expect(result.tokens.patient).toBe('pas-1');
+		});
+
 		it('avviser feil code_verifier', async () => {
 			const { challenge } = pkce();
 			const code = await createAuthorisationCode({
