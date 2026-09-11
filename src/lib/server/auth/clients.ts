@@ -102,6 +102,52 @@ export async function registerClient(inValue: NewClient): Promise<{ client: OAut
 	return { client, secret };
 }
 
+export interface ClientUpdate {
+	name: string;
+	redirectUris: string[];
+	scopes: string[];
+	launchUrl?: string;
+	jwks?: { keys: Jwk[] };
+	jwksUri?: string;
+	logoUrl?: string;
+	databehandleravtale?: string;
+}
+
+/**
+ * Changes what an app is allowed to do and where it may be sent.
+ *
+ * Everything but the client id and the client type can change: the id is what
+ * the app, the tokens and the security log know it by, and the type decides
+ * how it authenticates. A widened scope list is a new question to the users,
+ * so their remembered consents are withdrawn and each is asked again on the
+ * next launch. Tokens already issued keep the scopes they were narrowed to.
+ */
+export async function updateClient(clientId: string, inValue: ClientUpdate): Promise<void> {
+	const tenantId = requireTenant().id;
+	await transaction(async () => {
+		const before = await getClient(clientId);
+		if (!before) throw new Error('Ukjent klient');
+		await exec(
+			`UPDATE oauth_client
+			 SET name = $3, redirect_uris = $4, allowed_scopes = $5, launch_url = $6, jwks = $7, jwks_uri = $8,
+				 logo_url = $9, databehandleravtale = $10
+			 WHERE client_id = $1 AND tenant_id = $2`,
+			[
+				clientId, tenantId, inValue.name, JSON.stringify(inValue.redirectUris), JSON.stringify(inValue.scopes),
+				inValue.launchUrl ?? null, inValue.jwks ? JSON.stringify(inValue.jwks) : null, inValue.jwksUri ?? null,
+				inValue.logoUrl ?? null, inValue.databehandleravtale ?? null
+			]
+		);
+		const widened = inValue.scopes.some((s) => !before.allowed_scopes.includes(s));
+		if (widened) {
+			await exec(
+				'UPDATE oauth_consent SET revoked_at = now() WHERE tenant_id = $1 AND client_id = $2 AND revoked_at IS NULL',
+				[tenantId, clientId]
+			);
+		}
+	});
+}
+
 /**
  * Where an app is rendered.
  *

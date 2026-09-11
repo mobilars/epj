@@ -1,6 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { listClients, registerClient, setKlientstatus, type ClientCategory , setInMainMenu, setInPatientTabs, setPlacement, setRequireConsent, type Placement } from '$srv/auth/clients';
+import { listClients, registerClient, setKlientstatus, type ClientCategory , setInMainMenu, setInPatientTabs, updateClient, setPlacement, setRequireConsent, type Placement } from '$srv/auth/clients';
 import { createLaunch } from '$srv/auth/oauth';
 import { describeScope } from '$srv/authz/scopes';
 import { log, actorFromContext } from '$srv/audit';
@@ -46,6 +46,9 @@ export const load: PageServerLoad = async (event) => {
 			placement: k.placement,
 			requireConsent: k.require_consent,
 			hasKeys: Boolean(k.jwks || k.jwks_uri),
+			jwksUri: k.jwks_uri ?? '',
+			jwks: k.jwks ? JSON.stringify(k.jwks, null, 1) : '',
+			logoUrl: k.logo_url ?? '',
 			aktiveTokens: tokenKart.get(k.client_id) ?? 0,
 			created_at: new Date(k.created_at).toLocaleDateString('nb-NO')
 		}))
@@ -112,6 +115,67 @@ export const actions: Actions = {
 		await setInMainMenu(clientId, inMainMenu);
 		await log(
 			{ type: 'admin', subtype: 'app:hovedmeny', action: 'U', outcome: '0', entityRef: `Device/${clientId}`, details: { inMainMenu } },
+			actorFromContext(ctx)
+		);
+		redirect(303, '/admin/apper');
+	},
+
+	oppdater: async (event) => {
+		const ctx = event.locals.auth;
+		if (!ctx?.permissions.has('admin:apper')) return fail(403, { error: 'Ingen tilgang.' });
+		const form = await event.request.formData();
+		const clientId = String(form.get('clientId') ?? '');
+		const existing = (await listClients()).find((c) => c.client_id === clientId);
+		if (!existing) return fail(404, { error: 'Ukjent app.' });
+
+		const name = String(form.get('navn') ?? '').trim();
+		const redirectUris = String(form.get('redirectUris') ?? '').split(/\s+/).filter(Boolean);
+		const scopes = String(form.get('scopes') ?? '').split(/\s+/).filter(Boolean);
+		if (!name) return fail(400, { error: 'Appen må ha et navn.' });
+		if (existing.client_category !== 'backend' && redirectUris.length === 0) {
+			return fail(400, { error: 'SMART-apper må ha minst én redirect-URI.' });
+		}
+		// An exact address, https except on localhost, and no fragment.
+		const badUri = redirectUris.find((u) => {
+			try {
+				const url = new URL(u);
+				const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+				return (url.protocol !== 'https:' && !local) || Boolean(url.hash);
+			} catch {
+				return true;
+			}
+		});
+		if (badUri) return fail(400, { error: `Ugyldig redirect-URI: ${badUri}` });
+
+		let jwks: { keys: JsonWebKey[] } | undefined;
+		const jwksText = String(form.get('jwks') ?? '').trim();
+		if (jwksText) {
+			try {
+				jwks = JSON.parse(jwksText);
+			} catch {
+				return fail(400, { error: 'JWKS er ikke gyldig JSON.' });
+			}
+		}
+		const jwksUri = String(form.get('jwksUri') ?? '').trim() || undefined;
+		if (existing.client_category === 'backend' && !jwks && !jwksUri) {
+			return fail(400, { error: 'Backend-tjenester trenger JWKS eller jwks_uri.' });
+		}
+
+		await updateClient(clientId, {
+			name, redirectUris, scopes, jwks, jwksUri,
+			launchUrl: String(form.get('launchUrl') ?? '').trim() || undefined,
+			logoUrl: String(form.get('logoUrl') ?? '').trim() || undefined,
+			databehandleravtale: String(form.get('databehandleravtale') ?? '').trim() || undefined
+		});
+		await log(
+			{
+				type: 'admin', subtype: 'app:endret', action: 'U', outcome: '0', entityRef: `Device/${clientId}`,
+				details: {
+					name, redirectUris: redirectUris.join(' '), scopes: scopes.join(' '),
+					previousName: existing.name, previousRedirectUris: existing.redirect_uris.join(' '),
+					previousScopes: existing.allowed_scopes.join(' ')
+				}
+			},
 			actorFromContext(ctx)
 		);
 		redirect(303, '/admin/apper');

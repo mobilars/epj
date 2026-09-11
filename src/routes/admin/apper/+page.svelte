@@ -101,6 +101,60 @@
 			<summary>Tillatte tilganger ({a.scopes.length})</summary>
 			<ul>{#each a.scopes as s (s.scope)}<li><span class="mono">{s.scope}</span> — {s.description}</li>{/each}</ul>
 		</details>
+		<details>
+			<summary>Rediger appen</summary>
+			<!-- Everything but the client id and the client type. A wider scope
+			     list withdraws the users' remembered consents; they are asked again. -->
+			<form method="POST" action="?/oppdater">
+				<input type="hidden" name="clientId" value={a.clientId} />
+				<div class="feltrad">
+					<div style="flex:1 1 14rem">
+						<label for="navn-{a.clientId}">Navn</label>
+						<input id="navn-{a.clientId}" name="navn" value={a.name} required />
+					</div>
+					<div style="flex:1 1 12rem">
+						<label for="dba-{a.clientId}">Databehandleravtale</label>
+						<input id="dba-{a.clientId}" name="databehandleravtale" value={a.databehandleravtale ?? ''} />
+					</div>
+				</div>
+				{#if a.category !== 'backend'}
+					<div class="felt">
+						<label for="redirect-{a.clientId}">Redirect-URI-er</label>
+						<textarea id="redirect-{a.clientId}" name="redirectUris" style="min-height:4rem">{a.redirectUris.join('\n')}</textarea>
+						<small>
+							Én per linje. Sammenliknes eksakt, så <span class="mono">/callback</span> og
+							<span class="mono">/callback/</span> er to ulike adresser.
+						</small>
+					</div>
+				{/if}
+				<div class="felt">
+					<label for="scopes-{a.clientId}">Tillatte scope</label>
+					<textarea id="scopes-{a.clientId}" name="scopes" style="min-height:4rem">{a.scopes.map((s) => s.scope).join(' ')}</textarea>
+					<small>Utvides listen, må hver bruker godkjenne appen på nytt.</small>
+				</div>
+				<div class="feltrad">
+					<div style="flex:1 1 18rem">
+						<label for="launch-{a.clientId}">Launch-URL (EHR launch)</label>
+						<input id="launch-{a.clientId}" name="launchUrl" value={a.launchUrl ?? ''} />
+					</div>
+					<div style="flex:1 1 16rem">
+						<label for="jwksuri-{a.clientId}">jwks_uri</label>
+						<input id="jwksuri-{a.clientId}" name="jwksUri" value={a.jwksUri} />
+					</div>
+				</div>
+				<div class="feltrad">
+					<div style="flex:1 1 18rem">
+						<label for="logo-{a.clientId}">Logo-URL</label>
+						<input id="logo-{a.clientId}" name="logoUrl" value={a.logoUrl} />
+					</div>
+				</div>
+				<div class="felt">
+					<label for="jwks-{a.clientId}">JWKS (JSON)</label>
+					<textarea id="jwks-{a.clientId}" name="jwks">{a.jwks}</textarea>
+				</div>
+				<button type="submit" class="primar liten">Lagre endringer</button>
+			</form>
+		</details>
 		<div class="rad">
 			{#if a.launchUrl}
 				<form method="POST" action="?/samtykke" class="rad">
