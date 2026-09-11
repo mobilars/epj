@@ -98,6 +98,7 @@ export async function issueTokens(inValue: UtstedelseIn): Promise<IssuedToken> {
 	if (inValue.launch.encounterId) result.encounter = inValue.launch.encounterId;
 	if (fhirUser) result.fhirUser = fhirUser;
 	result.need_patient_banner = !inValue.launch.patientId;
+	result.tenant = tenant.id;
 	result.smart_style_url = `${issuerFor(tenant)}/smart-style.json`;
 
 	if (inValue.scope.split(/\s+/).includes('openid') && inValue.userId) {
