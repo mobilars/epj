@@ -18,11 +18,11 @@
 // builds with kaniko in-cluster and pins the tag in `deploy/apus/`. The two
 // targets are independent; neither pipeline needs to know about the other.
 //
-// SET BEFORE FIRST USE: `K8S_REPO`, `K8S_YAML_PATH` and `K8S_YAML_FILES` below
-// name a manifest repository that does not exist yet. EPJ has no manifests at
-// git.unisoft.no - sveltelims-k8s, k8s-yaml and onering-yaml each hold their
-// own project. Create the repository, or point these at wherever EPJ's
-// manifests end up.
+// SET BEFORE THE MANIFEST STAGE CAN WORK: `K8S_REPO`, `K8S_YAML_PATH` and
+// `K8S_YAML_FILES` name a manifest repository that does not exist yet. EPJ has
+// no manifests at git.unisoft.no - sveltelims-k8s, k8s-yaml and onering-yaml
+// each hold their own project. Create the repository, or point these at
+// wherever EPJ's manifests end up. Everything before that stage works without.
 // ---------------------------------------------------------------------------
 
 pipeline {
@@ -42,6 +42,19 @@ pipeline {
 		IMAGE_NAME = "library/${APP_NAME}"
 		REGISTRY_CREDENTIALS = 'registry-unisoft-no-jenkins'
 
+		/*
+		 * Fully qualified, and used through plain `docker run` rather than the
+		 * Docker Pipeline plugin's `agent { docker { ... } }`.
+		 *
+		 * This Jenkins has registry.unisoft.no configured as its global registry,
+		 * so the plugin prefixes every image it starts with it: asking for
+		 * `node:22-alpine` made it pull `registry.unisoft.no/node:22-alpine`,
+		 * which Harbor refuses as a repository name with no project. Naming the
+		 * host here says where these come from and leaves no room for a prefix.
+		 */
+		NODE_IMAGE = 'docker.io/library/node:22-alpine'
+		POSTGRES_IMAGE = 'docker.io/library/postgres:16-alpine'
+
 		// The manifest repository ArgoCD watches. See the note above: this one
 		// does not exist yet.
 		K8S_REPO = 'git.unisoft.no/Unisoft/epj-yaml.git'
@@ -50,18 +63,12 @@ pipeline {
 		K8S_YAML_FILES = 'epj.yaml'
 		K8S_CREDENTIALS = 'lars-git-unisoft-no'
 
-		// Build number and commit, as the other projects tag. A branch build
-		// carries its branch, so it can never be mistaken for a release.
-		BRANCH_SUFFIX = "${env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' ? '' : '-' + (env.BRANCH_NAME ?: 'lokal').replaceAll('[^a-zA-Z0-9]', '-')}"
-		IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'ukjent'}${BRANCH_SUFFIX}"
-
 		// A test key, and meant to be one. Nothing here unlocks anything real.
 		EPJ_DATA_KEY = 'ci-nokkel-kun-for-testkjoring-000000000'
 		EPJ_ORG_HER_ID = '8000001'
 		EPJ_ORG_NUMBER = '994598759'
 		EPJ_INTEGRATION_MODE = 'mock'
 		PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = '1'
-		npm_config_cache = "${WORKSPACE}/.npm"
 	}
 
 	stages {
@@ -69,43 +76,77 @@ pipeline {
 			steps {
 				checkout scm
 				script {
-					echo "Branch:  ${env.BRANCH_NAME}"
+					/*
+					 * Which branch this is, in a job of either kind.
+					 *
+					 * A multibranch job sets BRANCH_NAME; a plain pipeline job does
+					 * not, and leaves it null - which silently turned every
+					 * `when { branch 'master' }` false, so a build could go green
+					 * having published nothing. The git plugin's GIT_BRANCH is the
+					 * fallback, and it arrives as `origin/master`.
+					 */
+					env.EPJ_BRANCH = env.BRANCH_NAME ?: (env.GIT_BRANCH ?: '').replaceFirst(/^origin\//, '')
+					if (!env.EPJ_BRANCH) {
+						env.EPJ_BRANCH = sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
+					}
+					env.EPJ_IS_MAIN = (env.EPJ_BRANCH in ['main', 'master']) ? 'true' : 'false'
+
+					// A branch build carries its branch, so it can never be mistaken
+					// for a release.
+					def suffix = env.EPJ_IS_MAIN == 'true' ? '' : '-' + env.EPJ_BRANCH.replaceAll('[^a-zA-Z0-9]', '-')
+					def sha = (env.GIT_COMMIT ?: 'ukjent').take(7)
+					env.IMAGE_TAG = "${env.BUILD_NUMBER}-${sha}${suffix}"
+					env.IMAGE_REF = "${DOCKER_REGISTRY}/${IMAGE_NAME}"
+
+					echo "Branch:  ${env.EPJ_BRANCH} (hovedlinje: ${env.EPJ_IS_MAIN})"
 					echo "Commit:  ${env.GIT_COMMIT}"
-					echo "Image:   ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+					echo "Image:   ${env.IMAGE_REF}:${env.IMAGE_TAG}"
 				}
 			}
 		}
 
 		// What fails most often, first.
 		stage('Types and build') {
-			agent {
-				docker {
-					image 'node:22-alpine'
-					reuseNode true
-				}
-			}
 			steps {
-				sh 'npm ci'
-				sh 'npm run check'
-				sh 'npm run build'
+				sh '''
+					docker run --rm \
+						-v "$PWD":/w -w /w \
+						-e npm_config_cache=/w/.npm \
+						-e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD \
+						-e EPJ_DATA_KEY -e EPJ_ORG_HER_ID -e EPJ_ORG_NUMBER -e EPJ_INTEGRATION_MODE \
+						"$NODE_IMAGE" \
+						sh -c "npm ci && npm run check && npm run build"
+				'''
 			}
 		}
 
 		stage('Tests') {
 			steps {
 				script {
-					// Postgres beside the tests, reachable under the name the
-					// Woodpecker pipeline uses, so the connection string matches.
-					docker.image('postgres:16-alpine').withRun(
-						'-e POSTGRES_USER=epj -e POSTGRES_PASSWORD=epj -e POSTGRES_DB=epj'
-					) { db ->
-						docker.image('node:22-alpine').inside("--link ${db.id}:postgres") {
-							sh 'npm ci'
-							sh 'until nc -z postgres 5432; do sleep 1; done'
-							withEnv(['EPJ_TEST_DATABASE_URL=postgres://epj:epj@postgres:5432/postgres']) {
-								sh 'npm test'
-							}
-						}
+					def net = "epj-ci-${env.BUILD_NUMBER}"
+					def pg = "epj-pg-${env.BUILD_NUMBER}"
+					try {
+						// Postgres beside the tests, reachable under the name the
+						// Woodpecker pipeline uses, so the connection string matches.
+						sh "docker network create ${net}"
+						sh """
+							docker run -d --name ${pg} --network ${net} --network-alias postgres \
+								-e POSTGRES_USER=epj -e POSTGRES_PASSWORD=epj -e POSTGRES_DB=epj \
+								"\$POSTGRES_IMAGE"
+						"""
+						sh """
+							docker run --rm --network ${net} \
+								-v "\$PWD":/w -w /w \
+								-e npm_config_cache=/w/.npm \
+								-e EPJ_TEST_DATABASE_URL=postgres://epj:epj@postgres:5432/postgres \
+								-e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD \
+								-e EPJ_DATA_KEY -e EPJ_ORG_HER_ID -e EPJ_ORG_NUMBER -e EPJ_INTEGRATION_MODE \
+								"\$NODE_IMAGE" \
+								sh -c "npm ci && until nc -z postgres 5432; do sleep 1; done && npm test"
+						"""
+					} finally {
+						sh "docker rm -f ${pg} || true"
+						sh "docker network rm ${net} || true"
 					}
 				}
 			}
@@ -113,18 +154,18 @@ pipeline {
 
 		stage('Build image') {
 			steps {
-				sh """
+				sh '''
 					docker build \
 						-f docker/Dockerfile \
-						--build-arg EPJ_VERSION=${IMAGE_TAG} \
-						-t ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} \
+						--build-arg EPJ_VERSION="$IMAGE_TAG" \
+						-t "$IMAGE_REF:$IMAGE_TAG" \
 						.
-				"""
+				'''
 				script {
 					// `latest` only from the main line. A branch build that claimed
 					// it would be deployed by anything following the tag.
-					if (env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master') {
-						sh "docker tag ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest"
+					if (env.EPJ_IS_MAIN == 'true') {
+						sh 'docker tag "$IMAGE_REF:$IMAGE_TAG" "$IMAGE_REF:latest"'
 					}
 				}
 			}
@@ -134,9 +175,9 @@ pipeline {
 			steps {
 				script {
 					docker.withRegistry("https://${DOCKER_REGISTRY}", "${REGISTRY_CREDENTIALS}") {
-						sh "docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-						if (env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master') {
-							sh "docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest"
+						sh 'docker push "$IMAGE_REF:$IMAGE_TAG"'
+						if (env.EPJ_IS_MAIN == 'true') {
+							sh 'docker push "$IMAGE_REF:latest"'
 						}
 					}
 				}
@@ -144,72 +185,55 @@ pipeline {
 		}
 
 		stage('Update manifest') {
-			when {
-				anyOf {
-					branch 'main'
-					branch 'master'
-				}
-			}
+			when { expression { env.EPJ_IS_MAIN == 'true' } }
 			steps {
 				withCredentials([usernamePassword(
 					credentialsId: "${K8S_CREDENTIALS}",
 					usernameVariable: 'GIT_USERNAME',
 					passwordVariable: 'GIT_PASSWORD'
 				)]) {
-					// Everything the script needs comes through the environment, so
+					// Everything the script needs is already in the environment, so
 					// nothing is interpolated into the shell by Groovy and no secret
 					// is ever part of a command line.
-					withEnv([
-						"K8S_REPO=${K8S_REPO}",
-						"K8S_BRANCH=${K8S_BRANCH}",
-						"K8S_YAML_PATH=${K8S_YAML_PATH}",
-						"K8S_YAML_FILES=${K8S_YAML_FILES}",
-						"IMAGE_REF=${DOCKER_REGISTRY}/${IMAGE_NAME}",
-						"NEW_TAG=${IMAGE_TAG}",
-						"APP_NAME=${APP_NAME}",
-						"BUILD_NUMBER=${env.BUILD_NUMBER}"
-					]) {
-						sh '''#!/bin/bash
-							set -euo pipefail
+					sh '''#!/bin/bash
+						set -euo pipefail
 
-							rm -rf manifester
-							# The helper hands the credentials to git over a pipe. They
-							# never appear in the URL, so they stay out of the log.
-							git -c credential.helper= \
-								-c credential.helper='!f() { echo "username=$GIT_USERNAME"; echo "password=$GIT_PASSWORD"; }; f' \
-								clone --depth 1 --branch "$K8S_BRANCH" "https://$K8S_REPO" manifester
+						rm -rf manifester
+						# The helper hands the credentials to git over a pipe. They
+						# never appear in the URL, so they stay out of the log.
+						helper='!f() { echo "username=$GIT_USERNAME"; echo "password=$GIT_PASSWORD"; }; f'
+						git -c credential.helper= -c credential.helper="$helper" \
+							clone --depth 1 --branch "$K8S_BRANCH" "https://$K8S_REPO" manifester
 
-							cd "manifester/$K8S_YAML_PATH"
-							git config user.email "jenkins@unisoft.no"
-							git config user.name "Jenkins CI"
+						cd "manifester/$K8S_YAML_PATH"
+						git config user.email "jenkins@unisoft.no"
+						git config user.name "Jenkins CI"
 
-							for fil in $K8S_YAML_FILES; do
-								if [ ! -f "$fil" ]; then
-									echo "Fant ikke $fil i $K8S_YAML_PATH"
-									exit 1
-								fi
-								if ! grep -q "image: $IMAGE_REF:" "$fil"; then
-									echo "Fant ingen image-linje for $IMAGE_REF i $fil"
-									exit 1
-								fi
-								sed -i "s|image: $IMAGE_REF:.*|image: $IMAGE_REF:$NEW_TAG|g" "$fil"
-								git add "$fil"
-							done
-
-							if git diff --staged --quiet; then
-								echo "Manifestet peker allerede på $NEW_TAG. Ingenting å gjøre."
-							else
-								git diff --staged
-								git commit -m "Deploy $APP_NAME $NEW_TAG (bygg #$BUILD_NUMBER)"
-								git -c credential.helper= \
-									-c credential.helper='!f() { echo "username=$GIT_USERNAME"; echo "password=$GIT_PASSWORD"; }; f' \
-									push origin "HEAD:$K8S_BRANCH"
+						for fil in $K8S_YAML_FILES; do
+							if [ ! -f "$fil" ]; then
+								echo "Fant ikke $fil i $K8S_YAML_PATH"
+								exit 1
 							fi
+							if ! grep -q "image: $IMAGE_REF:" "$fil"; then
+								echo "Fant ingen image-linje for $IMAGE_REF i $fil"
+								exit 1
+							fi
+							sed -i "s|image: $IMAGE_REF:.*|image: $IMAGE_REF:$IMAGE_TAG|g" "$fil"
+							git add "$fil"
+						done
 
-							cd - > /dev/null
-							rm -rf manifester
-						'''
-					}
+						if git diff --staged --quiet; then
+							echo "Manifestet peker allerede på $IMAGE_TAG. Ingenting å gjøre."
+						else
+							git diff --staged
+							git commit -m "Deploy $APP_NAME $IMAGE_TAG (bygg #$BUILD_NUMBER)"
+							git -c credential.helper= -c credential.helper="$helper" \
+								push origin "HEAD:$K8S_BRANCH"
+						fi
+
+						cd - > /dev/null
+						rm -rf manifester
+					'''
 				}
 			}
 		}
@@ -218,19 +242,17 @@ pipeline {
 	post {
 		always {
 			// The tag is unique per build, so nothing here is worth keeping.
-			sh """
-				docker rmi ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} || true
-				docker rmi ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest || true
-			"""
+			sh 'docker rmi "$IMAGE_REF:$IMAGE_TAG" || true'
+			sh 'docker rmi "$IMAGE_REF:latest" || true'
 			cleanWs()
 		}
 		success {
 			script {
-				echo "Publisert: ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-				if (env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master') {
+				echo "Publisert: ${env.IMAGE_REF}:${env.IMAGE_TAG}"
+				if (env.EPJ_IS_MAIN == 'true') {
 					echo "Manifestet i ${K8S_REPO}/${K8S_YAML_PATH} er oppdatert. ArgoCD tar resten."
 				} else {
-					echo "Manifestet er ikke rørt - det skjer bare fra main/master."
+					echo "Manifestet er ikke rørt - det skjer bare fra hovedlinjen."
 				}
 			}
 		}
@@ -238,7 +260,7 @@ pipeline {
 			emailext(
 				to: 'lars@roland.bz',
 				subject: "[FAILURE] ${env.JOB_NAME} bygg #${env.BUILD_NUMBER}",
-				body: "${env.BUILD_URL}\n\nGren: ${env.BRANCH_NAME ?: 'ukjent'}"
+				body: "${env.BUILD_URL}\n\nGren: ${env.EPJ_BRANCH ?: 'ukjent'}"
 			)
 		}
 	}
@@ -255,13 +277,12 @@ pipeline {
 // that disables verification everywhere.
 //
 // End-to-end tests. Playwright is not run here; `.woodpecker.yaml` covers it.
-// If Jenkins becomes the only pipeline, add a stage using the
-// mcr.microsoft.com/playwright image with E2E_DATABASE_URL pointing at the same
-// Postgres, gated on main/master so branch builds stay quick.
+// If Jenkins becomes the only pipeline, add a stage on the same pattern as
+// Tests, using mcr.microsoft.com/playwright and E2E_DATABASE_URL against the
+// same Postgres, gated on the main line so branch builds stay quick.
 //
-// Running on Kubernetes. If this Jenkins uses the Kubernetes plugin rather than
-// Docker on the agent, replace `agent any` with a pod template, drop the
-// `docker.image(...)` wrappers, and build with kaniko or buildkit instead of
-// `docker build` - there is no Docker socket in a pod. `deploy/apus/bygg.sh`
-// already does a kaniko build and is worth reading first.
+// Running on Kubernetes. If this Jenkins ever moves to the Kubernetes plugin,
+// the `docker run` steps become containers in a pod template and the image
+// build needs kaniko or buildkit - there is no Docker socket in a pod.
+// `deploy/apus/bygg.sh` already does a kaniko build and is worth reading first.
 // ---------------------------------------------------------------------------
