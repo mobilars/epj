@@ -1,5 +1,5 @@
 import { one, exec, transaction } from '../db';
-import { fhirBaseFor, requireTenant } from '../tenant/context';
+import { fhirBaseFor, issuerFor, requireTenant } from '../tenant/context';
 import { config } from '../config';
 import { tokenHash } from '../util/crypto';
 import { newId, newToken } from '../util/ids';
@@ -144,7 +144,7 @@ export interface AutorisasjonsRequest {
 }
 
 export type Validation =
-	| { ok: true; request: AutorisasjonsRequest; client: OAuthClient }
+	| { ok: true; request: AutorisasjonsRequest; client: OAuthClient; deviations?: string[] }
 	| { ok: false; error: string; description: string; canRedirect: boolean; redirectUri?: string; state?: string };
 
 /**
@@ -171,6 +171,10 @@ export function validateAuthorisationRequest(
 		prompt: search.get('prompt') ?? undefined
 	};
 
+	// Accepted, but not as the standard asks for it. Recorded on the way through
+	// so the security log shows which apps need a word with their vendor.
+	const deviations: string[] = [];
+
 	const reject = (error: string, description: string, canRedirect = true): Validation => ({
 		ok: false, error, description, canRedirect,
 		redirectUri: canRedirect ? f.redirect_uri : undefined,
@@ -188,18 +192,27 @@ export function validateAuthorisationRequest(
 	const fhirBase = fhirBaseFor(requireTenant());
 	// Exact, with or without a trailing slash. A prefix match would accept
 	// `.../fhir.example.com`, which is another server entirely.
-	if (f.aud && f.aud.replace(/\/+$/, '') !== fhirBase.replace(/\/+$/, '')) {
-		// Say what came as well as what was wanted. The usual mistake is sending
-		// the issuer instead of the FHIR base - both answer on the same host, and
-		// both serve a smart-configuration - so an app that only sees what the
-		// value must be has no way to tell how near it was.
-		return reject('invalid_request', `aud må være ${fhirBase}, ikke ${f.aud.slice(0, 200)}`);
+	const issuer = issuerFor(requireTenant());
+	const trimmed = (u: string) => u.replace(/\/+$/, '');
+	if (f.aud && trimmed(f.aud) !== trimmed(fhirBase)) {
+		// SMART wants the FHIR base. An app that reads `issuer` out of our
+		// smart-configuration and sends that instead has named this very
+		// deployment by its other name, so it is let through: no other server
+		// answers to either string, which is the confusion the check exists to
+		// stop. Anything else is still refused, and says what it sent - the two
+		// URLs share a host and differ only by a path, so an integrator told
+		// merely what the value should be cannot see how near they were.
+		if (trimmed(f.aud) === trimmed(issuer)) {
+			deviations.push(`aud var utstederen (${issuer}) og ikke FHIR-endepunktet (${fhirBase})`);
+		} else {
+			return reject('invalid_request', `aud må være ${fhirBase}, ikke ${f.aud.slice(0, 200)}`);
+		}
 	}
 	if (f.scope.split(/\s+/).includes('launch') && !f.launch) {
 		return reject('invalid_request', 'scope «launch» krever parameteren launch');
 	}
 
-	return { ok: true, request: f, client };
+	return { ok: true, request: f, client, deviations: deviations.length ? deviations : undefined };
 }
 
 export function errorRedirect(redirectUri: string, error: string, description: string, state?: string): string {

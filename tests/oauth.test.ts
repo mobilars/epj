@@ -106,9 +106,25 @@ describeIf('OAuth 2.1 og SMART App Launch', () => {
 			if (!v.ok) expect(v.description).toMatch(/launch/);
 		});
 
-		it('avviser feil aud', async () => {
+		it('avviser feil aud, og sier hva som kom', async () => {
 			const v = validateAuthorisationRequest(search({ aud: 'https://feil.example/fhir' }), await getClientRow());
 			expect(v.ok).toBe(false);
+			if (!v.ok) expect(v.description).toContain('https://feil.example/fhir');
+		});
+
+		// An app that reads `issuer` out of the smart-configuration and sends that
+		// as `aud` has named this same deployment by its other name. Accepted, but
+		// the security log has to show it: the vendor's integration needs the fix.
+		it('godtar utstederen som aud, men noterer avviket', async () => {
+			const v = validateAuthorisationRequest(search({ aud: config.baseUrl }), await getClientRow());
+			expect(v.ok).toBe(true);
+			if (v.ok) expect(v.deviations?.join(' ')).toMatch(/utstederen/);
+		});
+
+		it('godtar FHIR-endepunktet som aud uten avvik', async () => {
+			const v = validateAuthorisationRequest(search({ aud: config.fhirBaseUrl }), await getClientRow());
+			expect(v.ok).toBe(true);
+			if (v.ok) expect(v.deviations).toBeUndefined();
 		});
 
 		it('avviser sperret klient', async () => {

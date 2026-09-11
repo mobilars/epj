@@ -40,6 +40,31 @@ export const load: PageServerLoad = async (event) => {
 		error(400, { message: `${validation.error}: ${validation.description}`, code: validation.error });
 	}
 
+	// A request that got through, but not the way the standard describes. Logged
+	// separately from the authorisation itself: it is the vendor's integration
+	// that needs the fix, and the practice should be able to see which apps.
+	if (validation.deviations?.length) {
+		await log(
+			{
+				type: 'login',
+				subtype: 'authorize:deviation',
+				action: 'E',
+				outcome: '0',
+				outcomeDescription: validation.deviations.join('; '),
+				details: { client_id: validation.client.client_id, name: validation.client.name }
+			},
+			{
+				userId: event.locals.auth?.userId ?? null,
+				actorRef: 'Device/oauth',
+				name: 'autorisasjonsendepunkt',
+				role: null,
+				clientId: validation.client.client_id,
+				ip: event.locals.clientIp,
+				requestId: event.locals.requestId
+			}
+		);
+	}
+
 	// Requires a signed-in user in the record.
 	if (!event.locals.auth || event.locals.auth.mate !== 'session') {
 		const returnTo = `${event.url.pathname}${event.url.search}`;
