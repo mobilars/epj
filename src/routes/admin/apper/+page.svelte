@@ -104,12 +104,12 @@
 <h3 class="listetittel">Registrerte apper ({data.apper.length})</h3>
 
 {#each data.apper as a (a.clientId)}
-	<article class="app" class:app-sperret={a.status !== 'aktiv'}>
+	<article class="appkort" class:appkort-sperret={a.status !== 'aktiv'}>
 		<details>
 			<summary>
-				<div class="app-hode">
-					<div class="app-tittel">
-						<span class="app-navn">{a.name}</span>
+				<div class="appkort-hode">
+					<div class="appkort-tittel">
+						<span class="appkort-navn">{a.name}</span>
 						<span class="merker">
 							{#if a.status !== 'aktiv'}<span class="merke merke-fare">sperret</span>{/if}
 							{#if !a.databehandleravtale}<span class="merke merke-advarsel">uten DBA</span>{/if}
@@ -117,12 +117,12 @@
 							<span class="merke">{a.category}</span>
 						</span>
 					</div>
-					<p class="app-hvor">{visesHvor(a)}</p>
-					<p class="app-id mono">{a.clientId}</p>
+					<p class="appkort-hvor">{visesHvor(a)}</p>
+					<p class="appkort-id mono">{a.clientId}</p>
 				</div>
 			</summary>
 
-			<div class="app-detalj">
+			<div class="appkort-detalj">
 				<dl class="fakta">
 					<div><dt>Registrert</dt><dd>{a.created_at}</dd></div>
 					<div><dt>Aktive tokens</dt><dd>{a.aktiveTokens}</dd></div>
@@ -316,59 +316,61 @@
 
 	.nyapp[open] > summary::before { content: '− '; }
 
-	/* One app is one row until you ask for more. Ten apps used to be ten screens. */
-	.app {
+	/* One app is one row until you ask for more. Ten apps used to be ten screens.
+	   Named appkort, not app: `.app` is the application shell in app.css and
+	   carries min-height: 100vh, which made every card a full screen tall. */
+	.appkort {
 		background: var(--flate);
 		border: 1px solid var(--kant);
 		border-radius: var(--radius);
 		margin-bottom: 0.5rem;
 	}
 
-	.app-sperret { background: var(--flate-2); }
+	.appkort-sperret { background: var(--flate-2); }
 
-	.app > details > summary {
+	.appkort > details > summary {
 		cursor: pointer;
 		padding: 0.7rem 0.9rem;
 		list-style: none;
 		display: block;
 	}
 
-	.app > details > summary::-webkit-details-marker { display: none; }
+	.appkort > details > summary::-webkit-details-marker { display: none; }
 
-	.app > details > summary:hover { background: var(--primar-svak); }
+	.appkort > details > summary:hover { background: var(--primar-svak); }
 
-	.app > details > summary:focus-visible {
+	.appkort > details > summary:focus-visible {
 		outline: 2px solid var(--primar);
 		outline-offset: -2px;
 	}
 
-	.app-hode {
+	.appkort-hode {
 		display: grid;
 		grid-template-columns: minmax(12rem, 1fr) minmax(10rem, 1.2fr) auto;
 		gap: 0.3rem 1rem;
 		align-items: baseline;
 	}
 
-	.app-tittel {
+	.appkort-tittel {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.4rem;
 		align-items: baseline;
 	}
 
-	.app-navn { font-weight: 600; }
+	.appkort-navn { font-weight: 600; }
 
 	.merker { display: flex; flex-wrap: wrap; gap: 0.25rem; }
 
-	.app-hvor, .app-id {
+	.appkort-hvor, .appkort-id {
 		margin: 0;
 		font-size: 0.82rem;
 		color: var(--tekst-svak);
 	}
 
-	.app-id { text-align: right; }
+	.appkort-id { text-align: right; }
 
-	.app-detalj {
+	.appkort-detalj {
 		border-top: 1px solid var(--kant);
 		padding: 0.9rem;
 		display: flex;
@@ -458,7 +460,7 @@
 	}
 
 	@media (max-width: 46rem) {
-		.app-hode { grid-template-columns: 1fr; }
-		.app-id { text-align: left; }
+		.appkort-hode { grid-template-columns: 1fr; }
+		.appkort-id { text-align: left; }
 	}
 </style>
