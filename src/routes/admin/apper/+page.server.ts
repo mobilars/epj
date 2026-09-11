@@ -108,20 +108,6 @@ export const actions: Actions = {
 		return { ok: true, clientId: client.client_id, secret };
 	},
 
-	hovedmeny: async (event) => {
-		const ctx = event.locals.auth;
-		if (!ctx?.permissions.has('admin:apper')) return fail(403, { error: 'Ingen tilgang.' });
-		const form = await event.request.formData();
-		const clientId = String(form.get('clientId') ?? '');
-		const inMainMenu = form.get('iHovedmeny') === 'ja';
-		await setInMainMenu(clientId, inMainMenu);
-		await log(
-			{ type: 'admin', subtype: 'app:hovedmeny', action: 'U', outcome: '0', entityRef: `Device/${clientId}`, details: { inMainMenu } },
-			actorFromContext(ctx)
-		);
-		redirect(303, '/admin/apper');
-	},
-
 	oppdater: async (event) => {
 		const ctx = event.locals.auth;
 		if (!ctx?.permissions.has('admin:apper')) return fail(403, { error: 'Ingen tilgang.' });
@@ -183,44 +169,34 @@ export const actions: Actions = {
 		redirect(303, '/admin/apper');
 	},
 
-	pasientfane: async (event) => {
-		const ctx = event.locals.auth;
-		if (!ctx?.permissions.has('admin:apper')) return fail(403, { error: 'Ingen tilgang.' });
-		const form = await event.request.formData();
-		const clientId = String(form.get('clientId') ?? '');
-		const inPatientTabs = form.get('iPasientfaner') === 'ja';
-		await setInPatientTabs(clientId, inPatientTabs);
-		await log(
-			{ type: 'admin', subtype: 'app:pasientfane', action: 'U', outcome: '0', entityRef: `Device/${clientId}`, details: { inPatientTabs } },
-			actorFromContext(ctx)
-		);
-		redirect(303, '/admin/apper');
-	},
-
-	ownWindow: async (event) => {
-		const ctx = event.locals.auth;
-		if (!ctx?.permissions.has('admin:apper')) return fail(403, { error: 'Ingen tilgang.' });
-		const form = await event.request.formData();
-		const clientId = String(form.get('clientId') ?? '');
-		const openInNewTab = form.get('iEgetVindu') === 'ja';
-		await setOpenInNewTab(clientId, openInNewTab);
-		await log(
-			{ type: 'admin', subtype: 'app:eget-vindu', action: 'U', outcome: '0', entityRef: `Device/${clientId}`, details: { openInNewTab } },
-			actorFromContext(ctx)
-		);
-		redirect(303, '/admin/apper');
-	},
-
-	plassering: async (event) => {
+	/**
+	 * Where the app appears, saved in one go.
+	 *
+	 * These four settings answer one question between them, and splitting them
+	 * across four one-button forms made each button a command whose label had to
+	 * describe the opposite of the current state - press "Eget vindu" and you
+	 * turned it off. Checkboxes say what is on, and one save applies the lot.
+	 */
+	visning: async (event) => {
 		const ctx = event.locals.auth;
 		if (!ctx?.permissions.has('admin:apper')) return fail(403, { error: 'Ingen tilgang.' });
 		const form = await event.request.formData();
 		const clientId = String(form.get('clientId') ?? '');
 		const placement = String(form.get('plassering') ?? 'ingen') as Placement;
 		if (!['ingen', 'hoved', 'side'].includes(placement)) return fail(400, { error: 'Ukjent plassering.' });
+		const inPatientTabs = form.get('iPasientfaner') === 'ja';
+		const inMainMenu = form.get('iHovedmeny') === 'ja';
+		const openInNewTab = form.get('iEgetVindu') === 'ja';
+
 		await setPlacement(clientId, placement);
+		await setInPatientTabs(clientId, inPatientTabs);
+		await setInMainMenu(clientId, inMainMenu);
+		await setOpenInNewTab(clientId, openInNewTab);
 		await log(
-			{ type: 'admin', subtype: 'app:plassering', action: 'U', outcome: '0', entityRef: `Device/${clientId}`, details: { placement } },
+			{
+				type: 'admin', subtype: 'app:visning', action: 'U', outcome: '0', entityRef: `Device/${clientId}`,
+				details: { placement, inPatientTabs, inMainMenu, openInNewTab }
+			},
 			actorFromContext(ctx)
 		);
 		redirect(303, '/admin/apper');

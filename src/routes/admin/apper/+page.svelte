@@ -150,48 +150,39 @@
 					<section class="gruppe">
 						<h4>Hvor appen vises</h4>
 						<p class="gruppe-hjelp">
-							Uten noe valgt startes appen ved behov fra «Apper» i journalen.
+							Uten noe krysset av startes appen ved behov fra «Apper» i journalen.
 						</p>
-						<div class="knapperad">
-							<form method="POST" action="?/plassering" class="rad">
-								<input type="hidden" name="clientId" value={a.clientId} />
-								<select name="plassering" aria-label="Plassering i journalen">
-									<option value="ingen" selected={a.placement === 'ingen'}>Startes ved behov</option>
+						<form method="POST" action="?/visning" class="visningsskjema">
+							<input type="hidden" name="clientId" value={a.clientId} />
+							<div class="felt">
+								<label for="plassering-{a.clientId}">Fast plass i journalen</label>
+								<select id="plassering-{a.clientId}" name="plassering">
+									<option value="ingen" selected={a.placement === 'ingen'}>Ingen — startes ved behov</option>
 									<option value="hoved" selected={a.placement === 'hoved'}>Stor flate i journalen</option>
 									<option value="side" selected={a.placement === 'side'}>Sidepanel i journalen</option>
 								</select>
-								<button type="submit" class="liten">Lagre</button>
-							</form>
+							</div>
 							<!-- An app used in most consultations gets a tab of its own beside
 							     the record's tabs, instead of a place under the Apper dropdown. -->
-							<form method="POST" action="?/pasientfane">
-								<input type="hidden" name="clientId" value={a.clientId} />
-								<input type="hidden" name="iPasientfaner" value={a.inPatientTabs ? 'nei' : 'ja'} />
-								<button type="submit" class="liten" class:valgt={a.inPatientTabs}>
-									{a.inPatientTabs ? '✓ Egen fane i journalen' : 'Egen fane i journalen'}
-								</button>
-							</form>
+							<label class="avkryssing">
+								<input type="checkbox" name="iPasientfaner" value="ja" checked={a.inPatientTabs} />
+								Egen fane i journalen
+							</label>
 							<!-- The main menu is for apps that work across patients and start
-							     without one - a worklist, an inbox. An app for one patient is
-							     reached from the record and does not belong here. -->
-							<form method="POST" action="?/hovedmeny">
-								<input type="hidden" name="clientId" value={a.clientId} />
-								<input type="hidden" name="iHovedmeny" value={a.inMainMenu ? 'nei' : 'ja'} />
-								<button type="submit" class="liten" class:valgt={a.inMainMenu}>
-									{a.inMainMenu ? '✓ I hovedmenyen' : 'I hovedmenyen (uten pasient)'}
-								</button>
-							</form>
+							     without one - a worklist, an inbox. -->
+							<label class="avkryssing">
+								<input type="checkbox" name="iHovedmeny" value="ja" checked={a.inMainMenu} />
+								I hovedmenyen, uten pasient
+							</label>
 							<!-- A framed app is a third-party context, so the browser withholds
-							     the cookies it needs. Apps that carry a session through the
-							     handshake have to be their own top-level document. -->
-							<form method="POST" action="?/ownWindow">
-								<input type="hidden" name="clientId" value={a.clientId} />
-								<input type="hidden" name="iEgetVindu" value={a.openInNewTab ? 'nei' : 'ja'} />
-								<button type="submit" class="liten" class:valgt={a.openInNewTab}>
-									{a.openInNewTab ? '✓ Eget vindu' : 'Eget vindu'}
-								</button>
-							</form>
-						</div>
+							     the cookies it needs. Apps that carry a session through their own
+							     launch have to be their own top-level document. -->
+							<label class="avkryssing">
+								<input type="checkbox" name="iEgetVindu" value="ja" checked={a.openInNewTab} />
+								Åpnes i eget vindu i stedet for i en ramme
+							</label>
+							<button type="submit" class="liten primar">Lagre visning</button>
+						</form>
 					</section>
 
 					<section class="gruppe">
@@ -425,12 +416,14 @@
 		align-items: center;
 	}
 
-	/* A setting that is on says so, instead of only offering to turn it off. */
-	.knapperad :global(button.valgt) {
-		background: var(--primar-svak);
-		border-color: var(--primar);
-		color: var(--primar-mork);
+	.visningsskjema {
+		display: flex;
+		flex-direction: column;
+		gap: 0.45rem;
+		align-items: flex-start;
 	}
+
+	.visningsskjema select { max-width: 22rem; }
 
 	.underseksjon > summary {
 		cursor: pointer;
