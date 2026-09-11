@@ -17,7 +17,7 @@
 		children: Snippet;
 	} = $props();
 
-	type MenuApp = { clientId: string; name: string; inMainMenu: boolean };
+	type MenuApp = { clientId: string; name: string; inMainMenu: boolean; inPatientTabs: boolean };
 
 	type UserInfo = {
 		name: string;

@@ -61,8 +61,11 @@
 
 	// The apps come from the root layout, and start straight from the tab bar
 	// with this patient in context - the Apper tab was a page you had to open
-	// before you could press start.
-	const apps = $derived((page.data.apps ?? []) as { clientId: string; name: string }[]);
+	// before you could press start. An app the practice has given a tab of its
+	// own sits beside the record's tabs; the rest wait under the dropdown.
+	const apps = $derived((page.data.apps ?? []) as { clientId: string; name: string; inPatientTabs?: boolean }[]);
+	const tabAppsOwn = $derived(apps.filter((a) => a.inPatientTabs));
+	const dropdownApps = $derived(apps.filter((a) => !a.inPatientTabs));
 	let appsOpen = $state(false);
 </script>
 
@@ -93,6 +96,10 @@
 		{#each faner as f (f.text)}
 			<a href={f.href} aria-current={page.url.pathname === f.href ? 'page' : undefined}>{f.text}</a>
 		{/each}
+		{#each tabAppsOwn as app (app.clientId)}
+			{@const href = `/pasienter/${data.patientId}/apper/${app.clientId}`}
+			<a {href} aria-current={page.url.pathname === href ? 'page' : undefined}>{app.name}</a>
+		{/each}
 
 		<div class="nedtrekk">
 			<button
@@ -106,10 +113,12 @@
 			{#if appsOpen}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div class="nedtrekk-panel" onmouseleave={() => (appsOpen = false)}>
-					{#each apps as app (app.clientId)}
+					{#each dropdownApps as app (app.clientId)}
 						<a href="/pasienter/{data.patientId}/apper/{app.clientId}">{app.name}</a>
 					{:else}
-						<span class="svak" style="padding: 0.4rem 0.55rem">Ingen apper er registrert.</span>
+						<span class="svak" style="padding: 0.4rem 0.55rem">
+							{apps.length ? 'Alle apper har egen fane.' : 'Ingen apper er registrert.'}
+						</span>
 					{/each}
 					<a href="/pasienter/{data.patientId}/apper">Alle apper og tilganger …</a>
 				</div>

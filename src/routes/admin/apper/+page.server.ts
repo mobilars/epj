@@ -1,6 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { listClients, registerClient, setKlientstatus, type ClientCategory , setInMainMenu, setPlacement, setRequireConsent, type Placement } from '$srv/auth/clients';
+import { listClients, registerClient, setKlientstatus, type ClientCategory , setInMainMenu, setInPatientTabs, setPlacement, setRequireConsent, type Placement } from '$srv/auth/clients';
 import { createLaunch } from '$srv/auth/oauth';
 import { describeScope } from '$srv/authz/scopes';
 import { log, actorFromContext } from '$srv/audit';
@@ -42,6 +42,7 @@ export const load: PageServerLoad = async (event) => {
 			databehandleravtale: k.databehandleravtale,
 			launchUrl: k.launch_url,
 			inMainMenu: k.in_main_menu,
+			inPatientTabs: k.in_patient_tabs,
 			placement: k.placement,
 			requireConsent: k.require_consent,
 			hasKeys: Boolean(k.jwks || k.jwks_uri),
@@ -111,6 +112,20 @@ export const actions: Actions = {
 		await setInMainMenu(clientId, inMainMenu);
 		await log(
 			{ type: 'admin', subtype: 'app:hovedmeny', action: 'U', outcome: '0', entityRef: `Device/${clientId}`, details: { inMainMenu } },
+			actorFromContext(ctx)
+		);
+		redirect(303, '/admin/apper');
+	},
+
+	pasientfane: async (event) => {
+		const ctx = event.locals.auth;
+		if (!ctx?.permissions.has('admin:apper')) return fail(403, { error: 'Ingen tilgang.' });
+		const form = await event.request.formData();
+		const clientId = String(form.get('clientId') ?? '');
+		const inPatientTabs = form.get('iPasientfaner') === 'ja';
+		await setInPatientTabs(clientId, inPatientTabs);
+		await log(
+			{ type: 'admin', subtype: 'app:pasientfane', action: 'U', outcome: '0', entityRef: `Device/${clientId}`, details: { inPatientTabs } },
 			actorFromContext(ctx)
 		);
 		redirect(303, '/admin/apper');

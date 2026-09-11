@@ -80,6 +80,7 @@
 				<span class="merke">{a.type}</span>
 				<span class="merke" class:merke-ok={a.status === 'aktiv'} class:merke-fare={a.status !== 'aktiv'}>{a.status}</span>
 				{#if a.inMainMenu}<span class="merke merke-info">I hovedmenyen</span>{/if}
+				{#if a.inPatientTabs}<span class="merke merke-info">Egen fane i journalen</span>{/if}
 				{#if !a.requireConsent}<span class="merke merke-ok">Godkjent av virksomheten</span>{/if}
 			</span>
 		</div>
@@ -119,6 +120,15 @@
 						<option value="side" selected={a.placement === 'side'}>Sidepanel i journalen</option>
 					</select>
 					<button type="submit" class="liten">Lagre plassering</button>
+				</form>
+				<!-- An app used in most consultations gets a tab of its own beside
+				     the record's tabs, instead of a place under the Apper dropdown. -->
+				<form method="POST" action="?/pasientfane">
+					<input type="hidden" name="clientId" value={a.clientId} />
+					<input type="hidden" name="iPasientfaner" value={a.inPatientTabs ? 'nei' : 'ja'} />
+					<button type="submit" class="liten">
+						{a.inPatientTabs ? 'Flytt tilbake under «Apper»' : 'Vis som egen fane i journalen'}
+					</button>
 				</form>
 				<!-- The main menu is for apps that work across patients and start
 				     without one - a worklist, an inbox. An app for one patient is

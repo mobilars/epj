@@ -28,6 +28,8 @@ export interface OAuthClient {
 	launch_url: string | null;
 	/** Sits directly in the main menu rather than under the apps dropdown. */
 	in_main_menu: boolean;
+	/** Has a tab of its own in the patient record rather than sitting under Apper. */
+	in_patient_tabs: boolean;
 	/** `ingen`, `hoved` (the wide surface) or `side` (the narrow panel). */
 	placement: string;
 	/** Route segment of the record tab this app answers for, or null. */
@@ -38,7 +40,7 @@ export interface OAuthClient {
 
 const FIELD = `client_id, tenant_id, name, type, client_category, secret_hash, jwks, jwks_uri, redirect_uris,
 	allowed_scopes, grant_types, require_pkce, require_consent, logo_url, databehandleravtale, launch_url,
-	in_main_menu, placement, replaces_tab, status, created_at`;
+	in_main_menu, in_patient_tabs, placement, replaces_tab, status, created_at`;
 
 export async function getClient(clientId: string): Promise<OAuthClient | null> {
 	return one<OAuthClient>(`SELECT ${FIELD} FROM oauth_client WHERE client_id = $1 AND tenant_id = $2`, [
@@ -174,6 +176,13 @@ export async function clientAtPlacement(placement: Placement): Promise<OAuthClie
 export async function setInMainMenu(clientId: string, inMainMenu: boolean): Promise<void> {
 	await exec('UPDATE oauth_client SET in_main_menu = $2 WHERE client_id = $1 AND tenant_id = $3', [
 		clientId, inMainMenu, requireTenant().id
+	]);
+}
+
+/** Gives an app a tab of its own in the patient record, or takes it away. */
+export async function setInPatientTabs(clientId: string, inPatientTabs: boolean): Promise<void> {
+	await exec('UPDATE oauth_client SET in_patient_tabs = $2 WHERE client_id = $1 AND tenant_id = $3', [
+		clientId, inPatientTabs, requireTenant().id
 	]);
 }
 
