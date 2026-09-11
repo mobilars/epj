@@ -127,6 +127,22 @@ export async function issueTokens(inValue: UtstedelseIn): Promise<IssuedToken> {
 				sub: inValue.userId,
 				aud: inValue.clientId,
 				tenant: tenant.id,
+				/*
+				 * The practice's organisasjonsnummer, under the name PasientSky uses.
+				 *
+				 * The third claim saying which practice this is, and the third name
+				 * for it: `tenant` is ours, `smart_app_officeApiUrl` on the access
+				 * token is WebMed's, and this is PasientSky's. Apps written for that
+				 * ecosystem look the organisation up by its organisasjonsnummer and
+				 * read it from the id_token, so that is where it goes.
+				 *
+				 * Not gated on a scope, unlike `fhirUser`. This names the
+				 * organisation, not the person: the app was launched from that
+				 * practice's record and already knows the issuer it is talking to, so
+				 * withholding the number protects nothing and would only add a
+				 * registration step for every app that expects it.
+				 */
+				organizationNumber: tenant.organisation_number,
 				iat: now,
 				exp: now + config.oauth.accessTokenTtl,
 				...(inValue.nonce ? { nonce: inValue.nonce } : {}),

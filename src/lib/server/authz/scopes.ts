@@ -58,7 +58,11 @@ export function parseScope(raw: string): ParsedScope | null {
 export const SPESIALSCOPES = new Set([
 	'openid', 'profile', 'fhirUser', 'email',
 	'launch', 'launch/patient', 'launch/encounter',
-	'offline_access', 'online_access'
+	'offline_access', 'online_access',
+	// PasientSky's. Apps written for that ecosystem ask for it by name; without
+	// it here the request is neither a known special scope nor a parseable
+	// clinical one, and disappears without ever reaching the consent screen.
+	'organizationNumber'
 ]);
 
 export interface ScopeSet {
@@ -193,6 +197,7 @@ function contextDekker(has: Context, ber: Context): boolean {
 export function describeScope(scope: string): string {
 	if (scope === 'openid' || scope === 'profile') return 'Vite hvem du er';
 	if (scope === 'fhirUser') return 'Se hvilken behandler du er registrert som';
+	if (scope === 'organizationNumber') return 'Se organisasjonsnummeret til virksomheten du er logget inn hos';
 	if (scope === 'launch') return 'Følge pasient- og kontaktvalget ditt i journalen';
 	if (scope === 'launch/patient') return 'Vite hvilken pasient som er åpen';
 	if (scope === 'launch/encounter') return 'Vite hvilken konsultasjon som er åpen';

@@ -15,6 +15,7 @@ import { jwks, rotateKey, emptyKeyCache } from '../src/lib/server/auth/keys';
 import { sign, type Jwk } from '../src/lib/server/auth/jws';
 import { config } from '../src/lib/server/config';
 import { newId } from '../src/lib/server/util/ids';
+import { requireTenant } from '../src/lib/server/tenant/context';
 
 const describeIf = hasTestDatabase() ? describe : describe.skip;
 
@@ -198,6 +199,25 @@ describeIf('OAuth 2.1 og SMART App Launch', () => {
 			const claims = JSON.parse(Buffer.from(result.tokens.access_token.split('.')[1], 'base64url').toString());
 			expect(claims.smart_app_officeApiUrl).toBe(claims.tenant);
 			expect(claims.tenant).toBeTruthy();
+		});
+
+		// Three ecosystems, three names for the same practice. An app written for
+		// WebMed reads it off the access token, one written for PasientSky off the
+		// id_token, and one written for us reads `tenant`.
+		it('oppgir organisasjonsnummeret i id_token slik PasientSky-apper venter', async () => {
+			const { verifier, challenge } = pkce();
+			const code = await createAuthorisationCode({
+				clientId, userId: 'bruker-1', redirectUri: REDIRECT,
+				scope: 'openid patient/Patient.rs',
+				codeChallenge: challenge, codeChallengeMethod: 'S256',
+				launch: { patientId: 'pas-1' }
+			});
+			const result = await exchangeInCode(code, await getClientRow(), REDIRECT, verifier);
+			expect(result.ok).toBe(true);
+			if (!result.ok || !result.tokens.id_token) return;
+			const claims = JSON.parse(Buffer.from(result.tokens.id_token.split('.')[1], 'base64url').toString());
+			expect(claims.organizationNumber).toBe(requireTenant().organisation_number);
+			expect(claims.organizationNumber).toBeTruthy();
 		});
 
 		it('avviser feil code_verifier', async () => {
