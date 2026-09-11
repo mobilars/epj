@@ -156,7 +156,7 @@
 							<input type="hidden" name="clientId" value={a.clientId} />
 							<div class="felt">
 								<label for="plassering-{a.clientId}">Fast plass i journalen</label>
-								<select id="plassering-{a.clientId}" name="plassering">
+								<select id="plassering-{a.clientId}" name="plassering" class="plasseringsvalg">
 									<option value="ingen" selected={a.placement === 'ingen'}>Ingen — startes ved behov</option>
 									<option value="hoved" selected={a.placement === 'hoved'}>Stor flate i journalen</option>
 									<option value="side" selected={a.placement === 'side'}>Sidepanel i journalen</option>
@@ -181,7 +181,7 @@
 								<input type="checkbox" name="iEgetVindu" value="ja" checked={a.openInNewTab} />
 								Åpnes i eget vindu i stedet for i en ramme
 							</label>
-							<button type="submit" class="liten primar">Lagre visning</button>
+							<button type="submit" class="liten primar lagreknapp">Lagre visning</button>
 						</form>
 					</section>
 
@@ -419,11 +419,16 @@
 	.visningsskjema {
 		display: flex;
 		flex-direction: column;
-		gap: 0.45rem;
+		gap: 0.6rem;
 		align-items: flex-start;
 	}
 
-	.visningsskjema select { max-width: 22rem; }
+	.visningsskjema .felt { margin-bottom: 0; }
+	.visningsskjema .plasseringsvalg { min-width: 16rem; width: auto; }
+	.visningsskjema .lagreknapp { margin-top: 0.25rem; }
+
+	/* The three checkboxes are one group of choices, so they sit together. */
+	.visningsskjema .avkryssing { margin-bottom: 0; }
 
 	.underseksjon > summary {
 		cursor: pointer;

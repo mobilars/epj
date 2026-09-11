@@ -156,6 +156,40 @@ input, select, textarea {
 	color: var(--tekst);
 }
 textarea { min-height: 6rem; resize: vertical; }
+
+/*
+ * A tick box is not a text field.
+ *
+ * The rule above gives every input the full width of its line, a padding and a
+ * border. That is right for something you type into and wrong for a checkbox or
+ * a radio: the box stretched across the line and pushed its own text onto the
+ * next one, at a different offset on every row. Every checkbox and radio in the
+ * record was drawn that way - sperring, utlevering, innstillinger, oppgjor.
+ */
+input[type='checkbox'],
+input[type='radio'] {
+	width: auto;
+	padding: 0;
+	margin: 0;
+	accent-color: var(--primar);
+}
+
+/*
+ * One choice, on one line.
+ *
+ * The class was used in eight places before it existed anywhere in the
+ * stylesheet. Labels are block and bold by default because they usually name a
+ * field sitting below them; here the label is the choice itself, beside its box.
+ */
+.avkryssing {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	font-weight: 400;
+	margin-bottom: 0.3rem;
+}
+
+.avkryssing:last-child { margin-bottom: 0; }
 .felt { margin-bottom: 0.9rem; }
 .felt small { display: block; color: var(--tekst-svak); margin-top: 0.2rem; }
 fieldset { border: 1px solid var(--kant); border-radius: var(--radius); padding: 0.85rem 1rem; margin: 0 0 1rem; }
