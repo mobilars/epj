@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Nedtrekk from '$lib/components/Nedtrekk.svelte';
 	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
 	let { data, children }: { data: PatientLayoutData; children: Snippet } = $props();
@@ -97,8 +98,6 @@
 
 	const tabAppsOwn = $derived(apps.filter((a) => a.inPatientTabs));
 	const dropdownApps = $derived(apps.filter((a) => !a.inPatientTabs));
-	let appsOpen = $state(false);
-	let merOpen = $state(false);
 </script>
 
 {#if data.patient}
@@ -138,18 +137,8 @@
 			>{app.name}{#if app.openInNewTab} ↗{/if}</a>
 		{/each}
 
-		<div class="nedtrekk">
-			<button
-				type="button"
-				class="fanelenke"
-				aria-expanded={appsOpen}
-				onclick={() => (appsOpen = !appsOpen)}
-			>
-				Apper ▾
-			</button>
-			{#if appsOpen}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div class="nedtrekk-panel" onmouseleave={() => (appsOpen = false)}>
+		<Nedtrekk etikett="Apper ▾">
+			{#snippet children()}
 					{#each dropdownApps as app (app.clientId)}
 						<a
 							href={appLenke(app)}
@@ -161,30 +150,17 @@
 							{apps.length ? 'Alle apper har egen fane.' : 'Ingen apper er registrert.'}
 						</span>
 					{/each}
-					<a href="/pasienter/{data.patientId}/apper">Alle apper og tilganger …</a>
-				</div>
-			{/if}
-		</div>
+				<a href="/pasienter/{data.patientId}/apper">Alle apper og tilganger …</a>
+			{/snippet}
+		</Nedtrekk>
 		{#if merFaner.length}
-			<div class="nedtrekk">
-				<button
-					type="button"
-					class="fanelenke"
-					aria-expanded={merOpen}
-					aria-current={paMerSide ? 'page' : undefined}
-					onclick={() => (merOpen = !merOpen)}
-				>
-					Mer ▾
-				</button>
-				{#if merOpen}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<div class="nedtrekk-panel" onmouseleave={() => (merOpen = false)}>
-						{#each merFaner as f (f.text)}
-							<a href={f.href} aria-current={page.url.pathname === f.href ? 'page' : undefined}>{f.text}</a>
-						{/each}
-					</div>
-				{/if}
-			</div>
+			<Nedtrekk etikett="Mer ▾" aktiv={paMerSide}>
+				{#snippet children()}
+					{#each merFaner as f (f.text)}
+						<a href={f.href} aria-current={page.url.pathname === f.href ? 'page' : undefined}>{f.text}</a>
+					{/each}
+				{/snippet}
+			</Nedtrekk>
 		{/if}
 	</nav>
 

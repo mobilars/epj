@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Nedtrekk from '$lib/components/Nedtrekk.svelte';
 	import '$lib/styles/app.css';
 	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
@@ -49,7 +50,6 @@
 	// else keeps the narrower measure that is easier to read.
 	const wide = $derived(page.url.pathname.startsWith('/pasienter/'));
 
-	let nyligApen = $state(false);
 
 
 	// Marks the page as hydrated. The UI works without JavaScript, but hydration
@@ -83,23 +83,12 @@
 					<a
 						href="/pasienter"
 						aria-current={page.url.pathname.startsWith('/pasienter') ? 'page' : undefined}
-						onmouseenter={() => (nyligApen = true)}
 					>
 						Pasienter
 					</a>
 					{#if data.recentPatients?.length}
-						<button
-							type="button"
-							class="menylenke pil"
-							aria-expanded={nyligApen}
-							aria-label="Nylige pasienter"
-							onclick={() => (nyligApen = !nyligApen)}
-						>
-							▾
-						</button>
-						{#if nyligApen}
-							<!-- svelte-ignore a11y_no_static_element_interactions -->
-							<div class="nedtrekk-panel" onmouseleave={() => (nyligApen = false)}>
+						<Nedtrekk etikett="▾" knappeklasse="menylenke pil" ariaLabel="Nylige pasienter">
+							{#snippet children()}
 								<span class="nedtrekk-tittel">Nylig åpnet</span>
 								{#each data.recentPatients as p (p.id)}
 									<a href="/pasienter/{p.id}">
@@ -108,8 +97,8 @@
 									</a>
 								{/each}
 								<a href="/pasienter" class="svak">Søk etter pasient …</a>
-							</div>
-						{/if}
+							{/snippet}
+						</Nedtrekk>
 					{/if}
 				</div>
 			{/if}
