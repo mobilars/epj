@@ -1,6 +1,7 @@
 {
 	"name": "epj",
 	"version": "0.1.0",
+	"license": "AGPL-3.0-or-later",
 	"private": true,
 	"description": "Elektronisk pasientjournal for norske fastleger - FHIR R5, SMART on FHIR, SFM, NHN meldingstjener, Helfo",
 	"type": "module",

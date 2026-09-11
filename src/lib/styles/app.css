@@ -399,3 +399,19 @@ main.bred { max-width: none; }
 /* The acceptance sits with the field it belongs to, not below the button. */
 .vilkarsvalg { display: flex; gap: 0.5rem; align-items: flex-start; margin: 0.9rem 0 0.4rem; }
 .vilkarsvalg input { margin-top: 0.25rem; flex: 0 0 auto; width: auto; }
+
+/* Licence notice at the foot of every page. Chrome, not content: quiet enough
+   to stay out of the way of the record, present enough to satisfy AGPL 13. */
+.bunntekst {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	justify-content: center;
+	padding: 1.75rem 1rem 1rem;
+	font-size: 0.78rem;
+	color: var(--tekst-svak);
+}
+
+.bunntekst a {
+	color: inherit;
+}

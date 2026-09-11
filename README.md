@@ -117,3 +117,21 @@ Dette er en referanseimplementasjon. Før klinisk bruk må virksomheten blant
 annet gjennomføre risikovurdering og personvernkonsekvensvurdering, inngå
 databehandleravtaler, og få integrasjonene mot SFM, NHN og Helfo godkjent av de
 respektive partene. Se [docs/apne-punkter.md](docs/apne-punkter.md).
+
+## Lisens
+
+Copyright © 2026 APUS Roland AS.
+
+Dette programmet er fri programvare: du kan distribuere det videre og/eller
+endre det under vilkårene i **GNU Affero General Public License** slik den er
+publisert av Free Software Foundation, enten versjon 3 av lisensen eller (etter
+eget valg) en senere versjon.
+
+Programmet distribueres i håp om at det er nyttig, men **uten noen garanti** —
+uten engang den underforståtte garantien om salgbarhet eller egnethet for et
+bestemt formål. Se GNU Affero General Public License for detaljer. Lisensteksten
+ligger i [LICENSE](LICENSE).
+
+AGPL § 13 gjelder særskilt for journalsystemer som dette: **kjører du en endret
+utgave som andre bruker over nett, må du tilby dem kildekoden til din utgave.**
+Det holder ikke å la være å distribuere programmet.

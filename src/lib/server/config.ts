@@ -49,6 +49,16 @@ function bool(name: string, fallback: boolean): boolean {
 export const config = {
 	/** Canonical outward-facing base URL. Used as `issuer` in OAuth/OIDC metadata. */
 	baseUrl: (env.EPJ_BASE_URL ?? 'http://localhost:5173').replace(/\/$/, ''),
+	/**
+	 * Where this running version's source can be had, and which version it is.
+	 *
+	 * AGPL section 13 gives everyone who uses the system over a network the right
+	 * to the source of the build they are actually using, so a deployment that
+	 * has modified the code has to point somewhere that serves *its* source, not
+	 * only upstream. `EPJ_VERSION` is the commit the image was built from.
+	 */
+	sourceUrl: env.EPJ_SOURCE_URL ?? 'https://github.com/apusroland/epj',
+	version: env.EPJ_VERSION ?? null,
 	get fhirBaseUrl() {
 		return `${this.baseUrl}/fhir`;
 	},

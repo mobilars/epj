@@ -146,4 +146,13 @@
 	<main class:bred={wide}>
 		{@render children()}
 	</main>
+
+	<!-- AGPL section 13: everyone who uses this over a network is entitled to the
+	     source of the version they are running, so the offer belongs in the
+	     interface and not only in the repository. -->
+	<footer class="bunntekst">
+		<span>© 2026 APUS Roland AS</span>
+		<span aria-hidden="true">·</span>
+		<a href="/kildekode">Fri programvare (AGPL v3) — hent kildekoden</a>
+	</footer>
 </div>
