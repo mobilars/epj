@@ -145,11 +145,11 @@ async function seed(tenant: Tenant): Promise<void> {
 
 	// --- Brukere ----------------------------------------------------------
 	const users = [
-		{ username: 'lege', name: 'Dr. Ingrid Fastlege', roles: ['lege'] as const, practitionerId: doctorRes.resource.id as string, hpr: '9144889' },
-		{ username: 'sykepleier', name: 'Kari Sykepleier', roles: ['sykepleier'] as const, practitionerId: nurseRes.resource.id as string, hpr: '5551234' },
-		{ username: 'sekretaer', name: 'Ola Helsesekretær', roles: ['helsesekretaer'] as const, practitionerId: undefined, hpr: undefined },
+		{ username: 'lege', name: 'Dr. Ingrid Fastlege', roles: ['behandler'] as const, practitionerId: doctorRes.resource.id as string, hpr: '9144889' },
+		{ username: 'sykepleier', name: 'Kari Sykepleier', roles: ['behandler'] as const, practitionerId: nurseRes.resource.id as string, hpr: '5551234' },
+		{ username: 'sekretaer', name: 'Ola Helsesekretær', roles: ['resepsjon'] as const, practitionerId: undefined, hpr: undefined },
 		{ username: 'admin', name: 'Systemansvarlig', roles: ['systemansvarlig'] as const, practitionerId: undefined, hpr: undefined },
-		{ username: 'ombud', name: 'Personvernombud', roles: ['personvernombud'] as const, practitionerId: undefined, hpr: undefined }
+		{ username: 'ombud', name: 'Personvernombud', roles: ['systemansvarlig'] as const, practitionerId: undefined, hpr: undefined }
 	];
 
 	const idPerUsername = new Map<string, string>();

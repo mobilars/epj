@@ -20,7 +20,7 @@ const describeIf = hasTestDatabase() ? describe : describe.skip;
 
 const actor: AuditActor = {
 	userId: 'bruker-1', actorRef: 'Practitioner/42', name: 'Dr. Ingrid Fastlege',
-	role: 'lege', clientId: null, ip: '192.0.2.10', requestId: 'req-1'
+	role: 'behandler', clientId: null, ip: '192.0.2.10', requestId: 'req-1'
 };
 
 const practitioner = { name: 'Ingrid Fastlege', hpr: '9144889' };
@@ -41,7 +41,7 @@ describeIf('integrasjoner', () => {
 	beforeEach(async () => {
 		await emptyTables();
 		fhir.nullstill();
-		await setIn('INSERT INTO user_account (id, username, name) VALUES ($1,$2,$3)', ['bruker-1', 'lege', 'Dr. Ingrid Fastlege']);
+		await setIn('INSERT INTO user_account (id, username, name) VALUES ($1,$2,$3)', ['bruker-1', 'behandler', 'Dr. Ingrid Fastlege']);
 		const p = await fhirClient.create({
 			resourceType: 'Patient',
 			identifier: [{ system: SYSTEM.FNR, value: patientPart.fnr }],

@@ -19,9 +19,11 @@ describe('JWS ES256', async () => {
 	});
 
 	it('rejects an altered payload', async () => {
-		const jwt = await sign({ sub: 'bruker-1', roles: ['sykepleier'] }, privatePkcs8, kid);
+		const jwt = await sign({ sub: 'bruker-1', roles: ['resepsjon'] }, privatePkcs8, kid);
 		const [h, , s] = jwt.split('.');
-		const tampered = `${h}.${b64u({ sub: 'bruker-1', roles: ['lege'] })}.${s}`;
+		// A different payload, or the test proves nothing: the point is that the
+		// signature no longer matches what it was made over.
+		const tampered = `${h}.${b64u({ sub: 'bruker-1', roles: ['behandler'] })}.${s}`;
 		await expect(verify(tampered, [publicJwk])).rejects.toThrow(/invalid/i);
 	});
 

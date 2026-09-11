@@ -297,7 +297,7 @@ export async function blockedPatients(ctx: AuthContext): Promise<Set<string>> {
 	const rows = await query<{ patient_id: string; scope_extent: string; target_user_id: string | null; target_role: string | null }>(
 		`SELECT patient_id, scope_extent, target_user_id, target_role FROM record_restriction
 		 WHERE tenant_id = $1 AND lifted = false AND (valid_until IS NULL OR valid_until > now())
-		   AND scope_extent IN ('alle','bruker','role')`,
+		   AND scope_extent IN ('alle','bruker','rolle')`,
 		[requireTenant().id]
 	);
 	const blocked = new Set<string>();

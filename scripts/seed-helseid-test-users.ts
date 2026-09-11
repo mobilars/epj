@@ -36,11 +36,11 @@ interface TestPerson {
 
 /** The practice's own staff. */
 const PRACTICE: TestPerson[] = [
-	{ nationalId: '05898597468', name: 'GRØNN VITS', username: 'gronn.vits', profession: 'Lege', role: 'lege' },
-	{ nationalId: '06828399789', name: 'KVART GREVLING', username: 'kvart.grevling', profession: 'Lege', role: 'lege' },
-	{ nationalId: '11857998857', name: 'VIRKELIG KJELTRING', username: 'virkelig.kjeltring', profession: 'Sykepleier', role: 'sykepleier' },
-	{ nationalId: '15849197352', name: 'LIVSTRETT BEVER', username: 'livstrett.bever', profession: 'Vernepleier', role: 'sykepleier' },
-	{ nationalId: '67865800174', name: 'DIREKTE HEI', username: 'direkte.hei', profession: 'Sykepleier', role: 'sykepleier' },
+	{ nationalId: '05898597468', name: 'GRØNN VITS', username: 'gronn.vits', profession: 'Lege', role: 'behandler' },
+	{ nationalId: '06828399789', name: 'KVART GREVLING', username: 'kvart.grevling', profession: 'Lege', role: 'behandler' },
+	{ nationalId: '11857998857', name: 'VIRKELIG KJELTRING', username: 'virkelig.kjeltring', profession: 'Sykepleier', role: 'behandler' },
+	{ nationalId: '15849197352', name: 'LIVSTRETT BEVER', username: 'livstrett.bever', profession: 'Vernepleier', role: 'behandler' },
+	{ nationalId: '67865800174', name: 'DIREKTE HEI', username: 'direkte.hei', profession: 'Sykepleier', role: 'behandler' },
 	{
 		nationalId: '60838200624',
 		name: 'VEIK LOGARITME',

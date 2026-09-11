@@ -3,22 +3,38 @@
  *
  * The EPJ standard (access control, correction and deletion) requires access to
  * be granted from role and legitimate need, not from whoever happens to be
- * signed in. The roles here define *what kind of* information a staff category
- * may see; `access.ts` then decides *which patients* it covers.
+ * signed in. A role here says *what kind of* information someone may see;
+ * `access.ts` then decides *which patients* it covers.
+ *
+ * The roles are named after what people need to reach, not after what they are
+ * qualified as. There were thirteen, one per profession - lege, lege-vikar,
+ * turnuslege, sykepleier, jordmor, psykolog - and between several of them there
+ * was no difference at all in what they could see. A distinction the system
+ * never acts on is not a distinction; it is a longer list to get wrong.
+ *
+ * Four roles at a practice, named by what they open:
+ *
+ *   behandler        gives care and writes in the record
+ *   lab              records results and measurements
+ *   resepsjon        appointments, messages, settlement, registering patients
+ *   systemansvarlig  users, apps, logs - no record content at all
+ *
+ * Two more sit outside that: `pasient` is the patient's own access to their own
+ * record, and `systemeier` administers the platform and belongs to no practice.
+ *
+ * One consequence is deliberate and worth stating plainly: `behandler` carries
+ * `resept:forskriv`, so a nurse holding it can prescribe. Prescribing is
+ * restricted by law to particular professions, and a model built on access does
+ * not know professions. Where that matters the answer is not a longer role list
+ * but the HPR number the record already holds - see docs/todo.md.
  */
 
 export const ROLES = [
-	'lege',
-	'lege-vikar',
-	'turnuslege',
-	'sykepleier',
-	'helsesekretaer',
-	'bioingenior',
-	'jordmor',
-	'psykolog',
+	'behandler',
+	'lab',
+	'resepsjon',
 	'systemansvarlig',
-	'personvernombud',
-	'regnskap',
+	// The patient's own access to their own record. Not a staff role.
 	'pasient',
 	// Platform level: belongs to no organisation, and never has clinical access.
 	'systemeier'
@@ -83,108 +99,88 @@ const CLINICAL_SKRIVE = [
 ];
 
 export const ROLE_DEFINISJONER: Record<Role, RoleDefinisjon> = {
-	lege: {
-		name: 'Lege',
-		description: 'Fastlege med fullt behandleransvar.',
-		scopes: [...CLINICAL_LESE, ...CLINICAL_SKRIVE, 'user/MedicationRequest.cruds', 'user/Patient.cruds', 'user/DiagnosticReport.cruds', 'user/Claim.cruds', 'user/Communication.cruds', 'user/Consent.rs'],
-		permissions: ['journal:les', 'journal:skriv', 'journal:signer', 'journal:rett', 'journal:slett-begjaering', 'journal:utlever', 'resept:forskriv', 'resept:fornye', 'melding:les', 'melding:send', 'melding:signer', 'oppgjor:registrer', 'time:administrer', 'pasient:opprett', 'pasient:sperr', 'logg:innsyn'],
+	behandler: {
+		name: 'Behandler',
+		description:
+			'Gir helsehjelp og skriver i journalen. Lege, sykepleier, jordmor, psykolog - rollen sier hva du får se, ikke hva du er utdannet til.',
+		scopes: [
+			...CLINICAL_LESE,
+			...CLINICAL_SKRIVE,
+			'user/MedicationRequest.cruds',
+			'user/Patient.cruds',
+			'user/Claim.cruds',
+			'user/Communication.cruds',
+			'user/Consent.rs'
+		],
+		permissions: [
+			'journal:les', 'journal:skriv', 'journal:signer', 'journal:rett', 'journal:slett-begjaering',
+			'journal:utlever', 'resept:forskriv', 'resept:fornye', 'melding:les', 'melding:send',
+			'melding:signer', 'oppgjor:registrer', 'time:administrer', 'pasient:opprett', 'pasient:sperr',
+			'logg:innsyn'
+		],
 		canEmergencyAccess: true,
 		canSeeAllPatients: false
 	},
-	'lege-vikar': {
-		name: 'Vikarlege',
-		description: 'Lege som dekker et fastlegehjemmel i et avgrenset tidsrom.',
-		scopes: [...CLINICAL_LESE, ...CLINICAL_SKRIVE, 'user/MedicationRequest.cruds', 'user/Claim.cruds', 'user/Communication.cruds'],
-		permissions: ['journal:les', 'journal:skriv', 'journal:signer', 'journal:utlever', 'resept:forskriv', 'resept:fornye', 'melding:les', 'melding:send', 'melding:signer', 'oppgjor:registrer'],
-		canEmergencyAccess: true,
-		canSeeAllPatients: false
-	},
-	turnuslege: {
-		name: 'LIS1 / turnuslege',
-		description: 'Lege under spesialisering. Notater kan kreve kontrasignering.',
-		scopes: [...CLINICAL_LESE, ...CLINICAL_SKRIVE, 'user/MedicationRequest.crus'],
-		permissions: ['journal:les', 'journal:skriv', 'resept:forskriv', 'melding:les', 'melding:send', 'oppgjor:registrer'],
-		canEmergencyAccess: true,
-		canSeeAllPatients: false
-	},
-	sykepleier: {
-		name: 'Sykepleier',
-		description: 'Utfører selvstendige tiltak og dokumenterer i journal.',
-		scopes: [...CLINICAL_LESE, ...CLINICAL_SKRIVE],
-		permissions: ['journal:les', 'journal:skriv', 'melding:les', 'melding:send', 'time:administrer', 'oppgjor:registrer'],
-		canEmergencyAccess: true,
-		canSeeAllPatients: false
-	},
-	helsesekretaer: {
-		name: 'Helsesekretær',
-		description: 'Administrativ oppfølging, timebok og oppgjør. Begrenset innsyn i kliniske notater.',
-		scopes: ['user/Patient.crs', 'user/Appointment.cruds', 'user/Encounter.rs', 'user/Communication.rs', 'user/Coverage.rs', 'user/Claim.cruds', 'user/Practitioner.rs', 'user/Organization.rs'],
-		permissions: ['journal:les', 'journal:utlever', 'melding:les', 'time:administrer', 'pasient:opprett', 'oppgjor:registrer', 'oppgjor:send'],
-		canEmergencyAccess: false,
-		canSeeAllPatients: false
-	},
-	bioingenior: {
-		name: 'Bioingeniør',
-		description: 'Registrerer prøvesvar og laboratorieundersøkelser.',
-		scopes: ['user/Patient.rs', 'user/Observation.cruds', 'user/DiagnosticReport.cruds', 'user/Specimen.cruds', 'user/ServiceRequest.rs'],
+
+	lab: {
+		name: 'Lab',
+		description:
+			'Registrerer prøvesvar og målinger. Ser det som trengs for å knytte et svar til riktig pasient og rekvisisjon, ikke journalen for øvrig.',
+		scopes: [
+			'user/Patient.rs', 'user/Encounter.rs', 'user/ServiceRequest.rs', 'user/Practitioner.rs',
+			'user/Organization.rs', 'user/Observation.cruds', 'user/DiagnosticReport.cruds'
+		],
 		permissions: ['journal:les', 'journal:skriv', 'melding:les'],
 		canEmergencyAccess: false,
 		canSeeAllPatients: false
 	},
-	jordmor: {
-		name: 'Jordmor',
-		description: 'Svangerskapsomsorg.',
-		scopes: [...CLINICAL_LESE, ...CLINICAL_SKRIVE],
-		permissions: ['journal:les', 'journal:skriv', 'journal:signer', 'journal:utlever', 'melding:les', 'melding:send', 'oppgjor:registrer'],
-		canEmergencyAccess: true,
+
+	resepsjon: {
+		name: 'Resepsjon',
+		description:
+			'Timebok, meldinger, oppgjør og registrering av pasienter. Ser at pasienten finnes og hva som skal betales - ikke hva som står i notatene.',
+		scopes: [
+			'user/Patient.crs', 'user/Appointment.cruds', 'user/Encounter.rs', 'user/Communication.rs',
+			'user/Coverage.rs', 'user/Claim.cruds', 'user/Practitioner.rs', 'user/Organization.rs'
+		],
+		permissions: [
+			'journal:les', 'journal:utlever', 'melding:les', 'time:administrer', 'pasient:opprett',
+			'oppgjor:registrer', 'oppgjor:send'
+		],
+		canEmergencyAccess: false,
 		canSeeAllPatients: false
 	},
-	psykolog: {
-		name: 'Psykolog',
-		description: 'Psykologfaglig utredning og behandling.',
-		scopes: [...CLINICAL_LESE, ...CLINICAL_SKRIVE],
-		permissions: ['journal:les', 'journal:skriv', 'journal:signer', 'journal:utlever', 'melding:les', 'melding:send', 'oppgjor:registrer'],
-		canEmergencyAccess: true,
-		canSeeAllPatients: false
-	},
+
 	systemansvarlig: {
 		name: 'Systemansvarlig',
-		description: 'Drifter journalsystemet. Har ikke klinisk innsyn - kun administrasjon.',
-		scopes: ['user/Practitioner.cruds', 'user/PractitionerRole.cruds', 'user/Organization.cruds', 'user/Location.cruds'],
-		permissions: ['admin:brukere', 'admin:apper', 'admin:system', 'admin:logg'],
+		description:
+			'Brukere, apper, logg og drift. Ingen tilgang til journalinnhold i det hele tatt - heller ikke ved nødrett.',
+		scopes: [],
+		permissions: ['admin:brukere', 'admin:apper', 'admin:system', 'admin:logg', 'logg:innsyn'],
 		canEmergencyAccess: false,
 		canSeeAllPatients: false
 	},
-	personvernombud: {
-		name: 'Personvernombud',
-		description: 'Kontrollerer sikkerhetsloggen og behandler innsynsbegjæringer.',
-		scopes: ['user/AuditEvent.rs', 'user/Consent.rs', 'user/Patient.rs'],
-		permissions: ['admin:logg', 'logg:innsyn', 'journal:utlever'],
-		canEmergencyAccess: false,
-		canSeeAllPatients: true
-	},
-	regnskap: {
-		name: 'Regnskap',
-		description: 'Fører oppgjør mot Helfo og pasientfakturering.',
-		scopes: ['user/Claim.rs', 'user/ClaimResponse.rs', 'user/Invoice.cruds', 'user/Coverage.rs', 'user/Patient.rs'],
-		permissions: ['oppgjor:registrer', 'oppgjor:send'],
+
+	pasient: {
+		name: 'Pasient',
+		description: 'Innbygger med innsyn i egen journal og egen logg.',
+		scopes: [
+			'patient/Patient.rs', 'patient/Observation.rs', 'patient/Condition.rs',
+			'patient/MedicationRequest.rs', 'patient/AllergyIntolerance.rs', 'patient/Immunization.rs',
+			'patient/DocumentReference.rs', 'patient/Encounter.rs', 'patient/Appointment.rs',
+			'patient/AuditEvent.rs'
+		],
+		permissions: ['logg:innsyn', 'journal:utlever'],
 		canEmergencyAccess: false,
 		canSeeAllPatients: false
 	},
+
 	systemeier: {
 		name: 'Systemeier',
 		description:
 			'Plattformadministrator. Oppretter og administrerer virksomheter. Har ingen tilgang til journaler i noen virksomhet.',
 		scopes: [],
 		permissions: ['plattform:administrer'],
-		canEmergencyAccess: false,
-		canSeeAllPatients: false
-	},
-	pasient: {
-		name: 'Pasient',
-		description: 'Innbygger med innsyn i egen journal og egen logg.',
-		scopes: ['patient/Patient.rs', 'patient/Observation.rs', 'patient/Condition.rs', 'patient/MedicationRequest.rs', 'patient/AllergyIntolerance.rs', 'patient/Immunization.rs', 'patient/DocumentReference.rs', 'patient/Encounter.rs', 'patient/Appointment.rs', 'patient/AuditEvent.rs'],
-		permissions: ['logg:innsyn', 'journal:utlever'],
 		canEmergencyAccess: false,
 		canSeeAllPatients: false
 	}

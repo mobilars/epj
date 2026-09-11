@@ -39,8 +39,8 @@ describeIf('FHIR-vokteren', () => {
 	beforeEach(async () => {
 		await emptyTables();
 		fhir.nullstill();
-		await setIn('INSERT INTO user_account (id, username, name) VALUES ($1,$2,$3)', ['bruker-1', 'lege', 'Dr. Ingrid Fastlege']);
-		await setIn('INSERT INTO user_account (id, username, name) VALUES ($1,$2,$3)', ['bruker-2', 'sykepleier', 'Kari Sykepleier']);
+		await setIn('INSERT INTO user_account (id, username, name) VALUES ($1,$2,$3)', ['bruker-1', 'ingrid', 'Dr. Ingrid Fastlege']);
+		await setIn('INSERT INTO user_account (id, username, name) VALUES ($1,$2,$3)', ['bruker-2', 'kari', 'Kari Sykepleier']);
 
 		const p1 = await fhirClient.create({
 			resourceType: 'Patient',
@@ -214,7 +214,7 @@ describeIf('FHIR-vokteren', () => {
 
 		it('nekter sletting for rolle uten skriverettighet', async () => {
 			await givesRelationship('bruker-2', pasient1);
-			const sekretaer = context({ userId: 'bruker-2', roles: ['helsesekretaer'] });
+			const sekretaer = context({ userId: 'bruker-2', roles: ['resepsjon'] });
 			await expect(
 				execute({ ctx: sekretaer, method: 'DELETE', path: `Condition/finnes-ikke`, search: new URLSearchParams() })
 			).rejects.toThrow();
@@ -240,6 +240,54 @@ describeIf('FHIR-vokteren', () => {
 			if (!fhir.isEkte) {
 				expect(fhir.call.some((k) => k.method === 'POST' && k.path === '')).toBe(false);
 			}
+		});
+
+		it('vurderer en endring i en transaksjon mot den lagrede versjonen også', async () => {
+			// The user sees patient 1 only. An observation belonging to patient 2,
+			// rewritten with patient 1 as subject, is a move of somebody else's
+			// record content - and would have passed if only the new version were
+			// judged, as a plain PUT already guards against.
+			await givesRelationship('bruker-1', pasient1);
+			const theirs = await fhirClient.create({
+				resourceType: 'Observation',
+				status: 'final',
+				code: { text: 'Ikke min' },
+				subject: { reference: `Patient/${pasient2}` }
+			});
+			await expect(
+				execute({
+					ctx: context(), method: 'POST', path: '', search: new URLSearchParams(),
+					body: {
+						resourceType: 'Bundle',
+						type: 'transaction',
+						entry: [
+							{
+								request: { method: 'PUT', url: `Observation/${theirs.resource.id}` },
+								resource: { ...theirs.resource, subject: { reference: `Patient/${pasient1}` } }
+							}
+						]
+					}
+				})
+			).rejects.toMatchObject({ status: 403 });
+		});
+
+		it('avviser betingede endringer i en transaksjon', async () => {
+			await givesRelationship('bruker-1', pasient1);
+			await expect(
+				execute({
+					ctx: context(), method: 'POST', path: '', search: new URLSearchParams(),
+					body: {
+						resourceType: 'Bundle',
+						type: 'transaction',
+						entry: [
+							{
+								request: { method: 'PUT', url: 'Observation?identifier=x' },
+								resource: { resourceType: 'Observation', status: 'final', code: { text: 'A' }, subject: { reference: `Patient/${pasient1}` } }
+							}
+						]
+					}
+				})
+			).rejects.toMatchObject({ status: 400 });
 		});
 
 		it('kjører en transaksjon der alt er tillatt', async () => {

@@ -5,7 +5,7 @@ import { permissionsForRoles, scopesForRoles, type Role } from '../../src/lib/se
 
 /** Builds an access context for the tests, with the role's full scope set. */
 export function context(over: Partial<AuthContext> & { roles?: Role[] } = {}): AuthContext {
-	const roles = over.roles ?? (['lege'] as Role[]);
+	const roles = over.roles ?? (['behandler'] as Role[]);
 	return {
 		mate: 'session',
 		userId: 'bruker-1',
@@ -28,7 +28,7 @@ export function context(over: Partial<AuthContext> & { roles?: Role[] } = {}): A
 }
 
 /** Context for a SMART app with a given scope set and patient context. */
-export function appContext(scope: string, patientId?: string, roles: Role[] = ['lege']): AuthContext {
+export function appContext(scope: string, patientId?: string, roles: Role[] = ['behandler']): AuthContext {
 	return context({
 		mate: 'smart-app',
 		clientId: 'app-1',

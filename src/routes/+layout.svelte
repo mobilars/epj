@@ -39,11 +39,10 @@
 	const showMiljobanner = $derived(!data.miljo.produksjon || data.miljo.integrations === 'mock');
 
 	/**
-	 * Starting an app needs a patient. The patient layout puts `patientId` in
-	 * the page data, so it is here whenever a record is open - and the menu can
-	 * start the app in one press rather than sending the user to a tab first.
+	 * Apps in the main menu are the ones that work across patients - a worklist,
+	 * an inbox - and start with no patient in context. Apps for one patient are
+	 * reached from the record instead, under the patient's own Apper menu.
 	 */
-	const patientId = $derived(page.data.patientId as string | undefined);
 	const mainMenuApps = $derived(data.apps.filter((a) => a.inMainMenu));
 
 	// The record is the working surface, and its tables are wide. Everything
@@ -128,11 +127,7 @@
 			{/if}
 
 			{#each mainMenuApps as app (app.clientId)}
-				{#if patientId}
-					<a href="/pasienter/{patientId}/apper/{app.clientId}">{app.name}</a>
-				{:else}
-					<a href="/pasienter" title="Velg en pasient først">{app.name}</a>
-				{/if}
+				<a href="/apper/{app.clientId}" aria-current={page.url.pathname === `/apper/${app.clientId}` ? 'page' : undefined}>{app.name}</a>
 			{/each}
 
 

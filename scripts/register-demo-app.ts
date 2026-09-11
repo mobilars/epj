@@ -59,7 +59,6 @@ const APPS: App[] = [
 		host: 'https://legemidler.apps.apus.no',
 		scopes: `${READ} patient/MedicationRequest.rs patient/MedicationRequest.cu patient/AllergyIntolerance.rs`.split(' '),
 		placement: 'ingen',
-		inMainMenu: true,
 		replacesTab: 'legemidler',
 		note: 'Legemiddellisten. Forskrivning går fortsatt gjennom SFM i journalen.'
 	},

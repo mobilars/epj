@@ -81,8 +81,10 @@ _search`), og maskeres i sikkerhetsloggens søkestrenger.
 ## 2. Tilgangsstyring
 
 **K-2.1 Tilgang skal styres av rolle.**
-Elleve roller med definerte rettigheter og maksimale scope. Systemansvarlig har
-ingen klinisk lesetilgang; personvernombudet har logg, ikke journal.
+Fire roller i virksomheten - `behandler`, `lab`, `resepsjon`,
+`systemansvarlig` - ordnet etter hva de får se, ikke etter profesjon, pluss
+`pasient` og plattformens `systemeier`. Systemansvarlig har ingen klinisk
+lesetilgang, men har sikkerhetsloggen.
 *Realisert:* `src/lib/server/authz/roles.ts`.
 *Testet:* `tests/brukere.test.ts`, `e2e/tilgang.spec.ts`.
 

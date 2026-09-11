@@ -127,7 +127,7 @@ export async function createTrial(request: TrialRequest, actor: AuditActor): Pro
 			name: request.contactName || email,
 			email,
 			nationalId: request.nationalId,
-			roles: ['systemansvarlig', 'lege']
+			roles: ['systemansvarlig', 'behandler']
 		})
 	);
 

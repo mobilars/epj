@@ -20,19 +20,17 @@ diagnoser får ikke diagnoser, uansett hvor akutt situasjonen er.
 
 | Rolle | Klinisk innsyn | Skriver journal | Forskriver | Nødrett | Merknad |
 | --- | --- | --- | --- | --- | --- |
-| Lege | ja | ja | ja | ja | fullt behandleransvar |
-| Vikarlege | ja | ja | ja | ja | tidsavgrenset |
-| Turnuslege | ja | ja | ja | ja | kan kreve kontrasignering |
-| Sykepleier | ja | ja | nei | ja | |
-| Helsesekretær | begrenset | nei | nei | nei | time, oppgjør, administrasjon |
-| Bioingeniør | begrenset | prøvesvar | nei | nei | |
-| Jordmor | ja | ja | nei | ja | |
-| Psykolog | ja | ja | nei | ja | |
-| Systemansvarlig | **nei** | nei | nei | nei | drift, ikke klinikk |
-| Personvernombud | nei | nei | nei | nei | logg og samtykker, alle pasienter |
-| Regnskap | nei | nei | nei | nei | oppgjør |
+| Behandler | ja | ja | ja | ja | lege, sykepleier, jordmor, psykolog - alle som gir helsehjelp |
+| Lab | begrenset | prøvesvar | nei | nei | Observation og DiagnosticReport |
+| Resepsjon | begrenset | nei | nei | nei | time, oppgjør, pasientregistrering |
+| Systemansvarlig | **nei** | nei | nei | nei | drift, brukere, apper og sikkerhetslogg |
 | Pasient | egen journal | nei | nei | nei | innbygger |
 | Systemeier | **nei** | nei | nei | nei | plattform, ingen virksomhet |
+
+Rollene sier hva en bruker får se og gjøre, ikke hva hen er utdannet til.
+Konsekvensen er at `behandler` kan forskrive selv om personen ikke er lege;
+sperren for det må komme fra HPR-autorisasjonen på brukeren, ikke fra rollen
+(se `docs/todo.md`).
 
 At systemansvarlig ikke har klinisk innsyn er et poeng, ikke en forglemmelse.
 Den som drifter systemet trenger ikke å lese journaler, og bør derfor ikke kunne
@@ -41,8 +39,7 @@ plattformen: rollen har ingen scopes i det hele tatt, så FHIR-fasaden avviser
 den uansett hva den skulle spørre om.
 
 Rettigheten `journal:utlever` styrer hvem som kan lage en journalutskrift. Den
-er gitt til lege, vikarlege, jordmor, psykolog, helsesekretær, personvernombud
-og pasienten selv. Utleveringen henter innholdet gjennom den samme vokteren som
+er gitt til `behandler`, `resepsjon` og pasienten selv. Utleveringen henter innholdet gjennom den samme vokteren som
 alt annet, så den gir aldri mer enn den som utleverer selv har tilgang til.
 
 ### Tjenstlig behov

@@ -14,6 +14,7 @@ import {
 } from '../src/lib/server/authz/access';
 import { STOTTEDE_RESSURSTYPER } from '../src/lib/server/fhir/searchparams';
 import { newId } from '../src/lib/server/util/ids';
+import { ROLES } from '../src/lib/server/authz/roles';
 import { parseScopes } from '../src/lib/server/authz/scopes';
 
 const describeIf = hasTestDatabase() ? describe : describe.skip;
@@ -43,8 +44,8 @@ describeIf('tilgangsbeslutning', () => {
 	afterAll(async () => { await db.riv(); });
 	beforeEach(async () => {
 		await emptyTables();
-		await layerUser('bruker-1', 'lege');
-		await layerUser('bruker-2', 'sykepleier');
+		await layerUser('bruker-1', 'bruker-1');
+		await layerUser('bruker-2', 'bruker-2');
 	});
 
 	describe('lag 3 - tjenstlig behov', () => {
@@ -95,7 +96,7 @@ describeIf('tilgangsbeslutning', () => {
 				"INSERT INTO record_restriction (id, patient_id, scope_extent, target_user_id, registered_by) VALUES ($1,$2,'bruker',$3,'bruker-1')",
 				[newId(), PATIENT, 'bruker-2']
 			);
-			const nurse = context({ userId: 'bruker-2', roles: ['sykepleier'] });
+			const nurse = context({ userId: 'bruker-2', roles: ['behandler'] });
 			const b = await evaluate({ ctx: nurse, resourceType: 'Observation', operation: 'r', resource: observation(PATIENT) });
 			expect(b.allowed).toBe(false);
 			expect(b.reason).toMatch(/sperret/);
@@ -106,10 +107,10 @@ describeIf('tilgangsbeslutning', () => {
 
 		it('sperrer for en hel rolle', async () => {
 			await setIn(
-				"INSERT INTO record_restriction (id, patient_id, scope_extent, target_role, registered_by) VALUES ($1,$2,'rolle','sykepleier','bruker-1')",
+				"INSERT INTO record_restriction (id, patient_id, scope_extent, target_role, registered_by) VALUES ($1,$2,'rolle','behandler','bruker-1')",
 				[newId(), PATIENT]
 			);
-			const nurse = context({ userId: 'bruker-2', roles: ['sykepleier'] });
+			const nurse = context({ userId: 'bruker-2', roles: ['behandler'] });
 			expect((await evaluate({ ctx: nurse, resourceType: 'Observation', operation: 'r', resource: observation(PATIENT) })).allowed).toBe(false);
 		});
 
@@ -180,7 +181,7 @@ describeIf('tilgangsbeslutning', () => {
 		beforeEach(async () => { await givesRelationship('bruker-1', PATIENT); });
 
 		it('nekter skriving for rolle uten skriverettighet', async () => {
-			const sekretaer = context({ roles: ['helsesekretaer'] });
+			const sekretaer = context({ roles: ['resepsjon'] });
 			const b = await evaluate({ ctx: sekretaer, resourceType: 'Observation', operation: 'c', resource: observation(PATIENT) });
 			expect(b.allowed).toBe(false);
 		});
@@ -208,28 +209,28 @@ describeIf('tilgangsbeslutning', () => {
 		const newPatient = { resourceType: 'Patient', name: [{ family: 'Nordmann', given: ['Kari'] }] };
 
 		it('lar en rolle med pasient:opprett registrere en ny pasient', async () => {
-			const decision = await evaluate({ ctx: context({ roles: ['lege'] }), resourceType: 'Patient', operation: 'c', resource: newPatient });
+			const decision = await evaluate({ ctx: context({ roles: ['behandler'] }), resourceType: 'Patient', operation: 'c', resource: newPatient });
 			expect(decision.allowed).toBe(true);
 			expect(decision.basis).toBe('pasientregistrering');
 		});
 
 		it('lar helsesekretæren registrere, selv uten skriverett i journal', async () => {
-			const sekretaer = context({ roles: ['helsesekretaer'] });
+			const sekretaer = context({ roles: ['resepsjon'] });
 			expect(sekretaer.permissions.has('journal:skriv')).toBe(false);
 			expect((await evaluate({ ctx: sekretaer, resourceType: 'Patient', operation: 'c', resource: newPatient })).allowed).toBe(true);
 		});
 
 		it('nekter en rolle uten pasient:opprett', async () => {
-			const sykepleier = context({ roles: ['sykepleier'] });
-			expect(sykepleier.permissions.has('pasient:opprett')).toBe(false);
-			expect((await evaluate({ ctx: sykepleier, resourceType: 'Patient', operation: 'c', resource: newPatient })).allowed).toBe(false);
+			const lab = context({ roles: ['lab'] });
+			expect(lab.permissions.has('pasient:opprett')).toBe(false);
+			expect((await evaluate({ ctx: lab, resourceType: 'Patient', operation: 'c', resource: newPatient })).allowed).toBe(false);
 		});
 
 		it('gir ikke tilgang til en pasient som allerede finnes', async () => {
 			// The exception covers registration only. A create carrying an id names
 			// an existing record, and must be judged the ordinary way.
 			const decision = await evaluate({
-				ctx: context({ roles: ['lege'] }),
+				ctx: context({ roles: ['behandler'] }),
 				resourceType: 'Patient',
 				operation: 'c',
 				resource: { ...newPatient, id: ANNEN_PATIENT }
@@ -238,7 +239,7 @@ describeIf('tilgangsbeslutning', () => {
 		});
 
 		it('gir ikke skrivetilgang til journalinnhold som følge av registreringen', async () => {
-			const sekretaer = context({ roles: ['helsesekretaer'] });
+			const sekretaer = context({ roles: ['resepsjon'] });
 			expect((await evaluate({ ctx: sekretaer, resourceType: 'Observation', operation: 'c', resource: observation(PATIENT) })).allowed).toBe(false);
 		});
 	});
@@ -275,8 +276,14 @@ describeIf('tilgangsbeslutning', () => {
 			expect(await allowedPatients(context())).toContain('pas-9');
 		});
 
-		it('gir «alle» til personvernombudet', async () => {
-			expect(await allowedPatients(context({ roles: ['personvernombud'] }))).toBe('alle');
+		it('gir ingen rolle innsyn i alle pasienter', async () => {
+			// Det fantes en rolle som så alle pasienter uten behandlingsrelasjon -
+			// personvernombudet. Den er borte, og med den den eneste veien inn i en
+			// journal uten enten relasjon eller nødrett. Systemansvarlig arvet
+			// loggtilgangen, ikke journaltilgangen.
+			for (const role of ROLES) {
+				expect(await allowedPatients(context({ roles: [role] }))).not.toBe('alle');
+			}
 		});
 
 		it('avgrenser til launch-pasienten når appen bare har patient/-scope', async () => {
@@ -289,6 +296,18 @@ describeIf('tilgangsbeslutning', () => {
 			await setIn("INSERT INTO record_restriction (id, patient_id, scope_extent, registered_by) VALUES ($1,$2,'alle','bruker-1')", [newId(), ANNEN_PATIENT]);
 			const blocked = await blockedPatients(context());
 			expect(blocked.has(ANNEN_PATIENT)).toBe(true);
+		});
+
+		it('lister pasienter som er sperret for hele rollen', async () => {
+			// The query used to spell the value 'role' while the rows say 'rolle',
+			// so a restriction against a whole role held for single reads but not
+			// for searches - which is where most of the reading happens.
+			await setIn(
+				"INSERT INTO record_restriction (id, patient_id, scope_extent, target_role, registered_by) VALUES ($1,$2,'rolle','behandler','bruker-1')",
+				[newId(), ANNEN_PATIENT]
+			);
+			expect((await blockedPatients(context({ roles: ['behandler'] }))).has(ANNEN_PATIENT)).toBe(true);
+			expect((await blockedPatients(context({ roles: ['resepsjon'] }))).has(ANNEN_PATIENT)).toBe(false);
 		});
 
 		it('fjerner sperring fra listen når det finnes nødrett', async () => {

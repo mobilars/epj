@@ -36,8 +36,8 @@ describeIf('OAuth 2.1 og SMART App Launch', () => {
 	beforeEach(async () => {
 		await emptyTables();
 		emptyKeyCache();
-		await setIn('INSERT INTO user_account (id, username, name, practitioner_id) VALUES ($1,$2,$3,$4)', ['bruker-1', 'lege', 'Dr. Ingrid Fastlege', 'prac-42']);
-		await exec('INSERT INTO role_assignment (id, user_id, role) VALUES ($1,$2,$3)', [newId(), 'bruker-1', 'lege']);
+		await setIn('INSERT INTO user_account (id, username, name, practitioner_id) VALUES ($1,$2,$3,$4)', ['bruker-1', 'behandler', 'Dr. Ingrid Fastlege', 'prac-42']);
+		await exec('INSERT INTO role_assignment (id, user_id, role) VALUES ($1,$2,$3)', [newId(), 'bruker-1', 'behandler']);
 		const reg = await registerClient({
 			name: 'Testapp',
 			type: 'public',
@@ -231,7 +231,7 @@ describeIf('OAuth 2.1 og SMART App Launch', () => {
 			const tokens = await issueTokens({ clientId, userId: 'bruker-1', scope: 'patient/Patient.rs', launch: { patientId: 'pas-1' }, withRefresh: false });
 			const v = await validateAccessToken(tokens.access_token);
 			expect(v.valid).toBe(true);
-			expect(v.ctx?.roles).toContain('lege');
+			expect(v.ctx?.roles).toContain('behandler');
 			expect(v.ctx?.launch.patientId).toBe('pas-1');
 			expect(v.ctx?.actorRef).toBe('Practitioner/prac-42');
 		});

@@ -64,7 +64,7 @@
 		</div>
 		<label class="avkryssing">
 			<input type="checkbox" name="iHovedmeny" value="ja" />
-			Vis appen i hovedmenyen (ellers under «Apper»)
+			Vis appen i hovedmenyen — for apper som virker på tvers av pasienter og startes uten pasient (ellers under pasientens «Apper»)
 		</label>
 		<div class="felt"><label for="jwks">JWKS (JSON)</label><textarea id="jwks" name="jwks" placeholder={'{"keys":[...]}'}></textarea></div>
 		<button type="submit" class="primar">Registrer</button>
@@ -120,13 +120,14 @@
 					</select>
 					<button type="submit" class="liten">Lagre plassering</button>
 				</form>
-				<!-- An app used in most consultations belongs in the main menu, where it
-				     starts in one press with the open patient already in context. -->
+				<!-- The main menu is for apps that work across patients and start
+				     without one - a worklist, an inbox. An app for one patient is
+				     reached from the record and does not belong here. -->
 				<form method="POST" action="?/hovedmeny">
 					<input type="hidden" name="clientId" value={a.clientId} />
 					<input type="hidden" name="iHovedmeny" value={a.inMainMenu ? 'nei' : 'ja'} />
 					<button type="submit" class="liten">
-						{a.inMainMenu ? 'Ta ut av hovedmenyen' : 'Vis i hovedmenyen'}
+						{a.inMainMenu ? 'Ta ut av hovedmenyen' : 'Vis i hovedmenyen (uten pasient)'}
 					</button>
 				</form>
 			{/if}

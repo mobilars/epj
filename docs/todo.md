@@ -92,8 +92,9 @@ Dette er trolig den enkeltfunksjonen et fastlegekontor vil savne mest.
 
 ### 2.2 Kontrasignering **[V]**
 
-Rollen `turnuslege` er definert som en rolle hvis notater kan kreve
-kontrasignering, men flyten er ikke bygget: markering av notater som venter,
+Rollene sier ikke lenger hvem som er under veiledning - `behandler` dekker
+alle som skriver i journalen. Kontrasignering må derfor knyttes til brukeren
+(HPR-autorisasjon eller et eget flagg), og flyten er ikke bygget: markering av notater som venter,
 kø hos veileder, signering med begrunnelse, og sporing i journalen.
 
 ### 2.3 Prøvesvarhåndtering **[V]**
@@ -117,7 +118,7 @@ prosjekt i seg selv.
 
 ### 2.6 Svangerskapsjournal og helsestasjon **[N]**
 
-Rollen `jordmor` finnes, men det er ingen strukturert svangerskapsjournal.
+Det er ingen strukturert svangerskapsjournal.
 
 ### 2.7 Interaksjonsvarsler fra en vedlikeholdt kilde **[N]**
 

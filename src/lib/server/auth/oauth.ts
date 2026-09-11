@@ -186,7 +186,9 @@ export function validateAuthorisationRequest(
 	if ((f.code_challenge_method ?? 'plain') !== 'S256') return reject('invalid_request', 'code_challenge_method må være S256');
 	if (!client.grant_types.includes('authorization_code')) return reject('unauthorized_client', 'Klienten kan ikke bruke authorization_code');
 	const fhirBase = fhirBaseFor(requireTenant());
-	if (f.aud && !f.aud.startsWith(fhirBase) && f.aud !== fhirBase) {
+	// Exact, with or without a trailing slash. A prefix match would accept
+	// `.../fhir.example.com`, which is another server entirely.
+	if (f.aud && f.aud.replace(/\/+$/, '') !== fhirBase.replace(/\/+$/, '')) {
 		return reject('invalid_request', `aud må være ${fhirBase}`);
 	}
 	if (f.scope.split(/\s+/).includes('launch') && !f.launch) {

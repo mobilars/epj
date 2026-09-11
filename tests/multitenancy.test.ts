@@ -203,8 +203,8 @@ describeIf('multitenancy', () => {
 
 	describe('brukere', () => {
 		it('holder brukerne adskilt', async () => {
-			const iA = await withTenant(a, () => createUser({ username: 'lege', name: 'Lege A', roles: ['lege'] }));
-			const iB = await withTenant(b, () => createUser({ username: 'lege', name: 'Lege B', roles: ['lege'] }));
+			const iA = await withTenant(a, () => createUser({ username: 'lege', name: 'Lege A', roles: ['behandler'] }));
+			const iB = await withTenant(b, () => createUser({ username: 'lege', name: 'Lege B', roles: ['behandler'] }));
 			expect(iA.id).not.toBe(iB.id);
 
 			expect((await withTenant(a, () => listUsers())).map((u) => u.name)).toEqual(['Lege A']);
@@ -216,18 +216,18 @@ describeIf('multitenancy', () => {
 		});
 
 		it('lar samme brukernavn finnes i flere virksomheter, men ikke to ganger i én', async () => {
-			await withTenant(a, () => createUser({ username: 'lege', name: 'Lege A', roles: ['lege'] }));
+			await withTenant(a, () => createUser({ username: 'lege', name: 'Lege A', roles: ['behandler'] }));
 			await expect(
-				withTenant(a, () => createUser({ username: 'LEGE', name: 'Dublett', roles: ['lege'] }))
+				withTenant(a, () => createUser({ username: 'LEGE', name: 'Dublett', roles: ['behandler'] }))
 			).rejects.toThrow();
 			await expect(
-				withTenant(b, () => createUser({ username: 'lege', name: 'Lege B', roles: ['lege'] }))
+				withTenant(b, () => createUser({ username: 'lege', name: 'Lege B', roles: ['behandler'] }))
 			).resolves.toBeTruthy();
 		});
 
 		it('lar samme HelseID-identitet ha én konto per virksomhet', async () => {
-			const iA = await withTenant(a, () => createUser({ username: 'ingrid', name: 'Ingrid', roles: ['lege'] }));
-			const iB = await withTenant(b, () => createUser({ username: 'ingrid', name: 'Ingrid', roles: ['lege'] }));
+			const iA = await withTenant(a, () => createUser({ username: 'ingrid', name: 'Ingrid', roles: ['behandler'] }));
+			const iB = await withTenant(b, () => createUser({ username: 'ingrid', name: 'Ingrid', roles: ['behandler'] }));
 			await exec('UPDATE user_account SET helseid_sub = $2 WHERE id = $1', [iA.id, 'helseid-1']);
 			await exec('UPDATE user_account SET helseid_sub = $2 WHERE id = $1', [iB.id, 'helseid-1']);
 
@@ -236,7 +236,7 @@ describeIf('multitenancy', () => {
 		});
 
 		it('nekter pålogging med et brukernavn som hører hjemme i en annen virksomhet', async () => {
-			await withTenant(a, () => createUser({ username: 'lege', name: 'Lege A', password: 'Testpassord1!', roles: ['lege'] }));
+			await withTenant(a, () => createUser({ username: 'lege', name: 'Lege A', password: 'Testpassord1!', roles: ['behandler'] }));
 			// In its own organisation the system knows the user (and goes on to MFA).
 			expect((await withTenant(a, () => logIn('lege', 'Testpassord1!'))).outcome).not.toBe('ukjent-bruker');
 			// In the neighbouring organisation the username simply does not exist.
@@ -415,7 +415,7 @@ describeIf('multitenancy', () => {
 
 	describe('suspensjon', () => {
 		it('avslutter sesjoner og trekker tilbake tokens umiddelbart', async () => {
-			const user = await withTenant(b, () => createUser({ username: 'lege', name: 'Lege B', roles: ['lege'] }));
+			const user = await withTenant(b, () => createUser({ username: 'lege', name: 'Lege B', roles: ['behandler'] }));
 			await exec(
 				"INSERT INTO user_session (id, user_id, token_hash, expires_at, amr) VALUES ($1,$2,'x', now() + interval '1 hour','pwd')",
 				['sesjon-b', user.id]
@@ -436,7 +436,7 @@ describeIf('multitenancy', () => {
 		});
 
 		it('rører ikke de andre virksomhetenes sesjoner', async () => {
-			const iA = await withTenant(a, () => createUser({ username: 'lege', name: 'Lege A', roles: ['lege'] }));
+			const iA = await withTenant(a, () => createUser({ username: 'lege', name: 'Lege A', roles: ['behandler'] }));
 			await exec(
 				"INSERT INTO user_session (id, user_id, token_hash, expires_at, amr) VALUES ($1,$2,'y', now() + interval '1 hour','pwd')",
 				['sesjon-a', iA.id]
@@ -451,9 +451,9 @@ describeIf('multitenancy', () => {
 
 	describe('plattformoversikten', () => {
 		it('teller brukere og loggeinnslag per virksomhet, og krysser av mot HAPI', async () => {
-			await withTenant(a, () => createUser({ username: 'lege', name: 'Lege A', roles: ['lege'] }));
-			await withTenant(b, () => createUser({ username: 'lege', name: 'Lege B', roles: ['lege'] }));
-			await withTenant(b, () => createUser({ username: 'sek', name: 'Sek B', roles: ['helsesekretaer'] }));
+			await withTenant(a, () => createUser({ username: 'lege', name: 'Lege A', roles: ['behandler'] }));
+			await withTenant(b, () => createUser({ username: 'lege', name: 'Lege B', roles: ['behandler'] }));
+			await withTenant(b, () => createUser({ username: 'sek', name: 'Sek B', roles: ['resepsjon'] }));
 			await withTenant(b, () => log({ type: 'admin', subtype: 'b', action: 'E', outcome: '0' }, actor));
 
 			const overview = await tenantOverview();

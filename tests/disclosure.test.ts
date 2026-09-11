@@ -39,7 +39,7 @@ describeIf('utlevering av journal', () => {
 	beforeEach(async () => {
 		await emptyTables();
 		fhir.nullstill();
-		await setIn('INSERT INTO user_account (id, username, name) VALUES ($1,$2,$3)', ['bruker-1', 'lege', 'Dr. Ingrid Fastlege']);
+		await setIn('INSERT INTO user_account (id, username, name) VALUES ($1,$2,$3)', ['bruker-1', 'behandler', 'Dr. Ingrid Fastlege']);
 
 		const p = await fhirClient.create({
 			resourceType: 'Patient',

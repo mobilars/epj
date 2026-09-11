@@ -93,7 +93,7 @@ async function resolveTenant(
 		if (funnet.status !== 'aktiv') {
 			return { error: `Virksomheten er ${funnet.status}. Kontakt leverandøren.`, status: 503 };
 		}
-		return { tenant: funnet, isPlatform: false };
+		return { tenant: funnet, isPlatform: funnet.id === PLATFORM_TENANT };
 	}
 
 	if (!config.tenant.allowUnknownHostname) {
@@ -151,7 +151,11 @@ async function handleIContext(
 	resolve: Parameters<Handle>[0]['resolve'],
 	isPlatform: boolean
 ): Promise<Response> {
-	const requestId = event.request.headers.get('x-request-id') ?? randomUUID();
+	// A caller may supply the correlation id, so that its own logs and ours
+	// line up - but it ends up in the audit log verbatim, so only a plain token
+	// is accepted. Anything else gets an id of our own.
+	const supplied = event.request.headers.get('x-request-id') ?? '';
+	const requestId = /^[A-Za-z0-9._-]{8,64}$/.test(supplied) ? supplied : randomUUID();
 	event.locals.requestId = requestId;
 	event.locals.clientIp = clientIp(event);
 	event.locals.auth = null;

@@ -203,7 +203,10 @@ async function updateResource(f: Request, resourceType: string, id: string): Pro
 async function patchResource(f: Request, resourceType: string, id: string): Promise<GatewayResponse> {
 	const existing = await fhirClient.read(resourceType, id, { requestId: f.ctx.requestId });
 	const decision = await evaluate({ ctx: f.ctx, resourceType, operation: 'u', resource: existing, patientId: patientIdFromResource(existing) });
-	if (!decision.allowed) throw new FhirError(decision.status, [issue('error', 'forbidden', decision.reason ?? 'Ingen tilgang')]);
+	if (!decision.allowed) {
+		await log({ type: 'rest', subtype: 'patch', action: 'U', outcome: '4', outcomeDescription: decision.reason, patientId: patientIdFromResource(existing), entityRef: `${resourceType}/${id}`, purposeOfUse: decision.purposeOfUse }, actorFromContext(f.ctx));
+		throw new FhirError(decision.status, [issue('error', 'forbidden', decision.reason ?? 'Ingen tilgang')]);
+	}
 	if (!Array.isArray(f.body)) throw FhirError.invalid('PATCH krever en JSON Patch-array');
 
 	const response = await fhirClient.patch(resourceType, id, f.body as unknown[], { requestId: f.ctx.requestId, ifMatch: f.ifMatch });
@@ -281,11 +284,20 @@ async function searchResources(f: Request, resourceType: string): Promise<Gatewa
 
 	// Post-filter for restrictions. A restriction can change between two calls,
 	// and HAPI does not know the restriction model, so the filter is applied here.
+	//
+	// The same pass keeps included resources (`_include`, `_revinclude`) to the
+	// patients the user may see. The `patient=` narrowing above covers the type
+	// being searched; what is pulled in alongside can point at another patient
+	// - a Composition entry, a ServiceRequest a Communication is based on - and
+	// gets the same test per entry.
 	const blocked = await blockedPatients(f.ctx);
+	const allowedSet = allowed === 'alle' ? null : new Set(allowed);
 	const kept = (bundle.entry ?? []).filter((e) => {
 		if (!e.resource) return true;
 		const p = patientIdFromResource(e.resource);
-		return !p || !blocked.has(p);
+		if (!p) return true;
+		if (blocked.has(p)) return false;
+		return !allowedSet || allowedSet.has(p);
 	});
 	const removed = (bundle.entry ?? []).length - kept.length;
 
@@ -387,14 +399,32 @@ async function transaction(f: Request): Promise<GatewayResponse> {
 		const resourceType = entry.resource?.resourceType ?? url.split('/')[0].split('?')[0];
 		if (!resourceType) throw FhirError.invalid('Oppføring i Bundle mangler ressurstype');
 		const operation = METHOD_TO_OPERATION[method] ?? 'r';
-		const decision = await evaluate({
-			ctx: f.ctx, resourceType, operation,
-			resource: entry.resource ?? null,
-			patientId: entry.resource ? patientIdFromResource(entry.resource) : null
-		});
-		if (!decision.allowed) {
-			await log({ type: 'rest', subtype: 'transaction', action: 'E', outcome: '4', outcomeDescription: decision.reason, entityRef: `${method} ${url}` }, actorFromContext(f.ctx));
-			throw new FhirError(decision.status, [issue('error', 'forbidden', `${method} ${url}: ${decision.reason}`)]);
+		const refuse = async (reason: string, status: 403 | 400 = 403) => {
+			await log({ type: 'rest', subtype: 'transaction', action: 'E', outcome: '4', outcomeDescription: reason, entityRef: `${method} ${url}` }, actorFromContext(f.ctx));
+			throw new FhirError(status, [issue('error', status === 403 ? 'forbidden' : 'not-supported', `${method} ${url}: ${reason}`)]);
+		};
+
+		const candidates: { resource: FhirResource | null; patientId: string | null }[] = [
+			{ resource: entry.resource ?? null, patientId: entry.resource ? patientIdFromResource(entry.resource) : null }
+		];
+
+		/**
+		 * A change to something that exists is judged against the stored version
+		 * too, exactly as a plain PUT is: otherwise a bundle could move another
+		 * patient's resource onto a patient the user does see. Conditional forms
+		 * (`Type?identifier=...`) have no single stored version to judge, and
+		 * are refused rather than guessed at.
+		 */
+		if (operation === 'u' || operation === 'd') {
+			const m = /^([A-Za-z]+)\/([A-Za-z0-9.-]+)$/.exec(url.split('?')[0]);
+			if (!m || url.includes('?')) await refuse('Betingede endringer i en Bundle støttes ikke', 400);
+			const existing = await fhirClient.read(m![1], m![2], { requestId: f.ctx.requestId }).catch(() => null);
+			if (existing) candidates.push({ resource: existing, patientId: patientIdFromResource(existing) });
+		}
+
+		for (const c of candidates) {
+			const decision = await evaluate({ ctx: f.ctx, resourceType, operation, resource: c.resource, patientId: c.patientId });
+			if (!decision.allowed) await refuse(decision.reason ?? 'Ingen tilgang');
 		}
 	}
 

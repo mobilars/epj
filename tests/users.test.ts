@@ -43,7 +43,7 @@ describe('rollemodell', () => {
 	});
 
 	it('gir helsesekretær administrative rettigheter, men ikke skriving i journal', () => {
-		const rett = permissionsForRoles(['helsesekretaer']);
+		const rett = permissionsForRoles(['resepsjon']);
 		expect(rett.has('time:administrer')).toBe(true);
 		expect(rett.has('journal:skriv')).toBe(false);
 		expect(rett.has('resept:forskriv')).toBe(false);
@@ -57,15 +57,17 @@ describe('rollemodell', () => {
 	});
 
 	it('lar bare kliniske roller bruke nødrett', () => {
-		expect(canEmergencyAccess(['lege'])).toBe(true);
-		expect(canEmergencyAccess(['sykepleier'])).toBe(true);
-		expect(canEmergencyAccess(['helsesekretaer'])).toBe(false);
+		expect(canEmergencyAccess(['behandler'])).toBe(true);
+		expect(canEmergencyAccess(['behandler'])).toBe(true);
+		expect(canEmergencyAccess(['resepsjon'])).toBe(false);
 		expect(canEmergencyAccess(['systemansvarlig'])).toBe(false);
 	});
 
-	it('gir bare personvernombudet innsyn på tvers av alle pasienter', () => {
-		expect(canSeeAllPatients(['personvernombud'])).toBe(true);
-		expect(canSeeAllPatients(['lege'])).toBe(false);
+	it('gir ingen rolle innsyn på tvers av alle pasienter', () => {
+		// Personvernombudet kunne det, og var dermed den eneste rollen som kom inn
+		// i en journal uten behandlingsrelasjon eller nødrett. Rollen er borte, og
+		// systemansvarlig arvet loggtilgangen - ikke journaltilgangen.
+		for (const role of ROLES) expect(canSeeAllPatients([role])).toBe(false);
 	});
 
 	it('gir pasientrollen bare patient/-scope og ingen skriverettigheter', () => {
@@ -82,27 +84,27 @@ describeIf('brukere, pålogging og sesjoner', () => {
 
 	describe('brukeradministrasjon', () => {
 		it('oppretter bruker med roller', async () => {
-			const user = await createUser({ username: 'lege', name: 'Dr. Lege', password: 'Testpassord1!', roles: ['lege'] });
-			expect(await rolesFor(user.id)).toEqual(['lege']);
+			const user = await createUser({ username: 'lege', name: 'Dr. Lege', password: 'Testpassord1!', roles: ['behandler'] });
+			expect(await rolesFor(user.id)).toEqual(['behandler']);
 			expect((await getUserAtUsername('LEGE'))?.id).toBe(user.id);
 		});
 
 		it('erstatter roller uten å miste historikken', async () => {
-			const user = await createUser({ username: 'x', name: 'X', password: 'Testpassord1!', roles: ['sykepleier'] });
-			await setRoles(user.id, ['lege'], 'admin-1');
-			expect(await rolesFor(user.id)).toEqual(['lege']);
+			const user = await createUser({ username: 'x', name: 'X', password: 'Testpassord1!', roles: ['behandler'] });
+			await setRoles(user.id, ['behandler'], 'admin-1');
+			expect(await rolesFor(user.id)).toEqual(['behandler']);
 			expect(await query('SELECT 1 FROM role_assignment WHERE user_id = $1', [user.id])).toHaveLength(2);
 		});
 
 		it('lister brukere med rollene sine', async () => {
-			await createUser({ username: 'a', name: 'A', roles: ['lege'] });
-			await createUser({ username: 'b', name: 'B', roles: ['sykepleier', 'jordmor'] });
+			await createUser({ username: 'a', name: 'A', roles: ['behandler'] });
+			await createUser({ username: 'b', name: 'B', roles: ['behandler', 'resepsjon'] });
 			const list = await listUsers();
-			expect(list.find((b) => b.username === 'b')?.roles.sort()).toEqual(['jordmor', 'sykepleier']);
+			expect(list.find((b) => b.username === 'b')?.roles.sort()).toEqual(['behandler', 'resepsjon']);
 		});
 
 		it('avslutter sesjoner og trekker tilbake tokens når brukeren deaktiveres', async () => {
-			const user = await createUser({ username: 'slutt', name: 'Slutter', password: 'Testpassord1!', roles: ['lege'] });
+			const user = await createUser({ username: 'slutt', name: 'Slutter', password: 'Testpassord1!', roles: ['behandler'] });
 			const cookies = layerCookies();
 			await createSession(user.id, 'pwd', '127.0.0.1', 'test', cookies);
 			await setStatus(user.id, 'avsluttet');
@@ -113,7 +115,7 @@ describeIf('brukere, pålogging og sesjoner', () => {
 
 	describe('pålogging', () => {
 		const layerLoggedIn = async () => {
-			const user = await createUser({ username: 'lege', name: 'Dr. Lege', password: 'Testpassord1!', roles: ['lege'] });
+			const user = await createUser({ username: 'lege', name: 'Dr. Lege', password: 'Testpassord1!', roles: ['behandler'] });
 			return user;
 		};
 
@@ -142,7 +144,7 @@ describeIf('brukere, pålogging og sesjoner', () => {
 			const result = await logIn('lege', 'Testpassord1!', totpCode(secret));
 			expect(result.outcome).toBe('ok');
 			if (result.outcome === 'ok') {
-				expect(result.roles).toEqual(['lege']);
+				expect(result.roles).toEqual(['behandler']);
 				expect(result.amr).toBe('pwd+otp');
 			}
 		});
@@ -225,7 +227,7 @@ describeIf('brukere, pålogging og sesjoner', () => {
 
 	describe('sesjoner', () => {
 		it('oppretter, gjenfinner og avslutter sesjon', async () => {
-			const user = await createUser({ username: 's', name: 'S', roles: ['lege'] });
+			const user = await createUser({ username: 's', name: 'S', roles: ['behandler'] });
 			const cookies = layerCookies();
 			await createSession(user.id, 'pwd+otp', '192.0.2.1', 'testklient', cookies);
 
@@ -238,7 +240,7 @@ describeIf('brukere, pålogging og sesjoner', () => {
 		});
 
 		it('lagrer bare hashen av sesjonstokenet', async () => {
-			const user = await createUser({ username: 's2', name: 'S2', roles: ['lege'] });
+			const user = await createUser({ username: 's2', name: 'S2', roles: ['behandler'] });
 			const cookies = layerCookies();
 			await createSession(user.id, 'pwd', '192.0.2.1', null, cookies);
 			const cookie = cookies.store.get(config.session.cookieName) as string;
@@ -248,7 +250,7 @@ describeIf('brukere, pålogging og sesjoner', () => {
 		});
 
 		it('avslutter sesjonen ved feil token på gyldig sesjons-id', async () => {
-			const user = await createUser({ username: 's3', name: 'S3', roles: ['lege'] });
+			const user = await createUser({ username: 's3', name: 'S3', roles: ['behandler'] });
 			const cookies = layerCookies();
 			await createSession(user.id, 'pwd', '192.0.2.1', null, cookies);
 			const id = (cookies.store.get(config.session.cookieName) as string).split('.')[0];
@@ -259,7 +261,7 @@ describeIf('brukere, pålogging og sesjoner', () => {
 		});
 
 		it('avviser sesjon som har stått ubrukt for lenge', async () => {
-			const user = await createUser({ username: 's4', name: 'S4', roles: ['lege'] });
+			const user = await createUser({ username: 's4', name: 'S4', roles: ['behandler'] });
 			const cookies = layerCookies();
 			await createSession(user.id, 'pwd', '192.0.2.1', null, cookies);
 			await exec("UPDATE user_session SET last_active = now() - interval '2 days'");
@@ -267,7 +269,7 @@ describeIf('brukere, pålogging og sesjoner', () => {
 		});
 
 		it('avviser utløpt sesjon', async () => {
-			const user = await createUser({ username: 's5', name: 'S5', roles: ['lege'] });
+			const user = await createUser({ username: 's5', name: 'S5', roles: ['behandler'] });
 			const cookies = layerCookies();
 			await createSession(user.id, 'pwd', '192.0.2.1', null, cookies);
 			await exec("UPDATE user_session SET expires_at = now() - interval '1 minute'");
@@ -275,7 +277,7 @@ describeIf('brukere, pålogging og sesjoner', () => {
 		});
 
 		it('markerer reautentisering (step-up)', async () => {
-			const user = await createUser({ username: 's6', name: 'S6', roles: ['lege'] });
+			const user = await createUser({ username: 's6', name: 'S6', roles: ['behandler'] });
 			const cookies = layerCookies();
 			const id = await createSession(user.id, 'pwd', '192.0.2.1', null, cookies);
 			await elevateSession(id);
@@ -283,7 +285,7 @@ describeIf('brukere, pålogging og sesjoner', () => {
 		});
 
 		it('avslutter alle sesjoner for en bruker', async () => {
-			const user = await createUser({ username: 's7', name: 'S7', roles: ['lege'] });
+			const user = await createUser({ username: 's7', name: 'S7', roles: ['behandler'] });
 			const a = layerCookies();
 			const b = layerCookies();
 			await createSession(user.id, 'pwd', '1.1.1.1', null, a);

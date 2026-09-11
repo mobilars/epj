@@ -11,7 +11,7 @@ const actor: AuditActor = {
 	userId: 'bruker-1',
 	actorRef: 'Practitioner/42',
 	name: 'Dr. Ingrid Fastlege',
-	role: 'lege',
+	role: 'behandler',
 	clientId: null,
 	ip: '192.0.2.10',
 	requestId: 'req-1'
@@ -108,7 +108,7 @@ describeIf('sikkerhetslogg', () => {
 	});
 
 	it('lister nødrettsoppslag som ikke er gjennomgått', async () => {
-		await setIn('INSERT INTO user_account (id, username, name) VALUES ($1,$2,$3)', ['bruker-1', 'lege', 'Lege']);
+		await setIn('INSERT INTO user_account (id, username, name) VALUES ($1,$2,$3)', ['bruker-1', 'behandler', 'Lege']);
 		await log({ type: 'emergency-override', action: 'R', outcome: '0', patientId: 'p9', purposeOfUse: 'ETREAT' }, actor);
 		expect(await unreviewedEmergencyAccess()).toHaveLength(1);
 
