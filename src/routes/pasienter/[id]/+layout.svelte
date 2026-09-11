@@ -53,20 +53,21 @@
 		fane('notater', 'Journalnotater'),
 		fane('legemidler', 'Legemidler'),
 		fane('meldinger', 'Meldinger'),
-		fane('oppgjor', 'Oppgjør'),
-		...(data.canRestrict ? [fane('sperring', 'Sperring')] : [])
+		fane('oppgjor', 'Oppgjør')
 	]);
 
 	/**
 	 * The pages about the record rather than in it.
 	 *
-	 * Reading who has looked at the journal, and handing it out, are things one
-	 * does occasionally and deliberately. Kept off the bar so the tabs of the
-	 * consultation stay on one line and stay quick to hit.
+	 * Reading who has looked at the journal, handing it out, and restricting it
+	 * are things one does occasionally and deliberately. Kept off the bar so the
+	 * tabs of the consultation stay on one line and stay quick to hit, and put
+	 * last so the apps - which are used during the consultation - come first.
 	 */
 	const merFaner = $derived([
 		fane('logg', 'Innsynslogg'),
-		...(data.canUtlevere ? [fane('utlevering', 'Utlevering')] : [])
+		...(data.canUtlevere ? [fane('utlevering', 'Utlevering')] : []),
+		...(data.canRestrict ? [fane('sperring', 'Sperring')] : [])
 	]);
 
 	const paMerSide = $derived(merFaner.some((f) => page.url.pathname === f.href));
@@ -127,28 +128,6 @@
 		{#each faner as f (f.text)}
 			<a href={f.href} aria-current={page.url.pathname === f.href ? 'page' : undefined}>{f.text}</a>
 		{/each}
-		{#if merFaner.length}
-			<div class="nedtrekk">
-				<button
-					type="button"
-					class="fanelenke"
-					aria-expanded={merOpen}
-					aria-current={paMerSide ? 'page' : undefined}
-					onclick={() => (merOpen = !merOpen)}
-				>
-					Mer ▾
-				</button>
-				{#if merOpen}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<div class="nedtrekk-panel" onmouseleave={() => (merOpen = false)}>
-						{#each merFaner as f (f.text)}
-							<a href={f.href} aria-current={page.url.pathname === f.href ? 'page' : undefined}>{f.text}</a>
-						{/each}
-					</div>
-				{/if}
-			</div>
-		{/if}
-
 		{#each tabAppsOwn as app (app.clientId)}
 			{@const href = appLenke(app)}
 			<a
@@ -186,6 +165,27 @@
 				</div>
 			{/if}
 		</div>
+		{#if merFaner.length}
+			<div class="nedtrekk">
+				<button
+					type="button"
+					class="fanelenke"
+					aria-expanded={merOpen}
+					aria-current={paMerSide ? 'page' : undefined}
+					onclick={() => (merOpen = !merOpen)}
+				>
+					Mer ▾
+				</button>
+				{#if merOpen}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div class="nedtrekk-panel" onmouseleave={() => (merOpen = false)}>
+						{#each merFaner as f (f.text)}
+							<a href={f.href} aria-current={page.url.pathname === f.href ? 'page' : undefined}>{f.text}</a>
+						{/each}
+					</div>
+				{/if}
+			</div>
+		{/if}
 	</nav>
 
 	<div class="journalflate">
