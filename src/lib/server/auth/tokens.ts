@@ -72,6 +72,18 @@ export async function issueTokens(inValue: UtstedelseIn): Promise<IssuedToken> {
 		// token from one organisation cannot be used against another.
 		tenant: tenant.id,
 		client_id: inValue.clientId,
+		/*
+		 * The same organisation id as `tenant`, under the name WebMed uses.
+		 *
+		 * Norwegian SMART apps are largely written against WebMed, and they find
+		 * out which practice they were launched from by reading this claim. The
+		 * name is theirs and says `url`, but the apps treat the value as an opaque
+		 * key they look up, so what matters is that it is stable and identifies the
+		 * practice - which `tenant` already does. Emitting both costs nothing and
+		 * saves every such app a code change it would have to release to talk to
+		 * us. `tenant` stays the one to read for anything written against us.
+		 */
+		smart_app_officeApiUrl: tenant.id,
 		scope: inValue.scope,
 		jti,
 		iat: now,

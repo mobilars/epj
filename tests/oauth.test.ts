@@ -182,6 +182,24 @@ describeIf('OAuth 2.1 og SMART App Launch', () => {
 			expect(result.tokens.patient).toBe('pas-1');
 		});
 
+		// Apps written for WebMed read the practice out of this claim. Same value as
+		// `tenant`, under the name that ecosystem already looks for.
+		it('oppgir organisasjonen både som tenant og under WebMeds navn', async () => {
+			const { verifier, challenge } = pkce();
+			const code = await createAuthorisationCode({
+				clientId, userId: 'bruker-1', redirectUri: REDIRECT,
+				scope: 'openid patient/Patient.rs',
+				codeChallenge: challenge, codeChallengeMethod: 'S256',
+				launch: { patientId: 'pas-1' }
+			});
+			const result = await exchangeInCode(code, await getClientRow(), REDIRECT, verifier);
+			expect(result.ok).toBe(true);
+			if (!result.ok) return;
+			const claims = JSON.parse(Buffer.from(result.tokens.access_token.split('.')[1], 'base64url').toString());
+			expect(claims.smart_app_officeApiUrl).toBe(claims.tenant);
+			expect(claims.tenant).toBeTruthy();
+		});
+
 		it('avviser feil code_verifier', async () => {
 			const { challenge } = pkce();
 			const code = await createAuthorisationCode({
