@@ -15,6 +15,7 @@
 		canBeAboutEmergencyAccess: boolean;
 		canUtlevere: boolean;
 		canSkrive: boolean;
+		canRestrict: boolean;
 		tabApps: Record<string, { name: string; clientId: string }>;
 		sidePanel: PanelApp | null;
 		widePanel: PanelApp | null;
@@ -49,8 +50,14 @@
 		fane('meldinger', 'Meldinger'),
 		fane('oppgjor', 'Oppgjør'),
 		fane('logg', 'Innsynslogg'),
-		...(data.canUtlevere ? [fane('utlevering', 'Utlevering')] : [])
+		...(data.canUtlevere ? [fane('utlevering', 'Utlevering')] : []),
+		...(data.canRestrict ? [fane('sperring', 'Sperring')] : [])
 	]);
+
+	// Managing a restriction is not reading the record, so that page is shown
+	// even when the record itself is denied - otherwise a restriction against
+	// everyone would be one nobody could lift.
+	const onRestrictionPage = $derived(page.url.pathname.endsWith('/sperring'));
 
 	// The apps come from the root layout, and start straight from the tab bar
 	// with this patient in context - the Apper tab was a page you had to open
@@ -69,7 +76,7 @@
 		{#if data.blocked}<span class="merke merke-advarsel">Sperret journal</span>{/if}
 		{#if data.emergencyAccess}
 			<span class="merke merke-fare">Nødrettstilgang aktiv</span>
-			<form method="POST" action="/pasienter/{data.patientId}/nodrett?/avsluttNodrett">
+			<form method="POST" action="/pasienter/{data.patientId}/nodrett?/endEmergencyAccess">
 				<button type="submit" class="liten">Avslutt nå</button>
 			</form>
 		{/if}
@@ -182,6 +189,13 @@
 			</section>
 		</aside>
 	</div>
+{:else if onRestrictionPage}
+	<div class="pasientbanner">
+		<strong>{data.minimaltName ?? `Pasient ${data.patientId}`}</strong>
+		{#if data.blocked}<span class="merke merke-advarsel">Sperret journal</span>{/if}
+		<a class="svak" href="/pasienter/{data.patientId}">Tilbake til journalen</a>
+	</div>
+	{@render children()}
 {:else}
 	<h1>Ingen tilgang til journalen</h1>
 	<div class="varsel varsel-advarsel" role="alert">{data.nektet}</div>
@@ -192,6 +206,9 @@
 			Du har ikke dokumentert behandlingsrelasjon til denne pasienten
 			{#if data.blocked}, eller pasienten har sperret journalen{/if}.
 		</p>
+		{#if data.blocked && data.canRestrict && !onRestrictionPage}
+			<p><a href="/pasienter/{data.patientId}/sperring">Se og forvalt sperringene på journalen</a></p>
+		{/if}
 
 		{#if data.canBeAboutEmergencyAccess}
 			<h3>Be om nødrettstilgang</h3>
@@ -205,7 +222,7 @@
 				<div class="varsel varsel-feil" role="alert">{emergencyAccessError}</div>
 			{/if}
 
-			<form method="POST" action="/pasienter/{data.patientId}/nodrett?/nodrett">
+			<form method="POST" action="/pasienter/{data.patientId}/nodrett?/emergencyAccess">
 				<div class="felt">
 					<label for="begrunnelse">Begrunnelse</label>
 					<textarea

@@ -30,8 +30,16 @@
 	<section class="kort">
 		<div class="rad-mellom">
 			<h2>{app.name}</h2>
-			{#if app.installed}<span class="merke merke-ok">Installert</span>{/if}
+			{#if app.withdrawn}<span class="merke merke-fare">Trukket tilbake</span>
+			{:else if app.installed}<span class="merke merke-ok">Installert</span>{/if}
 		</div>
+		{#if app.withdrawn}
+			<div class="varsel varsel-feil" role="alert">
+				Plattformen har trukket tilbake godkjenningen av denne appen. Den er sperret i
+				virksomheten og kan ikke lenger startes eller hente data.
+				{#if app.reviewNote}<br /><strong>Begrunnelse:</strong> {app.reviewNote}{/if}
+			</div>
+		{/if}
 		{#if app.summary}<p>{app.summary}</p>{/if}
 		{#if app.description}<p class="svak">{app.description}</p>{/if}
 

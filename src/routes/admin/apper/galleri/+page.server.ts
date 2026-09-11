@@ -7,7 +7,9 @@ import { actorFromContext, log } from '$srv/audit';
 /**
  * The app gallery, as a practice sees it.
  *
- * Only apps the platform has approved appear here. Installing one creates a
+ * Apps the platform has approved appear here, together with any installed app
+ * whose approval was later withdrawn - those are blocked already, and listed
+ * with the platform's reason so the practice knows. Installing one creates a
  * client in this organisation's own register - its own id, its own consent -
  * so two practices running the same app share nothing, and blocking it at one
  * leaves the other alone.
@@ -31,7 +33,11 @@ export const load: PageServerLoad = async (event) => {
 			databehandleravtale: a.databehandleravtale,
 			scopes: a.scopes.map((s) => ({ scope: s, description: describeScope(s) })),
 			installed: installed.has(a.id),
-			clientId: installed.get(a.id)?.client_id ?? null
+			clientId: installed.get(a.id)?.client_id ?? null,
+			// Set when the platform withdrew its approval after this practice
+			// installed the app. The client is already blocked.
+			withdrawn: a.status !== 'godkjent',
+			reviewNote: a.status !== 'godkjent' ? (a.review_note ?? '') : ''
 		}))
 	};
 };

@@ -65,7 +65,10 @@
 	<h3>Godkjent ({data.approved.length})</h3>
 	{#each data.approved as app (app.id)}
 		<details>
-			<summary>{app.name} — {app.developer}</summary>
+			<summary>
+				{app.name} — {app.developer}
+				<span class="svak liten">· installert hos {app.installs} {app.installs === 1 ? 'virksomhet' : 'virksomheter'}</span>
+			</summary>
 			{@render detaljer(app)}
 			<form method="POST" action="?/vurder">
 				<input type="hidden" name="id" value={app.id} />
@@ -73,6 +76,11 @@
 					<label for="trekk-{app.id}">Begrunnelse for å trekke tilbake</label>
 					<textarea id="trekk-{app.id}" name="begrunnelse" rows="2"></textarea>
 				</div>
+				<p class="svak liten">
+					Å trekke tilbake sperrer appen hos alle {app.installs}
+					{app.installs === 1 ? 'virksomheten' : 'virksomhetene'} som har installert den, med
+					øyeblikkelig virkning. Begrunnelsen vises til utvikleren og til virksomhetene.
+				</p>
 				<button type="submit" name="utfall" value="avvist" class="liten fare">Trekk tilbake</button>
 			</form>
 		</details>

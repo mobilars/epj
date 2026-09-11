@@ -1,6 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { appsWithStatus, getCatalogueApp, reviewApp } from '$srv/developer/catalogue';
+import { appsWithStatus, getCatalogueApp, installCounts, reviewApp } from '$srv/developer/catalogue';
 import { listDevelopers } from '$srv/developer/developer';
 import { describeScope } from '$srv/authz/scopes';
 import { actorFromContext, log } from '$srv/audit';
@@ -19,11 +19,12 @@ export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx?.permissions.has('plattform:administrer')) error(403, 'Ingen tilgang.');
 
-	const [waiting, approved, refused, developers] = await Promise.all([
+	const [waiting, approved, refused, developers, installs] = await Promise.all([
 		appsWithStatus('til-vurdering'),
 		appsWithStatus('godkjent'),
 		appsWithStatus('avvist'),
-		listDevelopers()
+		listDevelopers(),
+		installCounts()
 	]);
 	const byId = new Map(developers.map((d) => [d.id, d]));
 	const shape = (list: Awaited<ReturnType<typeof appsWithStatus>>) =>
@@ -40,6 +41,7 @@ export const load: PageServerLoad = async (event) => {
 			privacyUrl: a.privacy_url,
 			databehandleravtale: a.databehandleravtale,
 			reviewNote: a.review_note,
+			installs: installs.get(a.id) ?? 0,
 			developer: byId.get(a.developer_id)?.email ?? 'ukjent',
 			developerName: byId.get(a.developer_id)?.name ?? '',
 			organisation: byId.get(a.developer_id)?.organisation ?? ''
@@ -75,16 +77,24 @@ export const actions: Actions = {
 
 		const app = await getCatalogueApp(id);
 		if (!app) return fail(404, { error: 'Ukjent app.' });
+		// Withdrawing an approval is a different act from refusing a submission:
+		// it stops the app at every practice that has it, and is logged as such.
+		const withdrawn = !approved && app.status === 'godkjent';
+		const blocked = withdrawn ? ((await installCounts()).get(id) ?? 0) : 0;
 		await reviewApp(id, approved, note, ctx.userId);
 
 		await log(
 			{
 				type: 'admin',
-				subtype: 'katalog:vurdert',
+				subtype: withdrawn ? 'katalog:trukket' : 'katalog:vurdert',
 				action: 'U',
 				outcome: '0',
 				entityRef: `Device/${id}`,
-				details: { app: app.name, utfall: approved ? 'godkjent' : 'avvist' }
+				details: {
+					app: app.name,
+					utfall: approved ? 'godkjent' : 'avvist',
+					...(withdrawn ? { sperredeInstallasjoner: blocked } : {})
+				}
 			},
 			actorFromContext(ctx)
 		);
@@ -95,10 +105,19 @@ export const actions: Actions = {
 		if (developer) {
 			await sendEmail({
 				to: developer.email,
-				subject: approved ? `«${app.name}» er godkjent` : `«${app.name}» ble ikke godkjent`,
+				subject: approved
+					? `«${app.name}» er godkjent`
+					: withdrawn
+						? `Godkjenningen av «${app.name}» er trukket tilbake`
+						: `«${app.name}» ble ikke godkjent`,
 				text: approved
 					? [`«${app.name}» er godkjent, og virksomheter kan nå installere den.`, '', note].join('\n')
-					: [`«${app.name}» ble ikke godkjent.`, '', note, '', 'Rett opp og send den inn på nytt.'].join('\n')
+					: withdrawn
+						? [
+								`Godkjenningen av «${app.name}» er trukket tilbake. Appen er sperret hos de ${blocked} virksomhetene som hadde installert den.`,
+								'', note, '', 'Rett opp og send den inn på nytt.'
+							].join('\n')
+						: [`«${app.name}» ble ikke godkjent.`, '', note, '', 'Rett opp og send den inn på nytt.'].join('\n')
 			}).catch(() => undefined);
 		}
 		redirect(303, '/systemadmin/apper');

@@ -70,9 +70,9 @@ test.describe('tilgangsstyring', () => {
 		// Posts straight to the action, without the form - as an attacker would.
 		// page.request shares cookies with the browser, so the call is made as the
 		// signed-in nurse.
-		const response = await page.request.post(`/pasienter/${id}/nodrett?/nodrett`, {
+		const response = await page.request.post(`/pasienter/${id}/nodrett?/emergencyAccess`, {
 			headers: { accept: 'text/html', 'content-type': 'application/x-www-form-urlencoded' },
-			form: { justification: 'kort', oneTimeCode: totp() },
+			form: { begrunnelse: 'kort', engangskode: totp() },
 			maxRedirects: 0
 		});
 		expect(response.status()).toBe(303);
@@ -134,6 +134,48 @@ test.describe('tilgangsstyring', () => {
 		await page.goto('/admin');
 		await expect(page.getByRole('heading', { name: 'Nødrettsoppslag til gjennomgang' })).toBeVisible();
 		await expect(page.getByText('Kari Sykepleier').first()).toBeVisible();
+	});
+
+	test('legen kan registrere og oppheve en sperring, og den virker med en gang', async ({ page }) => {
+		// The nurse has a care relationship with Nordli and no restriction. The
+		// doctor blocks the record for the nurse, who then loses access; lifting
+		// it gives the access back.
+		await logIn(page, 'lege');
+		const id = await findPatientId(page, 'Nordli');
+		await page.getByRole('link', { name: 'Sperring' }).click();
+		await expect(page.getByRole('heading', { name: 'Sperring av journalen' })).toBeVisible();
+		await expect(page.getByText('Journalen har ingen sperringer.')).toBeVisible();
+		await waitOnHydration(page);
+
+		await page.getByLabel('En bestemt bruker').check();
+		await page.getByLabel('Bruker').selectOption({ label: 'Kari Sykepleier' });
+		await page.getByLabel('Hva har pasienten bedt om?').fill('Pasienten ønsker ikke at Kari skal lese journalen.');
+		await page.getByRole('button', { name: 'Registrer sperring' }).click();
+		await expect(page.getByText('Hele journalen, for Kari Sykepleier')).toBeVisible();
+		await expect(page.locator('.pasientbanner')).toContainText('Sperret journal');
+
+		await page.getByRole('button', { name: 'Logg ut' }).click();
+		await logIn(page, 'sykepleier');
+		await page.goto(`/pasienter/${id}`);
+		await expect(page.getByRole('heading', { name: 'Ingen tilgang til journalen' })).toBeVisible();
+		// The nurse cannot manage restrictions.
+		await page.goto(`/pasienter/${id}/sperring`);
+		await expect(page.getByText('kan ikke registrere sperringer')).toBeVisible();
+
+		await page.getByRole('button', { name: 'Logg ut' }).click();
+		await logIn(page, 'lege');
+		await page.goto(`/pasienter/${id}/sperring`);
+		await waitOnHydration(page);
+		await page.getByText('Opphev sperringen').click();
+		await page.getByLabel('Hvorfor oppheves sperringen?').fill('Pasienten har trukket ønsket tilbake.');
+		await page.getByRole('button', { name: 'Opphev' }).click();
+		await expect(page.getByText('Journalen har ingen sperringer.')).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Opphevede sperringer' })).toBeVisible();
+
+		await page.getByRole('button', { name: 'Logg ut' }).click();
+		await logIn(page, 'sykepleier');
+		await page.goto(`/pasienter/${id}`);
+		await expect(page.getByRole('heading', { name: 'Diagnoser og problemer' })).toBeVisible();
 	});
 
 	test('helsesekretær kan se pasienten, men ikke skrive journalnotat', async ({ page }) => {

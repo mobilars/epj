@@ -1,6 +1,6 @@
 import { exec, one, query, transaction } from '../db';
 import { newId } from '../util/ids';
-import { registerClient, setPlacement, setReplacesTab, setRequireConsent, type Placement } from '../auth/clients';
+import { registerClient, setKlientstatus, setPlacement, setReplacesTab, setRequireConsent, type Placement } from '../auth/clients';
 import { requireTenant } from '../tenant/context';
 
 /**
@@ -123,18 +123,64 @@ export async function submitApp(id: string, developerId: string): Promise<void> 
 	);
 }
 
+/**
+ * Records the platform's decision.
+ *
+ * Withdrawing an approval reaches every practice that installed the app: the
+ * installed clients are blocked and their tokens revoked, across
+ * organisations. That is the point of a platform review - an app found to
+ * misbehave has to stop everywhere at once, not practice by practice as each
+ * administrator hears of it. The install rows stay, so a practice can see
+ * what happened and why.
+ */
 export async function reviewApp(id: string, approved: boolean, note: string, reviewer: string | null): Promise<void> {
-	await exec(
-		`UPDATE catalogue_app
-		 SET status = $2, review_note = $3, reviewed_at = now(), reviewed_by = $4, updated_at = now()
-		 WHERE id = $1`,
-		[id, approved ? 'godkjent' : 'avvist', note, reviewer]
-	);
+	await transaction(async () => {
+		await exec(
+			`UPDATE catalogue_app
+			 SET status = $2, review_note = $3, reviewed_at = now(), reviewed_by = $4, updated_at = now()
+			 WHERE id = $1`,
+			[id, approved ? 'godkjent' : 'avvist', note, reviewer]
+		);
+		if (!approved) {
+			// Deliberately across organisations: the platform is the one caller
+			// that may reach into every practice's client register for this.
+			await exec(
+				`UPDATE oauth_client SET status = 'sperret'
+				 WHERE (tenant_id, client_id) IN (SELECT tenant_id, client_id FROM catalogue_install WHERE catalogue_id = $1)`,
+				[id]
+			);
+			await exec(
+				`UPDATE oauth_token SET revoked = true, revoked_reason = 'appen trukket tilbake av plattformen'
+				 WHERE revoked = false
+				   AND (tenant_id, client_id) IN (SELECT tenant_id, client_id FROM catalogue_install WHERE catalogue_id = $1)`,
+				[id]
+			);
+		}
+	});
 }
 
-/** Approved apps, for a practice to choose from. */
+/** How many practices have each app installed, for the platform's review page. */
+export async function installCounts(): Promise<Map<string, number>> {
+	const rows = await query<{ catalogue_id: string; n: string }>(
+		'SELECT catalogue_id, count(*)::text AS n FROM catalogue_install GROUP BY catalogue_id'
+	);
+	return new Map(rows.map((r) => [r.catalogue_id, Number(r.n)]));
+}
+
+/**
+ * What the practice's gallery shows: every approved app, plus any app this
+ * practice installed that has since lost its approval. The latter has already
+ * been blocked; it stays listed so the administrator learns why, instead of
+ * finding the app gone and the users asking.
+ */
 export async function installableApps(): Promise<CatalogueApp[]> {
-	return query<CatalogueApp>(`SELECT ${FIELD} FROM catalogue_app WHERE status = 'godkjent' ORDER BY name`);
+	return query<CatalogueApp>(
+		`SELECT ${FIELD} FROM catalogue_app
+		 WHERE status = 'godkjent'
+		    OR id IN (SELECT catalogue_id FROM catalogue_install WHERE tenant_id = $1)
+		 ORDER BY name`,
+		[requireTenant().id]
+	);
 }
 
 export interface Install {
@@ -197,9 +243,22 @@ export async function installApp(
 	});
 }
 
+/**
+ * Removes the app from the practice.
+ *
+ * The client it installed is blocked and its tokens revoked, not deleted: the
+ * security log refers to it by id, and an id that no longer resolves to
+ * anything makes those entries unreadable. What the app did while installed
+ * stays on record; what it can do from now on is nothing.
+ */
 export async function uninstallApp(catalogueId: string): Promise<void> {
-	await exec('DELETE FROM catalogue_install WHERE catalogue_id = $1 AND tenant_id = $2', [
-		catalogueId,
-		requireTenant().id
-	]);
+	const tenantId = requireTenant().id;
+	await transaction(async () => {
+		const install = await one<{ client_id: string }>(
+			'SELECT client_id FROM catalogue_install WHERE catalogue_id = $1 AND tenant_id = $2',
+			[catalogueId, tenantId]
+		);
+		if (install) await setKlientstatus(install.client_id, 'sperret');
+		await exec('DELETE FROM catalogue_install WHERE catalogue_id = $1 AND tenant_id = $2', [catalogueId, tenantId]);
+	});
 }

@@ -417,8 +417,10 @@ Ikke gjort:
 - **Versjonering av kataloginnslag.** Endrer en utvikler en godkjent app, går
   den til vurdering på nytt — men virksomheter som allerede har installert den,
   får ingen beskjed om at det finnes en nyere utgave.
-- **Avinstallering fjerner ikke klienten.** Den kobler bare appen fra
-  katalogen; klienten står igjen i registeret og må sperres for seg.
+- ~~**Avinstallering fjerner ikke klienten.**~~ Gjort: avinstallering sperrer
+  klienten og trekker tilbake tokenene. Trekker plattformen tilbake en
+  godkjenning, sperres alle installerte klienter i alle virksomheter samtidig,
+  og galleriet viser begrunnelsen til de som hadde appen.
 - **Ingen apper med bakgrunnstilgang i katalogen.** Alt i katalogen er
   offentlige klienter med PKCE. En backend-tjeneste trenger nøkler og en annen
   vurdering.

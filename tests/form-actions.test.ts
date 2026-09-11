@@ -39,20 +39,30 @@ describe('skjemahandlinger', () => {
 
 		for (const page of pages) {
 			const markup = fs.readFileSync(page, 'utf8');
-			const used = [...markup.matchAll(/action="\?\/([^"]+)"/g)].map((m) => m[1]);
+			// Same-page forms post to `?/name`; a layout posts to another route's
+			// action with a full path, `/pasienter/{id}/nodrett?/name`. The first
+			// version of this test only read the former, and the emergency-access
+			// forms - reachable from every tab in the record - stayed dead.
+			const used: { route: string; name: string }[] = [];
+			for (const m of markup.matchAll(/action="([^"]*)\?\/([^"]+)"/g)) {
+				const target = m[1];
+				const route = target
+					? path.join('src', 'routes', ...target.replace(/\{[^}]*\}/g, '[id]').split('/').filter(Boolean))
+					: path.dirname(page);
+				used.push({ route, name: m[2] });
+			}
 			if (!used.length) continue;
 
-			const server = path.join(path.dirname(page), '+page.server.ts');
-			if (!fs.existsSync(server)) {
-				broken.push(`${page}: bruker ?/${used.join(', ?/')} uten +page.server.ts`);
-				continue;
-			}
-			const source = fs.readFileSync(server, 'utf8');
-			const defined = new Set([...source.matchAll(/^\t([A-Za-z_$][\w$]*)\s*:\s*async/gm)].map((m) => m[1]));
-			// A single unnamed action is posted to without a name at all.
-			if (/^\tdefault\s*:/m.test(source)) defined.add('default');
-
-			for (const name of used) {
+			for (const { route, name } of used) {
+				const server = path.join(route, '+page.server.ts');
+				if (!fs.existsSync(server)) {
+					broken.push(`${page}: bruker ?/${name} mot ${route}, som ikke har +page.server.ts`);
+					continue;
+				}
+				const source = fs.readFileSync(server, 'utf8');
+				const defined = new Set([...source.matchAll(/^\t([A-Za-z_$][\w$]*)\s*:\s*async/gm)].map((m) => m[1]));
+				// A single unnamed action is posted to without a name at all.
+				if (/^\tdefault\s*:/m.test(source)) defined.add('default');
 				if (!defined.has(name)) {
 					broken.push(`${page}: ?/${name} finnes ikke i ${server} (der er: ${[...defined].join(', ') || 'ingen'})`);
 				}

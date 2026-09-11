@@ -47,7 +47,7 @@ export const load: LayoutServerLoad = async (event) => {
 		activeEmergencyAccess(ctx.userId, patientId),
 		hasCareRelationship(ctx.userId, patientId),
 		query<{ scope_extent: string; justification: string | null; registered_at: string }>(
-			'SELECT scope_extent, justification, registered_at FROM record_restriction WHERE patient_id = $1 AND tenant_id = $2 AND lifted = false',
+			'SELECT scope_extent, justification, registered_at FROM record_restriction WHERE patient_id = $1 AND tenant_id = $2 AND lifted = false AND (valid_until IS NULL OR valid_until > now())',
 			[patientId, requireTenant().id]
 		)
 	]);
@@ -108,6 +108,7 @@ export const load: LayoutServerLoad = async (event) => {
 		canBeAboutEmergencyAccess: canEmergencyAccess(ctx.roles),
 		canUtlevere: ctx.permissions.has('journal:utlever'),
 		canSkrive: ctx.permissions.has('journal:skriv'),
+		canRestrict: ctx.permissions.has('pasient:sperr'),
 		requireIsOneTimeCode: config.security.requireMfa && ctx.amr !== 'helseid'
 	};
 };
