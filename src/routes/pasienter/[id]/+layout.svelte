@@ -63,7 +63,20 @@
 	// with this patient in context - the Apper tab was a page you had to open
 	// before you could press start. An app the practice has given a tab of its
 	// own sits beside the record's tabs; the rest wait under the dropdown.
-	const apps = $derived((page.data.apps ?? []) as { clientId: string; name: string; inPatientTabs?: boolean }[]);
+	const apps = $derived((page.data.apps ?? []) as { clientId: string; name: string; inPatientTabs?: boolean; openInNewTab?: boolean }[]);
+	/**
+	 * Where a link to an app should go.
+	 *
+	 * An app that wants its own window is opened straight from the press, through
+	 * the start endpoint that mints a launch for it. Sending it to the app page
+	 * first meant a page whose only content was a button to press next, and the
+	 * setting looked broken because nothing opened.
+	 */
+	const appLenke = (app: { clientId: string; openInNewTab?: boolean }) =>
+		app.openInNewTab
+			? `/pasienter/${data.patientId}/apper/${app.clientId}/start`
+			: `/pasienter/${data.patientId}/apper/${app.clientId}`;
+
 	const tabAppsOwn = $derived(apps.filter((a) => a.inPatientTabs));
 	const dropdownApps = $derived(apps.filter((a) => !a.inPatientTabs));
 	let appsOpen = $state(false);
@@ -97,8 +110,13 @@
 			<a href={f.href} aria-current={page.url.pathname === f.href ? 'page' : undefined}>{f.text}</a>
 		{/each}
 		{#each tabAppsOwn as app (app.clientId)}
-			{@const href = `/pasienter/${data.patientId}/apper/${app.clientId}`}
-			<a {href} aria-current={page.url.pathname === href ? 'page' : undefined}>{app.name}</a>
+			{@const href = appLenke(app)}
+			<a
+				{href}
+				target={app.openInNewTab ? '_blank' : undefined}
+				rel={app.openInNewTab ? 'noopener' : undefined}
+				aria-current={page.url.pathname === href ? 'page' : undefined}
+			>{app.name}{#if app.openInNewTab} ↗{/if}</a>
 		{/each}
 
 		<div class="nedtrekk">
@@ -114,7 +132,11 @@
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div class="nedtrekk-panel" onmouseleave={() => (appsOpen = false)}>
 					{#each dropdownApps as app (app.clientId)}
-						<a href="/pasienter/{data.patientId}/apper/{app.clientId}">{app.name}</a>
+						<a
+							href={appLenke(app)}
+							target={app.openInNewTab ? '_blank' : undefined}
+							rel={app.openInNewTab ? 'noopener' : undefined}
+						>{app.name}{#if app.openInNewTab} ↗{/if}</a>
 					{:else}
 						<span class="svak" style="padding: 0.4rem 0.55rem">
 							{apps.length ? 'Alle apper har egen fane.' : 'Ingen apper er registrert.'}

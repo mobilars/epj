@@ -20,7 +20,7 @@ export const load: LayoutServerLoad = async (event) => {
 		ctx?.permissions.has('journal:les')
 			? (await listClients())
 					.filter((c) => c.status === 'aktiv' && c.launch_url && c.client_category !== 'backend')
-					.map((c) => ({ clientId: c.client_id, name: c.name, inMainMenu: c.in_main_menu, inPatientTabs: c.in_patient_tabs }))
+					.map((c) => ({ clientId: c.client_id, name: c.name, inMainMenu: c.in_main_menu, inPatientTabs: c.in_patient_tabs, openInNewTab: c.open_in_new_tab }))
 			: [];
 
 	/**

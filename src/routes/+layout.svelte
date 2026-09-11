@@ -17,7 +17,7 @@
 		children: Snippet;
 	} = $props();
 
-	type MenuApp = { clientId: string; name: string; inMainMenu: boolean; inPatientTabs: boolean };
+	type MenuApp = { clientId: string; name: string; inMainMenu: boolean; inPatientTabs: boolean; openInNewTab?: boolean };
 
 	type UserInfo = {
 		name: string;
@@ -126,8 +126,14 @@
 				<a href="/systemadmin" aria-current={page.url.pathname.startsWith('/systemadmin') ? 'page' : undefined}>Plattform</a>
 			{/if}
 
+			<!-- An app that wants its own window is opened straight from the press,
+			     through the start endpoint that mints its launch. -->
 			{#each mainMenuApps as app (app.clientId)}
-				<a href="/apper/{app.clientId}" aria-current={page.url.pathname === `/apper/${app.clientId}` ? 'page' : undefined}>{app.name}</a>
+				{#if app.openInNewTab}
+					<a href="/apper/{app.clientId}/start" target="_blank" rel="noopener">{app.name} ↗</a>
+				{:else}
+					<a href="/apper/{app.clientId}" aria-current={page.url.pathname === `/apper/${app.clientId}` ? 'page' : undefined}>{app.name}</a>
+				{/if}
 			{/each}
 
 
