@@ -162,10 +162,12 @@ describeIf('OAuth 2.1 og SMART App Launch', () => {
 			expect(result.tokens.smart_style_url).toContain('/smart-style.json');
 		});
 
-		// An app that never asked for `fhirUser` must not be told which clinician is
-		// at the record. Every app but one requests the scope, so the leak was
-		// invisible until an app turned up that did not.
-		it('holder fhirUser tilbake når appen ikke har bedt om scopet', async () => {
+		// The clinician is named to every app that has one, whether it asked for
+		// `fhirUser` or not: the id_token already carries the name and the roles,
+		// and an app that cannot find the Practitioner reference falls back to the
+		// token's sub and writes an author that points at nothing. Deliberate
+		// deviation from SMART - see docs/apne-punkter.md.
+		it('oppgir behandleren også når appen ikke har bedt om fhirUser-scopet', async () => {
 			const { verifier, challenge } = pkce();
 			const code = await createAuthorisationCode({
 				clientId, userId: 'bruker-1', redirectUri: REDIRECT,
@@ -176,9 +178,12 @@ describeIf('OAuth 2.1 og SMART App Launch', () => {
 			const result = await exchangeInCode(code, await getClientRow(), REDIRECT, verifier);
 			expect(result.ok).toBe(true);
 			if (!result.ok) return;
-			expect(result.tokens.fhirUser).toBeUndefined();
+			expect(result.tokens.fhirUser).toContain('Practitioner/prac-42');
+			// WebMed's two names for the same fact, which is what apps built for
+			// that ecosystem read - one at login, one when writing a document.
+			expect(result.tokens.practitioner).toBe('prac-42');
 			const claims = JSON.parse(Buffer.from(result.tokens.access_token.split('.')[1], 'base64url').toString());
-			expect(claims.fhirUser).toBeUndefined();
+			expect(claims.smart_app_practitioner).toBe('prac-42');
 			// The patient context is unaffected: it rides on the launch, not the scope.
 			expect(result.tokens.patient).toBe('pas-1');
 		});

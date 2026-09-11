@@ -53,16 +53,28 @@ export async function issueTokens(inValue: UtstedelseIn): Promise<IssuedToken> {
 
 	const roles = inValue.userId ? await rolesFor(inValue.userId) : [];
 	const user = inValue.userId ? await getUser(inValue.userId) : null;
-	// SMART ties the clinician's identity to the `fhirUser` scope, and the tie has
-	// to hold: an app that asked only to read a patient would otherwise also learn
-	// which clinician is sitting at the record, and which Practitioner resource is
-	// theirs, without ever asking for it. Gated here rather than at each use, so
-	// the access token, the id_token, the token response and introspection all
-	// answer the same way.
-	const fhirUser =
-		inValue.scope.split(/\s+/).includes('fhirUser') && user?.practitioner_id
-			? `${fhirBaseFor(tenant)}/Practitioner/${user.practitioner_id}`
-			: undefined;
+	/*
+	 * Who the clinician is, told to every app that has one.
+	 *
+	 * SMART ties this to the `fhirUser` scope, and we did gate it. The gate came
+	 * out again, deliberately, for two reasons.
+	 *
+	 * It protected less than it appeared to: the id_token already carries the
+	 * user's `name` and `roles` to anything holding `openid`, so what the gate
+	 * withheld was not the clinician's identity but the reference tying them to a
+	 * resource in the record. And withholding that reference is what does the
+	 * damage - an app that cannot find it falls back to the token's `sub`, which
+	 * is a user id and not a Practitioner id, and writes a DocumentReference
+	 * whose author points at a resource that does not exist. A dangling
+	 * authorship in someone's record is worse than a missing one, and silent.
+	 *
+	 * The app is in any case launched by that clinician, from inside the record,
+	 * acting for them. This is a deliberate deviation from SMART on one point -
+	 * see docs/apne-punkter.md - not an oversight, and it is one line to undo.
+	 */
+	const fhirUser = user?.practitioner_id
+		? `${fhirBaseFor(tenant)}/Practitioner/${user.practitioner_id}`
+		: undefined;
 
 	const payload = {
 		iss: issuerFor(tenant),
@@ -84,6 +96,16 @@ export async function issueTokens(inValue: UtstedelseIn): Promise<IssuedToken> {
 		 * us. `tenant` stays the one to read for anything written against us.
 		 */
 		smart_app_officeApiUrl: tenant.id,
+		/*
+		 * The clinician, under the name WebMed uses.
+		 *
+		 * Apps written for that ecosystem read `smart_app_practitioner` off the
+		 * access token, and fall back through a chain ending at `sub` when it is
+		 * missing - which for us is a user id, not a Practitioner id. The bare id
+		 * rather than a reference, because that is the shape those apps expect and
+		 * paste straight after `Practitioner/`.
+		 */
+		...(user?.practitioner_id ? { smart_app_practitioner: user.practitioner_id } : {}),
 		scope: inValue.scope,
 		jti,
 		iat: now,
@@ -116,6 +138,10 @@ export async function issueTokens(inValue: UtstedelseIn): Promise<IssuedToken> {
 	if (inValue.launch.patientId) result.patient = inValue.launch.patientId;
 	if (inValue.launch.encounterId) result.encounter = inValue.launch.encounterId;
 	if (fhirUser) result.fhirUser = fhirUser;
+	// The same fact under the name the WebMed-shaped apps read at login time,
+	// where the practitioner is taken from the token response rather than from
+	// the access token's claims.
+	if (user?.practitioner_id) result.practitioner = user.practitioner_id;
 	result.need_patient_banner = !inValue.launch.patientId;
 	result.tenant = tenant.id;
 	result.smart_style_url = `${issuerFor(tenant)}/smart-style.json`;

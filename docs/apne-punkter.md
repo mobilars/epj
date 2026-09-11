@@ -59,6 +59,25 @@ access token.
 Før produksjon må guidene gjennomgås i sin helhet. Se
 [smart-on-fhir.md](smart-on-fhir.md).
 
+### Behandlerens identitet uten `fhirUser`-scope **[avvik]**
+
+SMART knytter behandlerens identitet til scopet `fhirUser`. Journalen oppgir
+den uansett: `fhirUser` i id-tokenet, og `smart_app_practitioner` i access-
+tokenet og `practitioner` i token-svaret, som er navnene apper skrevet for
+WebMed leser.
+
+Valget er bevisst, og har to grunner. Id-tokenet bærer allerede `name` og
+`roles` til enhver app med `openid`, så det scopet faktisk holdt tilbake var
+ikke identiteten, men referansen som knytter behandleren til en ressurs i
+journalen. Og en app som ikke finner den referansen faller tilbake til `sub` i
+tokenet - en bruker-id, ikke en Practitioner-id - og skriver en
+`DocumentReference` der `author` peker på en ressurs som ikke finnes. En
+forfatter som peker i tomme luften er verre enn ingen forfatter, og den sier
+ikke fra.
+
+Avviket er verdt å ta opp igjen når appene rundt oss ber om scopet slik
+standarden sier. Det er én linje i `tokens.ts` å reversere.
+
 ### Meldingsformatene
 
 Hodemelding, dialogmelding, henvisning, epikrise og applikasjonskvittering er
