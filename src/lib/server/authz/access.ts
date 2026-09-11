@@ -75,6 +75,16 @@ const NOT_PASIENTNAERE = new Set([
  */
 export function canDeterminePatient(resourceType: string): boolean {
 	if (resourceType === 'Patient') return true;
+	/*
+	 * Binary is the decided case the bar above asks for.
+	 *
+	 * The type has no patient reference and never will - it is bytes. The link
+	 * is recorded in `binary_patient` when the attachment is written, from the
+	 * patient in the app's launch context, and the gateway resolves it and hands
+	 * the patient in. An attachment with no such link is refused before it gets
+	 * here, so the answer is never "we do not know".
+	 */
+	if (resourceType === 'Binary') return true;
 	return (PATIENTCOMPARTMENT[resourceType]?.length ?? 0) > 0;
 }
 

@@ -384,16 +384,21 @@ export const SEARCH_PARAMS: Record<string, Record<string, SearchParamDef>> = {
 		recorded: p('date', 'recorded'),
 		patient: p('reference', 'patient', { targets: ['Patient'] })
 	},
-	// Binary is deliberately unsupported through /fhir.
-	//
-	// The resource carries attachments - scanned documents, lab results, images -
-	// but has no `subject` or `patient`. Access control therefore cannot decide
-	// which patient an attachment belongs to, and neither legitimate need nor
-	// restriction can be enforced. While the type was listed here, a token with
-	// `Binary` scope could fetch any attachment in the organisation.
-	//
-	// To expose attachments, the patient must be derived from the
-	// DocumentReference pointing at the resource, and access judged against that.
+	/*
+	 * Binary is supported, but only one attachment at a time.
+	 *
+	 * The type carries attachments - scanned documents, PDFs, images - and has no
+	 * `subject`, so nothing in the resource says which patient it concerns. The
+	 * link is recorded in `binary_patient` when the attachment is created, from
+	 * the patient in the app's launch context, and every read is judged against
+	 * that patient like any other resource. An attachment nothing has claimed is
+	 * readable by nobody.
+	 *
+	 * The empty parameter list is what keeps that safe: search is refused for
+	 * this type in the gateway, so attachments cannot be enumerated. They are
+	 * reached by id, from the DocumentReference that points at them.
+	 */
+	Binary: {},
 	Subscription: {
 		status: p('token', 'status'),
 		topic: p('uri', 'topic'),

@@ -79,6 +79,169 @@ describeIf('FHIR-vokteren', () => {
 	const countLog = async (): Promise<number> =>
 		Number((await query<{ n: string }>('SELECT count(*)::int AS n FROM audit_event'))[0].n);
 
+	/**
+	 * Attachments.
+	 *
+	 * A Binary has no subject, so the patient is the one in the app's launch
+	 * context when it is written, and everything after that - legitimate need,
+	 * restriction, the audit trail - hangs off that recorded link. The tests that
+	 * matter are the ones where the link is missing or points elsewhere.
+	 */
+	describe('vedlegg', () => {
+		const pdf = Buffer.from('%PDF-1.4 test').toString('base64');
+		const binary = () => ({ resourceType: 'Binary', contentType: 'application/pdf', data: pdf });
+
+		const lagreVedlegg = async (patientId: string) => {
+			const response = await execute({
+				ctx: appContext('patient/Binary.write patient/Binary.read', patientId),
+				method: 'POST',
+				path: 'Binary',
+				search: new URLSearchParams(),
+				body: binary()
+			});
+			return response.resource.id as string;
+		};
+
+		it('lagrer et vedlegg og knytter det til pasienten i konteksten', async () => {
+			await givesRelationship('bruker-1', pasient1);
+			const id = await lagreVedlegg(pasient1);
+			expect(id).toBeTruthy();
+
+			const eiere = await query<{ patient_id: string }>('SELECT patient_id FROM binary_patient WHERE binary_id = $1', [id]);
+			expect(eiere[0]?.patient_id).toBe(pasient1);
+
+			const lest = await execute({
+				ctx: appContext('patient/Binary.read', pasient1),
+				method: 'GET',
+				path: `Binary/${id}`,
+				search: new URLSearchParams()
+			});
+			expect(lest.status).toBe(200);
+			expect(lest.resource.resourceType).toBe('Binary');
+		});
+
+		it('avviser et vedlegg uten pasient i konteksten', async () => {
+			await expect(
+				execute({
+					ctx: appContext('patient/Binary.write'),
+					method: 'POST',
+					path: 'Binary',
+					search: new URLSearchParams(),
+					body: binary()
+				})
+			).rejects.toBeInstanceOf(FhirError);
+		});
+
+		// The point of the whole design: an attachment belongs to one patient, and
+		// a token for another patient must not reach it even knowing its id.
+		it('nekter å utlevere et vedlegg til en app som står i en annen pasient', async () => {
+			await givesRelationship('bruker-1', pasient1);
+			await givesRelationship('bruker-1', pasient2);
+			const id = await lagreVedlegg(pasient1);
+
+			await expect(
+				execute({
+					ctx: appContext('patient/Binary.read', pasient2),
+					method: 'GET',
+					path: `Binary/${id}`,
+					search: new URLSearchParams()
+				})
+			).rejects.toBeInstanceOf(FhirError);
+		});
+
+		// An attachment nothing has claimed is readable by nobody, so a Binary
+		// written past the gateway cannot be fetched through it.
+		it('nekter å utlevere et vedlegg ingen har knyttet til en pasient', async () => {
+			await givesRelationship('bruker-1', pasient1);
+			const utenfor = await fhirClient.create(binary());
+			await expect(
+				execute({
+					ctx: appContext('patient/Binary.read', pasient1),
+					method: 'GET',
+					path: `Binary/${utenfor.resource.id}`,
+					search: new URLSearchParams()
+				})
+			).rejects.toBeInstanceOf(FhirError);
+		});
+
+		it('lar seg ikke søke i', async () => {
+			await givesRelationship('bruker-1', pasient1);
+			await lagreVedlegg(pasient1);
+			await expect(
+				execute({
+					ctx: appContext('patient/Binary.read', pasient1),
+					method: 'GET',
+					path: 'Binary',
+					search: new URLSearchParams()
+				})
+			).rejects.toBeInstanceOf(FhirError);
+		});
+
+		it('avviser vedlegg som ligger i en Bundle', async () => {
+			await givesRelationship('bruker-1', pasient1);
+			const bundle: Bundle = {
+				resourceType: 'Bundle',
+				type: 'transaction',
+				entry: [{ resource: binary() as never, request: { method: 'POST', url: 'Binary' } }]
+			};
+			await expect(
+				execute({
+					ctx: appContext('patient/Binary.write', pasient1),
+					method: 'POST',
+					path: '',
+					search: new URLSearchParams(),
+					body: bundle
+				})
+			).rejects.toBeInstanceOf(FhirError);
+		});
+
+		it('logger utleveringen av et vedlegg på pasienten', async () => {
+			await givesRelationship('bruker-1', pasient1);
+			const id = await lagreVedlegg(pasient1);
+			await execute({
+				ctx: appContext('patient/Binary.read', pasient1),
+				method: 'GET',
+				path: `Binary/${id}`,
+				search: new URLSearchParams()
+			});
+			const log = await query<{ patient_id: string }>(
+				"SELECT patient_id FROM audit_event WHERE entity_ref = $1 AND subtype = 'read'",
+				[`Binary/${id}`]
+			);
+			expect(log[0]?.patient_id).toBe(pasient1);
+		});
+	});
+
+	/**
+	 * R4 on the way in.
+	 *
+	 * Most Norwegian systems are on R4 and so are most SMART apps, so a
+	 * DocumentReference arrives in the old shape more often than the new one.
+	 */
+	describe('R4 ved skriving', () => {
+		it('tar imot en R4-formet DocumentReference og lagrer den som R5', async () => {
+			await givesRelationship('bruker-1', pasient1);
+			const response = await execute({
+				ctx: context(),
+				method: 'POST',
+				path: 'DocumentReference',
+				search: new URLSearchParams(),
+				body: {
+					resourceType: 'DocumentReference',
+					status: 'current',
+					subject: { reference: `Patient/${pasient1}` },
+					// R4: the encounter sits inside a context backbone element.
+					context: { encounter: [{ reference: 'Encounter/123' }] },
+					content: [{ attachment: { contentType: 'application/pdf', title: 'Spirometri' } }]
+				}
+			});
+			expect(response.status).toBe(201);
+			const lagret = response.resource as unknown as { context?: unknown[] };
+			expect(Array.isArray(lagret.context)).toBe(true);
+			expect((lagret.context as { reference: string }[])[0].reference).toBe('Encounter/123');
+		});
+	});
+
 	describe('lesing', () => {
 		it('leser en ressurs brukeren har tilgang til, og logger det', async () => {
 			await givesRelationship('bruker-1', pasient1);

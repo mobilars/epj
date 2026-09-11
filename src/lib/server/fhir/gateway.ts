@@ -9,6 +9,8 @@ import type { AuthContext } from '../authz/context';
 import { isPatientRelated, patientIdFromResource, blockedPatients, allowedPatients, evaluate } from '../authz/access';
 import type { Operation } from '../authz/scopes';
 import { actorFromContext, log } from '../audit';
+import { binaryOwner, forgetBinaryOwner, rememberBinaryOwner } from './binary';
+import { normaliseFromR4 } from './r4';
 
 /**
  * The guard in front of HAPI FHIR.
@@ -34,6 +36,35 @@ export interface GatewayResponse {
 const METHOD_TO_OPERATION: Record<string, Operation> = {
 	GET: 'r', HEAD: 'r', POST: 'c', PUT: 'u', PATCH: 'u', DELETE: 'd'
 };
+
+/**
+ * The patient a request concerns.
+ *
+ * Every resource but one says so itself. `Binary` has no `subject`, so the link
+ * recorded when the attachment was created is looked up instead - and an
+ * attachment nothing has claimed belongs to nobody, which denies it to
+ * everybody.
+ */
+async function patientForResource(resourceType: string, resource: FhirResource | null, id?: string): Promise<string | null> {
+	if (resourceType !== 'Binary') return resource ? patientIdFromResource(resource) : null;
+	return id ? await binaryOwner(id) : null;
+}
+
+/**
+ * The patient an attachment being created belongs to.
+ *
+ * `Binary.securityContext` is the FHIR way of saying it, and is used when the
+ * app sets it. Apps generally do not - the attachment is posted first and the
+ * DocumentReference that names the patient only afterwards - so the patient in
+ * the launch context is what is left, and it is the right answer: the app was
+ * started on that patient and is writing about them.
+ */
+function patientForNewBinary(resource: FhirResource, ctx: AuthContext): string | null {
+	const securityContext = (resource as unknown as { securityContext?: { reference?: string } }).securityContext;
+	const ref = securityContext?.reference;
+	if (typeof ref === 'string' && ref.startsWith('Patient/')) return ref.slice('Patient/'.length);
+	return ctx.launch.patientId ?? null;
+}
 
 /** Search parameters used to narrow by patient, per resource type. */
 function patientParam(resourceType: string): string | null {
@@ -73,6 +104,10 @@ export async function execute(f: Request): Promise<GatewayResponse> {
 	// [type]/_search  and  [type]?...  -> search
 	if ((parts.length === 2 && parts[1] === '_search') || parts.length === 1) {
 		if (f.method === 'POST' && parts.length === 1) return createResource(f, resourceType);
+		// Searching attachments would list every one in the practice: the type has
+		// no patient of its own to narrow by, so there is nothing to filter on.
+		// They are reached by id, from the DocumentReference pointing at them.
+		if (resourceType === 'Binary') throw FhirError.notStottet('Søk i Binary er ikke tilgjengelig. Hent vedlegget med id fra DocumentReference.');
 		if (f.method === 'DELETE') throw FhirError.notStottet('Betinget sletting er slått av');
 		return searchResources(f, resourceType);
 	}
@@ -106,7 +141,14 @@ export async function execute(f: Request): Promise<GatewayResponse> {
 
 async function readResource(f: Request, resourceType: string, id: string): Promise<GatewayResponse> {
 	const resource = await fhirClient.read(resourceType, id, { requestId: f.ctx.requestId });
-	const patientId = patientIdFromResource(resource);
+	const patientId = await patientForResource(resourceType, resource, id);
+	if (resourceType === 'Binary' && !patientId) {
+		await log(
+			{ type: 'rest', subtype: 'read', action: 'R', outcome: '4', outcomeDescription: 'Vedlegget er ikke knyttet til en pasient', entityRef: `Binary/${id}` },
+			actorFromContext(f.ctx)
+		);
+		throw new FhirError(403, [issue('error', 'forbidden', 'Vedlegget er ikke knyttet til en pasient, og kan ikke utleveres.')]);
+	}
 	const decision = await evaluate({ ctx: f.ctx, resourceType, operation: 'r', resource, patientId });
 
 	await log(
@@ -133,7 +175,10 @@ async function readResource(f: Request, resourceType: string, id: string): Promi
 
 async function readVersion(f: Request, resourceType: string, id: string, versionId: string): Promise<GatewayResponse> {
 	const resource = await fhirClient.readVersion(resourceType, id, versionId, { requestId: f.ctx.requestId });
-	const patientId = patientIdFromResource(resource);
+	const patientId = await patientForResource(resourceType, resource, id);
+	if (resourceType === 'Binary' && !patientId) {
+		throw new FhirError(403, [issue('error', 'forbidden', 'Vedlegget er ikke knyttet til en pasient, og kan ikke utleveres.')]);
+	}
 	const decision = await evaluate({ ctx: f.ctx, resourceType, operation: 'r', resource, patientId });
 	await log(
 		{ type: 'rest', subtype: 'vread', action: 'R', outcome: decision.allowed ? '0' : '4', patientId, entityRef: `${resourceType}/${id}/_history/${versionId}`, purposeOfUse: decision.purposeOfUse },
@@ -144,11 +189,21 @@ async function readVersion(f: Request, resourceType: string, id: string, version
 }
 
 async function createResource(f: Request, resourceType: string): Promise<GatewayResponse> {
-	const resource = bodySomResource(f.body, resourceType);
+	const resource = normaliseFromR4(bodySomResource(f.body, resourceType));
 	const findings = validate(resource, resourceType).filter((i) => i.severity === 'error' || i.severity === 'fatal');
 	if (findings.length > 0) throw new FhirError(422, findings);
 
-	const patientId = patientIdFromResource(resource);
+	const patientId =
+		resourceType === 'Binary' ? patientForNewBinary(resource, f.ctx) : patientIdFromResource(resource);
+	if (resourceType === 'Binary' && !patientId) {
+		await log(
+			{ type: 'rest', subtype: 'create', action: 'C', outcome: '4', outcomeDescription: 'Vedlegg krever pasient i kontekst', entityRef: 'Binary' },
+			actorFromContext(f.ctx)
+		);
+		throw new FhirError(422, [
+			issue('error', 'invariant', 'Et vedlegg må knyttes til en pasient. Start appen med pasient i kontekst, eller sett Binary.securityContext til pasienten.')
+		]);
+	}
 	const decision = await evaluate({ ctx: f.ctx, resourceType, operation: 'c', resource, patientId });
 	if (!decision.allowed) {
 		await log({ type: 'rest', subtype: 'create', action: 'C', outcome: '4', outcomeDescription: decision.reason, patientId, entityRef: resourceType, purposeOfUse: decision.purposeOfUse }, actorFromContext(f.ctx));
@@ -159,6 +214,11 @@ async function createResource(f: Request, resourceType: string): Promise<Gateway
 		requestId: f.ctx.requestId,
 		ifNoneExist: f.ifNoneExist
 	});
+	// Recorded before the call returns to the app, so an attachment is never
+	// readable in the window between being stored and being claimed.
+	if (resourceType === 'Binary' && patientId && response.resource.id) {
+		await rememberBinaryOwner(response.resource.id as string, patientId, f.ctx.userId);
+	}
 	await log(
 		{ type: 'rest', subtype: 'create', action: 'C', outcome: '0', patientId, entityRef: `${resourceType}/${response.resource.id}`, purposeOfUse: decision.purposeOfUse },
 		actorFromContext(f.ctx)
@@ -174,15 +234,24 @@ async function createResource(f: Request, resourceType: string): Promise<Gateway
 }
 
 async function updateResource(f: Request, resourceType: string, id: string): Promise<GatewayResponse> {
-	const newValue = bodySomResource(f.body, resourceType);
+	const newValue = normaliseFromR4(bodySomResource(f.body, resourceType));
 	const findings = validate({ ...newValue, id }, resourceType).filter((i) => i.severity === 'error' || i.severity === 'fatal');
 	if (findings.length > 0) throw new FhirError(422, findings);
 
 	// Access must be judged against both the new and the existing version: a user
 	// must not be able to move a resource onto "their" patient.
 	const existing = await fhirClient.read(resourceType, id, { requestId: f.ctx.requestId }).catch(() => null);
+	// An attachment is judged against whoever owns it, and against the patient it
+	// would be given to, so it cannot be moved onto another patient's record.
+	const binaryPatient =
+		resourceType === 'Binary' ? (await binaryOwner(id)) ?? patientForNewBinary(newValue, f.ctx) : null;
+	if (resourceType === 'Binary' && !binaryPatient) {
+		throw new FhirError(422, [
+			issue('error', 'invariant', 'Et vedlegg må knyttes til en pasient. Start appen med pasient i kontekst, eller sett Binary.securityContext til pasienten.')
+		]);
+	}
 	for (const candidate of [newValue, existing].filter(Boolean) as FhirResource[]) {
-		const decision = await evaluate({ ctx: f.ctx, resourceType, operation: 'u', resource: candidate, patientId: patientIdFromResource(candidate) });
+		const decision = await evaluate({ ctx: f.ctx, resourceType, operation: 'u', resource: candidate, patientId: binaryPatient ?? patientIdFromResource(candidate) });
 		if (!decision.allowed) {
 			await log({ type: 'rest', subtype: 'update', action: 'U', outcome: '4', outcomeDescription: decision.reason, patientId: patientIdFromResource(candidate), entityRef: `${resourceType}/${id}`, purposeOfUse: decision.purposeOfUse }, actorFromContext(f.ctx));
 			throw new FhirError(decision.status, [issue('error', 'forbidden', decision.reason ?? 'Ingen tilgang')]);
@@ -193,6 +262,9 @@ async function updateResource(f: Request, resourceType: string, id: string): Pro
 		requestId: f.ctx.requestId,
 		ifMatch: f.ifMatch
 	});
+	if (resourceType === 'Binary' && binaryPatient) {
+		await rememberBinaryOwner(id, binaryPatient, f.ctx.userId);
+	}
 	await log(
 		{ type: 'rest', subtype: 'update', action: 'U', outcome: '0', patientId: patientIdFromResource(newValue), entityRef: `${resourceType}/${id}`, purposeOfUse: 'TREAT' },
 		actorFromContext(f.ctx)
@@ -219,7 +291,7 @@ async function patchResource(f: Request, resourceType: string, id: string): Prom
 
 async function deleteResource(f: Request, resourceType: string, id: string): Promise<GatewayResponse> {
 	const existing = await fhirClient.read(resourceType, id, { requestId: f.ctx.requestId }).catch(() => null);
-	const patientId = existing ? patientIdFromResource(existing) : null;
+	const patientId = await patientForResource(resourceType, existing, id);
 	const decision = await evaluate({ ctx: f.ctx, resourceType, operation: 'd', resource: existing, patientId, resourceId: id });
 	if (!decision.allowed) {
 		await log({ type: 'rest', subtype: 'delete', action: 'D', outcome: '4', outcomeDescription: decision.reason, patientId, entityRef: `${resourceType}/${id}` }, actorFromContext(f.ctx));
@@ -229,6 +301,7 @@ async function deleteResource(f: Request, resourceType: string, id: string): Pro
 	// entered-in-error is the main route. Deleting here removes the resource from
 	// search, while HAPI keeps the version history.
 	const response = await fhirClient.deleteValue(resourceType, id, { requestId: f.ctx.requestId });
+	if (resourceType === 'Binary') await forgetBinaryOwner(id);
 	await log(
 		{ type: 'rest', subtype: 'delete', action: 'D', outcome: '0', patientId, entityRef: `${resourceType}/${id}`, purposeOfUse: decision.purposeOfUse },
 		actorFromContext(f.ctx)
@@ -403,6 +476,18 @@ async function transaction(f: Request): Promise<GatewayResponse> {
 			await log({ type: 'rest', subtype: 'transaction', action: 'E', outcome: '4', outcomeDescription: reason, entityRef: `${method} ${url}` }, actorFromContext(f.ctx));
 			throw new FhirError(status, [issue('error', status === 403 ? 'forbidden' : 'not-supported', `${method} ${url}: ${reason}`)]);
 		};
+
+		/*
+		 * An attachment is claimed for a patient as it is written, and the claim
+		 * is what makes it readable afterwards. Inside a bundle the ids are
+		 * assigned by the server in one go, so there is no safe moment to record
+		 * the claim - and an attachment nobody has claimed can be read by nobody.
+		 * Refused rather than quietly written and lost: post it on its own first,
+		 * then refer to it from the DocumentReference.
+		 */
+		if (resourceType === 'Binary') {
+			await refuse('Vedlegg må håndteres for seg, ikke i en Bundle. Post Binary først, og pek på det fra DocumentReference.', 400);
+		}
 
 		const candidates: { resource: FhirResource | null; patientId: string | null }[] = [
 			{ resource: entry.resource ?? null, patientId: entry.resource ? patientIdFromResource(entry.resource) : null }

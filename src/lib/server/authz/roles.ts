@@ -88,14 +88,22 @@ const CLINICAL_LESE = [
 	'user/Immunization.rs', 'user/Procedure.rs', 'user/DiagnosticReport.rs',
 	'user/DocumentReference.rs', 'user/Composition.rs', 'user/ServiceRequest.rs',
 	'user/CarePlan.rs', 'user/Appointment.rs', 'user/Practitioner.rs', 'user/Organization.rs',
-	'user/QuestionnaireResponse.rs', 'user/Flag.rs', 'user/RelatedPerson.rs'
+	'user/QuestionnaireResponse.rs', 'user/Flag.rs', 'user/RelatedPerson.rs',
+	// The bytes behind a DocumentReference. Read only, and never searched: an
+	// attachment is reached by id from the reference that points at it.
+	'user/Binary.r'
 ];
 
 const CLINICAL_SKRIVE = [
 	'user/Encounter.cruds', 'user/Condition.cruds', 'user/Observation.cruds',
 	'user/Procedure.cruds', 'user/DocumentReference.cruds', 'user/Composition.cruds',
 	'user/ServiceRequest.cruds', 'user/CarePlan.cruds', 'user/QuestionnaireResponse.cruds',
-	'user/Flag.cruds', 'user/AllergyIntolerance.cruds', 'user/Immunization.cruds'
+	'user/Flag.cruds', 'user/AllergyIntolerance.cruds', 'user/Immunization.cruds',
+	// Filing a document is two writes - the bytes and the reference to them - and
+	// an app that may do one has to be able to do the other. `cud` rather than
+	// `cruds`: reading comes from CLINICAL_LESE above, and searching attachments
+	// is refused for everyone.
+	'user/Binary.cud'
 ];
 
 export const ROLE_DEFINISJONER: Record<Role, RoleDefinisjon> = {
@@ -128,7 +136,9 @@ export const ROLE_DEFINISJONER: Record<Role, RoleDefinisjon> = {
 			'Registrerer prøvesvar og målinger. Ser det som trengs for å knytte et svar til riktig pasient og rekvisisjon, ikke journalen for øvrig.',
 		scopes: [
 			'user/Patient.rs', 'user/Encounter.rs', 'user/ServiceRequest.rs', 'user/Practitioner.rs',
-			'user/Organization.rs', 'user/Observation.cruds', 'user/DiagnosticReport.cruds'
+			'user/Organization.rs', 'user/Observation.cruds', 'user/DiagnosticReport.cruds',
+			// A lab result arrives as a PDF as often as as a value.
+			'user/Binary.r', 'user/Binary.cud'
 		],
 		permissions: ['journal:les', 'journal:skriv', 'melding:les'],
 		canEmergencyAccess: false,
