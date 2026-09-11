@@ -16,6 +16,12 @@ FROM node:22-alpine AS kjor
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Hvilken utgave som kjører. AGPL § 13 gir enhver som bruker journalen over nett
+# rett til kilden til nettopp den utgaven, og /kildekode oppgir den herfra.
+# Bygger noen uten å sette den, sier siden det i stedet for å gjette.
+ARG EPJ_VERSION=""
+ENV EPJ_VERSION=$EPJ_VERSION
+
 # Kjører som ikke-privilegert bruker.
 RUN addgroup -S epj && adduser -S epj -G epj
 

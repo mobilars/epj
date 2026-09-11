@@ -1,23 +1,28 @@
 // ---------------------------------------------------------------------------
-// Continuous integration for Jenkins.
+// Build, publish and deploy, in the shape the other Unisoft projects use.
 //
-// Mirrors `.woodpecker.yaml` deliberately: the same stages, the same order and
-// the same reasoning. Two pipelines that test the same thing differently are
-// two pipelines that disagree, and the one nobody watches is the one that rots.
+// Same pattern as sveltelims: build the image, push it to registry.unisoft.no,
+// then rewrite the image tag in the manifest repository and let ArgoCD notice.
+// Deliberately the same, so that someone who knows one pipeline knows this one.
 //
-// The order puts what fails most often first: the types, then the unit tests,
-// then the browser.
+// Two differences, both on purpose:
 //
-// This pipeline does NOT build the container image, for the reason given in
-// `.woodpecker.yaml`: a kaniko build of this project needs around 3.5 GB, the
-// cluster nodes have under 4 GB, and they are also running the thing being
-// tested. The image is built and pushed by `deploy/apus/bygg.sh`, which runs
-// the build to completion and cleans up after itself.
+//   - The tests run before anything is published. This project has a suite that
+//     covers the access control in front of the record, and an image that
+//     reaches a registry untested is one that can reach a cluster untested.
+//   - Credentials go in through a git credential helper rather than into the
+//     clone URL. A URL carrying a password ends up in the build log, in the
+//     reflog and in `ps`, and no amount of URL-encoding changes that.
 //
-// AGENT MODEL. This file uses Docker on the agent, which is the portable
-// choice. If your Jenkins runs inside the cluster with the Kubernetes plugin,
-// replace the `agent` block with a pod template instead - see the note at the
-// foot of this file. Nothing else changes.
+// The apus demo cluster is deployed separately by `deploy/apus/bygg.sh`, which
+// builds with kaniko in-cluster and pins the tag in `deploy/apus/`. The two
+// targets are independent; neither pipeline needs to know about the other.
+//
+// SET BEFORE FIRST USE: `K8S_REPO`, `K8S_YAML_PATH` and `K8S_YAML_FILES` below
+// name a manifest repository that does not exist yet. EPJ has no manifests at
+// git.unisoft.no - sveltelims-k8s, k8s-yaml and onering-yaml each hold their
+// own project. Create the repository, or point these at wherever EPJ's
+// manifests end up.
 // ---------------------------------------------------------------------------
 
 pipeline {
@@ -31,18 +36,47 @@ pipeline {
 	}
 
 	environment {
+		APP_NAME = 'epj'
+
+		DOCKER_REGISTRY = 'registry.unisoft.no'
+		IMAGE_NAME = "library/${APP_NAME}"
+		REGISTRY_CREDENTIALS = 'registry-unisoft-no-jenkins'
+
+		// The manifest repository ArgoCD watches. See the note above: this one
+		// does not exist yet.
+		K8S_REPO = 'git.unisoft.no/Unisoft/epj-yaml.git'
+		K8S_BRANCH = 'main'
+		K8S_YAML_PATH = 'test/argocd'
+		K8S_YAML_FILES = 'epj.yaml'
+		K8S_CREDENTIALS = 'lars-git-unisoft-no'
+
+		// Build number and commit, as the other projects tag. A branch build
+		// carries its branch, so it can never be mistaken for a release.
+		BRANCH_SUFFIX = "${env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' ? '' : '-' + (env.BRANCH_NAME ?: 'lokal').replaceAll('[^a-zA-Z0-9]', '-')}"
+		IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'ukjent'}${BRANCH_SUFFIX}"
+
 		// A test key, and meant to be one. Nothing here unlocks anything real.
 		EPJ_DATA_KEY = 'ci-nokkel-kun-for-testkjoring-000000000'
 		EPJ_ORG_HER_ID = '8000001'
 		EPJ_ORG_NUMBER = '994598759'
 		EPJ_INTEGRATION_MODE = 'mock'
-		// Playwright's browsers are downloaded only in the stage that uses them.
 		PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = '1'
-		// npm writes its cache under the workspace, so the agent needs no home.
 		npm_config_cache = "${WORKSPACE}/.npm"
 	}
 
 	stages {
+		stage('Checkout') {
+			steps {
+				checkout scm
+				script {
+					echo "Branch:  ${env.BRANCH_NAME}"
+					echo "Commit:  ${env.GIT_COMMIT}"
+					echo "Image:   ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+				}
+			}
+		}
+
+		// What fails most often, first.
 		stage('Types and build') {
 			agent {
 				docker {
@@ -57,11 +91,11 @@ pipeline {
 			}
 		}
 
-		stage('Unit tests') {
+		stage('Tests') {
 			steps {
 				script {
-					// Postgres runs beside the tests and is reachable as `postgres`,
-					// so the connection string is the same one Woodpecker uses.
+					// Postgres beside the tests, reachable under the name the
+					// Woodpecker pipeline uses, so the connection string matches.
 					docker.image('postgres:16-alpine').withRun(
 						'-e POSTGRES_USER=epj -e POSTGRES_PASSWORD=epj -e POSTGRES_DB=epj'
 					) { db ->
@@ -77,84 +111,157 @@ pipeline {
 			}
 		}
 
-		stage('End to end') {
+		stage('Build image') {
+			steps {
+				sh """
+					docker build \
+						-f docker/Dockerfile \
+						--build-arg EPJ_VERSION=${IMAGE_TAG} \
+						-t ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} \
+						.
+				"""
+				script {
+					// `latest` only from the main line. A branch build that claimed
+					// it would be deployed by anything following the tag.
+					if (env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master') {
+						sh "docker tag ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest"
+					}
+				}
+			}
+		}
+
+		stage('Push image') {
 			steps {
 				script {
-					docker.image('postgres:16-alpine').withRun(
-						'-e POSTGRES_USER=epj -e POSTGRES_PASSWORD=epj -e POSTGRES_DB=epj'
-					) { db ->
-						docker.image('mcr.microsoft.com/playwright:v1.63.0-noble').inside("--link ${db.id}:postgres") {
-							sh 'npm ci'
-							sh 'until nc -z postgres 5432; do sleep 1; done'
-							withEnv([
-								'PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0',
-								'EPJ_BASE_URL=http://127.0.0.1:4173',
-								'E2E_DATABASE_URL=postgres://epj:epj@postgres:5432/epj_e2e'
-							]) {
-								sh 'npx playwright test'
-							}
+					docker.withRegistry("https://${DOCKER_REGISTRY}", "${REGISTRY_CREDENTIALS}") {
+						sh "docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+						if (env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master') {
+							sh "docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest"
 						}
 					}
 				}
 			}
-			post {
-				always {
-					archiveArtifacts artifacts: 'playwright-report/**, test-results/**',
-						allowEmptyArchive: true, fingerprint: false
+		}
+
+		stage('Update manifest') {
+			when {
+				anyOf {
+					branch 'main'
+					branch 'master'
+				}
+			}
+			steps {
+				withCredentials([usernamePassword(
+					credentialsId: "${K8S_CREDENTIALS}",
+					usernameVariable: 'GIT_USERNAME',
+					passwordVariable: 'GIT_PASSWORD'
+				)]) {
+					// Everything the script needs comes through the environment, so
+					// nothing is interpolated into the shell by Groovy and no secret
+					// is ever part of a command line.
+					withEnv([
+						"K8S_REPO=${K8S_REPO}",
+						"K8S_BRANCH=${K8S_BRANCH}",
+						"K8S_YAML_PATH=${K8S_YAML_PATH}",
+						"K8S_YAML_FILES=${K8S_YAML_FILES}",
+						"IMAGE_REF=${DOCKER_REGISTRY}/${IMAGE_NAME}",
+						"NEW_TAG=${IMAGE_TAG}",
+						"APP_NAME=${APP_NAME}",
+						"BUILD_NUMBER=${env.BUILD_NUMBER}"
+					]) {
+						sh '''#!/bin/bash
+							set -euo pipefail
+
+							rm -rf manifester
+							# The helper hands the credentials to git over a pipe. They
+							# never appear in the URL, so they stay out of the log.
+							git -c credential.helper= \
+								-c credential.helper='!f() { echo "username=$GIT_USERNAME"; echo "password=$GIT_PASSWORD"; }; f' \
+								clone --depth 1 --branch "$K8S_BRANCH" "https://$K8S_REPO" manifester
+
+							cd "manifester/$K8S_YAML_PATH"
+							git config user.email "jenkins@unisoft.no"
+							git config user.name "Jenkins CI"
+
+							for fil in $K8S_YAML_FILES; do
+								if [ ! -f "$fil" ]; then
+									echo "Fant ikke $fil i $K8S_YAML_PATH"
+									exit 1
+								fi
+								if ! grep -q "image: $IMAGE_REF:" "$fil"; then
+									echo "Fant ingen image-linje for $IMAGE_REF i $fil"
+									exit 1
+								fi
+								sed -i "s|image: $IMAGE_REF:.*|image: $IMAGE_REF:$NEW_TAG|g" "$fil"
+								git add "$fil"
+							done
+
+							if git diff --staged --quiet; then
+								echo "Manifestet peker allerede på $NEW_TAG. Ingenting å gjøre."
+							else
+								git diff --staged
+								git commit -m "Deploy $APP_NAME $NEW_TAG (bygg #$BUILD_NUMBER)"
+								git -c credential.helper= \
+									-c credential.helper='!f() { echo "username=$GIT_USERNAME"; echo "password=$GIT_PASSWORD"; }; f' \
+									push origin "HEAD:$K8S_BRANCH"
+							fi
+
+							cd - > /dev/null
+							rm -rf manifester
+						'''
+					}
 				}
 			}
 		}
 	}
 
 	post {
+		always {
+			// The tag is unique per build, so nothing here is worth keeping.
+			sh """
+				docker rmi ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} || true
+				docker rmi ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest || true
+			"""
+			cleanWs()
+		}
+		success {
+			script {
+				echo "Publisert: ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+				if (env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master') {
+					echo "Manifestet i ${K8S_REPO}/${K8S_YAML_PATH} er oppdatert. ArgoCD tar resten."
+				} else {
+					echo "Manifestet er ikke rørt - det skjer bare fra main/master."
+				}
+			}
+		}
 		failure {
-			// Same recipient and relay as the Woodpecker pipeline. The SMTP
-			// password belongs in Jenkins' credential store, never in this file.
 			emailext(
 				to: 'lars@roland.bz',
-				subject: "[FAILURE] ${env.JOB_NAME} build #${env.BUILD_NUMBER}",
-				body: "${env.BUILD_URL}\n\nBranch: ${env.BRANCH_NAME ?: 'ukjent'}"
+				subject: "[FAILURE] ${env.JOB_NAME} bygg #${env.BUILD_NUMBER}",
+				body: "${env.BUILD_URL}\n\nGren: ${env.BRANCH_NAME ?: 'ukjent'}"
 			)
 		}
 	}
 }
 
 // ---------------------------------------------------------------------------
-// Running on Kubernetes instead
+// Notes
 //
-// With the Kubernetes plugin, swap `agent any` for a pod template and drop the
-// per-stage `docker.image(...)` wrappers - the containers below take their
-// place, and Postgres becomes a sidecar reachable on localhost:
+// NODE_TLS_REJECT_UNAUTHORIZED. The sveltelims pipeline sets this to '0' for
+// the whole run. It is left out here on purpose: it turns off certificate
+// verification for every Node process in the build, including npm's fetches. If
+// something in this build fails on TLS, the fix belongs where the certificate
+// is - the Docker daemon's config, or the agent's trust store - not in a switch
+// that disables verification everywhere.
 //
-//   agent {
-//     kubernetes {
-//       yaml '''
-//         spec:
-//           containers:
-//             - name: node
-//               image: node:22-alpine
-//               command: ['cat']
-//               tty: true
-//               resources:
-//                 requests: {cpu: 250m, memory: 512Mi}
-//                 limits: {cpu: '1', memory: 1536Mi}
-//             - name: postgres
-//               image: postgres:16-alpine
-//               env:
-//                 - {name: POSTGRES_USER, value: epj}
-//                 - {name: POSTGRES_PASSWORD, value: epj}
-//                 - {name: POSTGRES_DB, value: epj}
-//               resources:
-//                 requests: {cpu: 100m, memory: 128Mi}
-//                 limits: {cpu: 500m, memory: 512Mi}
-//       '''
-//     }
-//   }
+// End-to-end tests. Playwright is not run here; `.woodpecker.yaml` covers it.
+// If Jenkins becomes the only pipeline, add a stage using the
+// mcr.microsoft.com/playwright image with E2E_DATABASE_URL pointing at the same
+// Postgres, gated on main/master so branch builds stay quick.
 //
-// Then each stage runs `container('node') { ... }`, and the database URL
-// becomes postgres://epj:epj@127.0.0.1:5432/postgres, since containers in a pod
-// share a network namespace.
-//
-// Set resource limits either way. Without them nothing stops a build step from
-// taking down the node it runs on, and with it the rest of the cluster.
+// Running on Kubernetes. If this Jenkins uses the Kubernetes plugin rather than
+// Docker on the agent, replace `agent any` with a pod template, drop the
+// `docker.image(...)` wrappers, and build with kaniko or buildkit instead of
+// `docker build` - there is no Docker socket in a pod. `deploy/apus/bygg.sh`
+// already does a kaniko build and is worth reading first.
 // ---------------------------------------------------------------------------
