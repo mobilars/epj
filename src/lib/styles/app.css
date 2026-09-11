@@ -328,7 +328,13 @@ main.bred { max-width: none; }
 .nedtrekk-panel .menylenke, .nedtrekk-panel a {
   color: var(--tekst); text-align: left; width: 100%; text-decoration: none; padding: 0.4rem 0.55rem;
 }
-.nedtrekk-panel .menylenke:hover, .nedtrekk-panel a:hover { background: var(--flate-2); }
+/* The panel is light, but it hangs off the dark top bar, and `.topplinje
+   a:hover` sets white on hover at a higher specificity than `.nedtrekk-panel a`.
+   Overriding only the background left white text on a light grey row. */
+.nedtrekk-panel .menylenke:hover, .nedtrekk-panel a:hover {
+  background: var(--flate-2);
+  color: var(--tekst);
+}
 .nedtrekk { position: relative; display: inline-flex; align-items: center; gap: 0.1rem; }
 .topplinje .menylenke.pil { padding: 0.3rem 0.25rem; font-size: 0.8rem; opacity: 0.85; }
 .nedtrekk-tittel {
