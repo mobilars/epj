@@ -11,6 +11,8 @@ import type { Operation } from '../authz/scopes';
 import { actorFromContext, log } from '../audit';
 import { binaryOwner, forgetBinaryOwner, rememberBinaryOwner } from './binary';
 import { normaliseFromR4 } from './r4';
+import { codeSystemOperation, valueSetOperation, icpc2CodeSystemResource } from '../terminology/operations';
+import { ICPC2 } from '../terminology/icpc2';
 
 /**
  * The guard in front of HAPI FHIR.
@@ -97,6 +99,26 @@ export async function execute(f: Request): Promise<GatewayResponse> {
 	if (parts[0].startsWith('$')) throw FhirError.notStottet(`Systemoperasjonen ${parts[0]} er ikke tilgjengelig`);
 
 	const resourceType = parts[0];
+
+	// Terminology is answered from the bundled tables, not from HAPI, and it
+	// concerns no patient: a signed-in caller is all that is required. See
+	// terminology/operations.ts.
+	if (resourceType === 'CodeSystem' || resourceType === 'ValueSet') {
+		if (parts.length === 2 && parts[1].startsWith('$')) {
+			const answer = resourceType === 'CodeSystem' ? codeSystemOperation(parts[1], f.search) : valueSetOperation(parts[1], f.search);
+			return { ...answer, headers: {} };
+		}
+		if (resourceType === 'CodeSystem' && parts.length === 1 && f.method === 'GET') {
+			const url = f.search.get('url');
+			const all = !url || url === ICPC2.url ? [icpc2CodeSystemResource()] : [];
+			return { status: 200, resource: { resourceType: 'Bundle', type: 'searchset', total: all.length, entry: all.map((r) => ({ resource: r })) } as FhirResource, headers: {} };
+		}
+		if (resourceType === 'CodeSystem' && parts.length === 2 && parts[1] === 'icpc-2' && f.method === 'GET') {
+			return { status: 200, resource: icpc2CodeSystemResource(), headers: {} };
+		}
+		throw FhirError.notStottet(`${f.method} ${f.path} er ikke tilgjengelig. Terminologi svares på $lookup, $validate-code og $expand.`);
+	}
+
 	if (!SEARCH_PARAMS[resourceType]) {
 		throw FhirError.notStottet(`Ressurstypen ${resourceType} er ikke støttet`);
 	}

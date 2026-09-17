@@ -3,6 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { resources, writeResource, searchResources } from '$srv/fhir/internal';
 import { formatsDate, codeText } from '$srv/fhir/display';
 import { SYSTEM } from '$srv/fhir/codesystems';
+import { isIcpc2Code, lookupIcpc2 } from '$srv/terminology/icpc2';
 import type { FhirResource } from '$srv/fhir/types';
 
 /**
@@ -67,12 +68,24 @@ export const actions: Actions = {
 		const subjektivt = String(form.get('subjektivt') ?? '').trim();
 		const objektivt = String(form.get('objektivt') ?? '').trim();
 		const assessment = String(form.get('vurdering') ?? '').trim();
-		const diagnosisCode = String(form.get('diagnoseKode') ?? '').trim();
-		const diagnosisText = String(form.get('diagnoseTekst') ?? '').trim();
+		const diagnosisCode = String(form.get('diagnoseKode') ?? '').trim().toUpperCase();
 
 		if (!subjektivt && !objektivt && !assessment) {
 			return fail(400, { error: 'Notatet må ha innhold.' });
 		}
+
+		// The name comes from the Directorate's table, not from the form: a code
+		// that is not in ICPC-2 is refused rather than filed under whatever was
+		// typed beside it, and a code that is gets its official name.
+		const diagnosis = diagnosisCode ? lookupIcpc2(diagnosisCode) : null;
+		if (diagnosisCode && !isIcpc2Code(diagnosisCode)) {
+			return fail(400, {
+				error: diagnosis
+					? `${diagnosisCode} er et kapittel eller en gruppe i ICPC-2, ikke en diagnosekode.`
+					: `${diagnosisCode} finnes ikke i ICPC-2. Søk opp koden i feltet.`
+			});
+		}
+		const diagnosisText = diagnosis?.display ?? '';
 
 		const patientId = event.params.id;
 		const now = new Date().toISOString();

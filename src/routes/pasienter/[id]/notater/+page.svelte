@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Icpc2Picker from '$lib/components/Icpc2Picker.svelte';
 	let { data, form } = $props();
 
 </script>
@@ -34,16 +35,7 @@
 		</div>
 		<fieldset>
 			<legend>Kontaktdiagnose (ICPC-2)</legend>
-			<div class="rad">
-				<div style="flex: 0 0 8rem">
-					<label for="diagnoseKode">Kode</label>
-					<input id="diagnoseKode" name="diagnoseKode" placeholder="K86" />
-				</div>
-				<div style="flex: 1 1 16rem">
-					<label for="diagnoseTekst">Tekst</label>
-					<input id="diagnoseTekst" name="diagnoseTekst" placeholder="Hypertensjon ukomplisert" />
-				</div>
-			</div>
+			<Icpc2Picker name="diagnoseKode" />
 		</fieldset>
 			<button type="submit" class="primar">Lagre notat</button>
 		</form>

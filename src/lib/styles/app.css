@@ -108,7 +108,11 @@ h3 { font-size: 1.02rem; }
 .feltrad input, .feltrad select { width: 100%; }
 .feltrad small { margin-top: 0.2rem; }
 .rad-mellom { display: flex; gap: 0.75rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
-.rutenett { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.rutenett { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); align-items: stretch; }
+/* The `.kort + .kort` spacing is for cards stacked in a column. In a grid it
+   pushed every card but the first down a line, so a row of equal cards had
+   its first one standing proud of the rest. */
+.rutenett > .kort { margin-top: 0; }
 
 /* Knapper */
 button, .knapp {
