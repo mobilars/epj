@@ -1,7 +1,7 @@
 import type { Cookies } from '@sveltejs/kit';
 import * as oidc from 'openid-client';
 import { exportJWK, importJWK, importPKCS8, type JWK } from 'jose';
-import { config } from '../config';
+import { config, HELSEID_ALGORITHMS } from '../config';
 import { decrypt, encrypt } from '../util/crypto';
 import { one, exec, transaction } from '../db';
 import { requireTenant, issuerFor } from '../tenant/context';
@@ -44,7 +44,14 @@ export const CLAIM = {
 } as const;
 
 /** HelseID refuses a client assertion valid for more than ten seconds. */
-const HELSEID_ASSERTION_LIFETIME = 10;
+/**
+ * HelseID accepts a client assertion whose `exp` is at most ten seconds ahead
+ * (sikkerhetskrav SK2). Exactly ten leaves nothing for clock drift between us
+ * and their servers, and a second of it would turn every sign-in into
+ * invalid_client. Five is inside the limit with room to spare, and the
+ * assertion is used once, immediately.
+ */
+const HELSEID_ASSERTION_LIFETIME = 5;
 
 /**
  * A client holding API scopes must bind its tokens to a key with DPoP (RFC
@@ -89,6 +96,9 @@ export async function helseIdConfiguration(): Promise<oidc.Configuration> {
 		 */
 		[oidc.modifyAssertion]: (header, payload) => {
 			header.typ = 'client-authentication+jwt';
+			// HelseID lists nbf among the assertion's claims; openid-client does not
+			// set it. Same instant as iat: the assertion is used at once.
+			payload.nbf = payload.iat as number;
 			payload.exp = (payload.iat as number) + HELSEID_ASSERTION_LIFETIME;
 		}
 	}));
@@ -105,6 +115,23 @@ export async function helseIdConfiguration(): Promise<oidc.Configuration> {
  * register the key under that same id. The PEM form remains for environments
  * configured before the JWK was available.
  */
+/**
+ * Refuses, at startup, an algorithm HelseID would refuse at sign-in.
+ *
+ * «Krav til kryptografi» allows PS256/384/512 and ES256/384/512 and
+ * recommends PS256 or PS512; RS256 is not on the list. Finding that out from
+ * an invalid_client on the first real sign-in is the wrong time.
+ */
+function requireHelseIdAlgorithm(alg: string): string {
+	if (!HELSEID_ALGORITHMS.has(alg)) {
+		throw new Error(
+			`HelseID godtar ikke ${alg} for client assertion. Tillatt: PS256, PS384, PS512, ES256, ES384, ES512 (anbefalt PS256 eller PS512). ` +
+				'Se «Krav til kryptografi» på utviklerportal.nhn.no, og sett EPJ_HELSEID_ALG eller alg i nøkkelens JWK.'
+		);
+	}
+	return alg;
+}
+
 async function clientKey(): Promise<oidc.CryptoKey | oidc.PrivateKey> {
 	const { privateJwkBase64, privateKeyPem, keyId, signingAlgorithm } = config.integrations.healthId;
 	if (privateJwkBase64) {
@@ -116,7 +143,7 @@ async function clientKey(): Promise<oidc.CryptoKey | oidc.PrivateKey> {
 		}
 		const jwk = (Array.isArray(parsed) ? parsed[0] : parsed) as JWK | undefined;
 		if (!jwk?.kty) throw new Error('EPJ_HELSEID_PRIVATE_JWK holds no JWK');
-		const alg = jwk.alg ?? signingAlgorithm;
+		const alg = requireHelseIdAlgorithm(jwk.alg ?? signingAlgorithm);
 		const key = await importJWK(jwk, alg);
 		if (!('type' in key)) throw new Error('EPJ_HELSEID_PRIVATE_JWK is a symmetric key, not a signing key');
 		return { key: key as oidc.CryptoKey, kid: jwk.kid };
@@ -124,7 +151,7 @@ async function clientKey(): Promise<oidc.CryptoKey | oidc.PrivateKey> {
 	if (!privateKeyPem) {
 		throw new Error('HelseID client key is missing (EPJ_HELSEID_PRIVATE_JWK or EPJ_HELSEID_PRIVATE_KEY)');
 	}
-	return { key: await importPKCS8(privateKeyPem, signingAlgorithm), kid: keyId || undefined };
+	return { key: await importPKCS8(privateKeyPem, requireHelseIdAlgorithm(signingAlgorithm)), kid: keyId || undefined };
 }
 
 /** Used by the tests, and after a configuration change. */
@@ -238,6 +265,29 @@ export interface HelseIdClaims {
 	raw: Record<string, unknown>;
 }
 
+/**
+ * Security level 4, and nothing less - including nothing at all.
+ *
+ * Health personnel sign in at level 4 (Normen; HelseID's own guidance), and
+ * the record asks for `helseid://scopes/identity/security_level` so the token
+ * says which level it was. A token that does not say used to be let through
+ * on the assumption that no claim meant no problem. It means the scope was
+ * not granted, and the person's level is unknown, which is a reason to refuse.
+ */
+export function checkSecurityLevel(
+	claims: Record<string, unknown>
+): { ok: true; level: string } | { ok: false; error: string } {
+	const level = claims[CLAIM.SECURITY_LEVEL];
+	if (level === '4' || level === 4) return { ok: true, level: '4' };
+	return {
+		ok: false,
+		error:
+			level !== undefined && level !== null
+				? `Innlogging krever sikkerhetsnivå 4 (fikk ${String(level)})`
+				: 'Innlogging krever sikkerhetsnivå 4, og HelseID oppga ikke nivået. Kontroller at scopet helseid://scopes/identity/security_level er bedt om og innvilget.'
+	};
+}
+
 export type LoginResult =
 	| { ok: true; claims: HelseIdClaims; returnTo: string; user: User; roles: Role[]; newUser: boolean }
 	| { ok: false; error: string };
@@ -290,10 +340,9 @@ export async function completeLogin(cookies: Cookies, currentUrl: URL): Promise<
 		return { ok: false, error: `HelseID avviste innloggingen: ${describeOAuthError(err)}` };
 	}
 
-	const securityLevel = (claims[CLAIM.SECURITY_LEVEL] as string) ?? null;
-	if (securityLevel && securityLevel !== '4') {
-		return { ok: false, error: `Innlogging krever sikkerhetsnivå 4 (fikk ${securityLevel})` };
-	}
+	const level = checkSecurityLevel(claims);
+	if (!level.ok) return level;
+	const securityLevel = level.level;
 
 	const parsed: HelseIdClaims = {
 		sub: String(claims.sub),

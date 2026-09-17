@@ -107,11 +107,33 @@ en vurdering av hva som må på plass før klinisk bruk.
 
 ### HelseID
 
-Klienten er implementert etter spesifikasjonen: OIDC med autorisasjonskode,
-PKCE, `private_key_jwt`, verifisering av `iss`, `aud` og `nonce`, og krav om
-sikkerhetsnivå 4. Signering og verifisering er dekket av enhetstester, men
-klienten er ikke kjørt mot NHN sitt testmiljø. Det krever registrert klient og
-nøkkel.
+Klienten er gjennomgått mot NHNs *Sikkerhetsprofil for HelseID-klienter og
+API-er* (sikkerhetskrav SK1–SK10 og SB1–SB6) og *Krav til kryptografi*,
+17.9.2026. Kilde: utviklerportal.nhn.no → HelseID → Protokoller og
+sikkerhetsprofil.
+
+| Krav | Innhold | Status |
+| --- | --- | --- |
+| SK1 | Bare TLS, minst 1.2 (1.3 anbefalt) | Oppfylt. Utgående kall bruker Node sin standard (1.2+); inngangen kjører ingress-nginx sin standard (1.2 og 1.3). |
+| SK2 | `private_key_jwt`, `exp` høyst 10 s fram | Oppfylt. Levetiden var 10 s og er satt til 5, så klokkeslakk ikke gjør hver innlogging til `invalid_client`. `nbf` settes nå også, slik dokumentet lister kravene. |
+| SK3 | Konfidensiell klient, offentlig nøkkel kjent for HelseID | Oppfylt. Nøkkelen ligger bare på tjeneren. |
+| SK4/SK5 | Hemmeligheten beskyttes og brukes bare mot HelseID og til DPoP | Oppfylt. Egen nøkkel (`EPJ_HELSEID_PRIVATE_KEY`/`_JWK`), adskilt fra journalens egne signeringsnøkler. |
+| SK6 | DPoP for API-tokens | Oppfylt. Nøkkelpar per innlogging, `dpop_jkt` i PAR, bevis på token- og userinfo-kallet. |
+| SK7/SK8 | Token bare i `Authorization`, aldri til sluttbruker | Oppfylt. Tokenene forlater ikke tjeneren; brukeren får journalens egen sesjon. |
+| SK10 | OWASP Topp 10 | Dekket av CSP, CSRF-vern, sikkerhetshoder og ratebegrensning. Ikke penetrasjonstestet — se todo.md 6.4. |
+| SB1 | Authorization code, `response_type=code` | Oppfylt. |
+| SB2 | PKCE med S256, unik `code_challenge` | Oppfylt. |
+| SB3 | PAR | Oppfylt. |
+| SB4 | Validering av ID-token | Oppfylt via openid-client 6.8: `iss`, `aud`, `nonce`, `exp`, signatur mot JWKS. |
+| SB5 | Lokal og HelseID-identitet må være samme person | Oppfylt: en lokal konto kobles bare når `pid` eller HPR-nummer stemmer, og bare om den ikke allerede er koblet. |
+| SB6 | `iss` i autorisasjonssvaret må være lik `issuer` fra discovery | Oppfylt via openid-client (RFC 9207), som håndhever det når serveren annonserer det — det gjør HelseID. |
+| Krypto | PS256/384/512 eller ES256/384/512; PS256 eller PS512 anbefalt; RSA ≥ 2048 bit | **Rettet.** Standardalgoritmen var RS256, som ikke står på listen; den er nå PS256, og en konfigurasjon med en algoritme HelseID avviser stoppes ved oppstart med en melding som sier hvilke som er lov. |
+| Nivå | Helsepersonell logger inn på sikkerhetsnivå 4 | **Rettet.** Et token *uten* nivå-claim slapp gjennom; det avvises nå, med beskjed om at scopet `helseid://scopes/identity/security_level` må være bedt om og innvilget. |
+
+Ikke gjort: klienten er fortsatt ikke kjørt ende til ende mot NHN sitt
+testmiljø med journalens egen klientregistrering. Det er den eneste måten å
+bekrefte SB4 og SB6 i praksis på, og det bør gjøres før første virksomhet
+tas i bruk med HelseID. Penetrasjonstest (SK10) er et eget punkt.
 
 ### HAPI FHIR
 

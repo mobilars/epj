@@ -46,6 +46,10 @@ function bool(name: string, fallback: boolean): boolean {
 	return v === '1' || v.toLowerCase() === 'true';
 }
 
+/** The signing algorithms HelseID accepts for client assertions and DPoP proofs. */
+export type HelseIdAlgorithm = 'PS256' | 'PS384' | 'PS512' | 'ES256' | 'ES384' | 'ES512';
+export const HELSEID_ALGORITHMS: ReadonlySet<string> = new Set(['PS256', 'PS384', 'PS512', 'ES256', 'ES384', 'ES512']);
+
 export const config = {
 	/** Canonical outward-facing base URL. Used as `issuer` in OAuth/OIDC metadata. */
 	baseUrl: (env.EPJ_BASE_URL ?? 'http://localhost:5173').replace(/\/$/, ''),
@@ -292,7 +296,14 @@ export const config = {
 			privateKeyPem: env.EPJ_HELSEID_PRIVATE_KEY ?? '',
 			/** Only consulted alongside the PEM; a JWK brings its own `kid`. */
 			keyId: env.EPJ_HELSEID_KEY_ID ?? '',
-			signingAlgorithm: (env.EPJ_HELSEID_ALG ?? 'RS256') as 'RS256' | 'PS256' | 'ES256',
+			/**
+			 * HelseID's «Krav til kryptografi» lists PS256/384/512 and ES256/384/512
+			 * and recommends PS256 or PS512. RS256 is not on the list, and a
+			 * client assertion signed with it is refused. The old default here was
+			 * RS256, which a PEM-configured client would have used without being
+			 * told anything until HelseID said invalid_client.
+			 */
+			signingAlgorithm: (env.EPJ_HELSEID_ALG ?? 'PS256') as HelseIdAlgorithm,
 			scopes: (env.EPJ_HELSEID_SCOPES ??
 				'openid profile helseid://scopes/identity/pid helseid://scopes/identity/security_level helseid://scopes/hpr/hpr_number')
 				.split(/\s+/).filter(Boolean),
