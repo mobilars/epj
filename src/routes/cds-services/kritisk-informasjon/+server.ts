@@ -1,5 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { HookCallerError, requireHookCaller } from '$srv/cds/signing';
+import { newId } from '$srv/util/ids';
 import { requireTenant } from '$srv/tenant/context';
 import { fhirClient } from '$srv/fhir/client';
 import type { FhirResource } from '$srv/fhir/types';
@@ -19,6 +21,8 @@ import type { FhirResource } from '$srv/fhir/types';
  */
 
 interface Card {
+	/** Names the card, so feedback about it can say which one. */
+	uuid?: string;
 	summary: string;
 	detail?: string;
 	indicator: 'info' | 'warning' | 'critical';
@@ -26,6 +30,14 @@ interface Card {
 }
 
 export const POST: RequestHandler = async (event) => {
+	// Only the record itself may ask. Without this, anyone who found the URL
+	// could post a patient id and be told what the record knows about them.
+	try {
+		await requireHookCaller(event);
+	} catch (err) {
+		if (err instanceof HookCallerError) return json({ error: err.message }, { status: err.status });
+		throw err;
+	}
 	const body = (await event.request.json().catch(() => ({}))) as {
 		context?: { patientId?: string; patient?: string };
 	};
@@ -58,6 +70,7 @@ export const POST: RequestHandler = async (event) => {
 			.filter(Boolean)
 			.join(', ');
 		cards.push({
+			uuid: newId(),
 			summary: `Allergi: ${name}`,
 			detail: [high ? 'Registrert med høy risiko.' : null, reactions ? `Reaksjon: ${reactions}.` : null]
 				.filter(Boolean)
@@ -75,6 +88,7 @@ export const POST: RequestHandler = async (event) => {
 			(c.code as { coding?: { display?: string }[] })?.coding?.[0]?.display ??
 			'Alvorlig tilstand';
 		cards.push({
+			uuid: newId(),
 			summary: `Alvorlig tilstand: ${name}`,
 			indicator: 'warning',
 			source: { label: tenant.name }

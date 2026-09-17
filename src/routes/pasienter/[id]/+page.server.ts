@@ -1,9 +1,10 @@
-import { error } from '@sveltejs/kit';
-import type { PageServerLoad } from './$types';
-import { patientRecord, resources } from '$srv/fhir/internal';
+import { error, fail, redirect } from '@sveltejs/kit';
+import type { Actions, PageServerLoad } from './$types';
+import { patientRecord, resources, writeResource } from '$srv/fhir/internal';
+import { actorFromContext, log } from '$srv/audit';
 import { formatsDate, klinisksStatus, codeText, codeValue } from '$srv/fhir/display';
 import type { FhirResource } from '$srv/fhir/types';
-import { callHook } from '$srv/cds/hooks';
+import { acceptedActions, callHook, sendFeedback, type Card, type Suggestion } from '$srv/cds/hooks';
 
 /** Clinical overview: diagnoses, medicines, allergies, latest measurements and notes. */
 export const load: PageServerLoad = async (event) => {
@@ -98,4 +99,77 @@ export const load: PageServerLoad = async (event) => {
 			}))
 		}
 	};
+};
+
+/**
+ * What a clinician does with a card.
+ *
+ * Accepting a suggestion is a write by the clinician - through the same door
+ * as any other, judged by scope, role and relationship - and the service is
+ * told it was taken. Setting a card aside tells the service that too. Neither
+ * lets the service do anything; both let it learn.
+ *
+ * The card travels back in the form, because a card is a moment's advice
+ * with no id in the record to look it up by. The write that follows is
+ * judged on what the resource says, not on where the form said it came from,
+ * so a tampered form can do no more than the clinician could do by hand.
+ */
+export const actions: Actions = {
+	acceptSuggestion: async (event) => {
+		const ctx = event.locals.auth;
+		if (!ctx?.userId) redirect(303, '/logg-inn');
+		const form = await event.request.formData();
+		let card: Card;
+		let suggestion: Suggestion;
+		try {
+			card = JSON.parse(String(form.get('card') ?? '')) as Card;
+			suggestion = JSON.parse(String(form.get('suggestion') ?? '')) as Suggestion;
+		} catch {
+			return fail(400, { cdsError: 'Forslaget kunne ikke leses.' });
+		}
+
+		const { resources: toCreate, refused } = acceptedActions(suggestion, event.params.id);
+		if (!toCreate.length) {
+			return fail(400, { cdsError: `Forslaget kan ikke utføres: ${refused.join('; ') || 'ingenting å opprette'}.` });
+		}
+
+		const created: string[] = [];
+		for (const resource of toCreate) {
+			const written = await writeResource(ctx, resource);
+			created.push(`${written.resourceType}/${written.id}`);
+		}
+		await log(
+			{
+				type: 'cds', subtype: 'forslag:godtatt', action: 'C', outcome: '0',
+				patientId: event.params.id, entityRef: created[0] ?? null,
+				details: { service: card.serviceId ?? null, card: card.uuid ?? null, suggestion: suggestion.label, created: created.join(' ') }
+			},
+			actorFromContext(ctx)
+		);
+		await sendFeedback(card, 'accepted', { acceptedSuggestions: suggestion.uuid ? [{ id: suggestion.uuid }] : [] });
+		return { cdsDone: `Utført: ${suggestion.label}${refused.length ? ` (hoppet over: ${refused.join('; ')})` : ''}` };
+	},
+
+	dismissCard: async (event) => {
+		const ctx = event.locals.auth;
+		if (!ctx?.userId) redirect(303, '/logg-inn');
+		const form = await event.request.formData();
+		let card: Card;
+		try {
+			card = JSON.parse(String(form.get('card') ?? '')) as Card;
+		} catch {
+			return fail(400, { cdsError: 'Kortet kunne ikke leses.' });
+		}
+		const reason = String(form.get('reason') ?? '').trim();
+		await log(
+			{
+				type: 'cds', subtype: 'kort:satt-til-side', action: 'E', outcome: '0',
+				patientId: event.params.id, entityRef: `cds/${card.serviceId ?? 'ukjent'}`,
+				details: { card: card.uuid ?? null, summary: card.summary, reason: reason || null }
+			},
+			actorFromContext(ctx)
+		);
+		await sendFeedback(card, 'overridden', reason ? { overrideReason: { code: reason } } : {});
+		return { cdsDismissed: card.uuid ?? card.summary };
+	}
 };

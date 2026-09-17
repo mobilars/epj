@@ -159,22 +159,29 @@ legemiddelutlevering.
 
 ### 3.5 CDS Hooks: flere kroker, og en ekte kilde **[N]**
 
-Bygget: `patient-view` og `medication-prescribe`, tjenesteregister per
-virksomhet, kort på pasientens forside, og tre egne tjenester
-(`kritisk-informasjon`, `manglende-maalinger`, `interaksjonssjekk`).
+Bygget: `patient-view`, `medication-prescribe` (fyrer før resepten sendes, og
+holder den tilbake til behandleren har sett kortene) og `order-sign` (etter
+signering). Tjenesteregister per virksomhet, kort på pasientens forside, og
+fire egne tjenester (`kritisk-informasjon`, `manglende-maalinger`,
+`kalkulatorer`, `interaksjonssjekk`). Se [cds-hooks.md](cds-hooks.md).
+
+- ~~**Signerte forespørsler.**~~ Gjort. Hvert kall bærer et JWT signert med
+  virksomhetens nøkkel; journalens egne tjenester krever det. Før dette svarte
+  de hvem som helst som fant adressen.
+- ~~**Suggestions.**~~ Gjort, i den trygge delen: et forslag kan bare *opprette*
+  ressurser om pasienten kortet gjaldt, og trykket er behandlerens skriving
+  gjennom vanlig tilgangskontroll. `update`/`delete` avvises.
+  `system-actions` er bevisst ikke bygget — det er en skriving uten et trykk.
+- ~~**Tilbakemelding (2.0).**~~ Gjort. Journalen sender `accepted`/`overridden`,
+  og egne tjenester tar imot.
 
 Ikke bygget:
 
-- **`order-select`, `order-sign`, `appointment-book`** — krokene som fyrer
-  under bestilling og timeavtale.
-- **Suggestions og `system-actions`.** Et kort kan i dag si noe; det kan ikke
-  foreslå en endring journalen kan utføre med ett trykk. Det er den delen som
-  krever mest omtanke: et forslag som utføres, er en skriving en tjeneste har
-  fått gjøre.
-- **Signerte forespørsler.** Tjenesten får i dag ingen måte å vite at det
-  virkelig er journalen som spør. CDS Hooks beskriver et JWT i
-  `Authorization` — det bør på plass før noen tjeneste utenfor huset tas i
-  bruk.
+- **`order-select` og `appointment-book`** — det finnes ennå ingen bestilling
+  eller timebok å henge dem på. Se 2.1.
+- **`prefetch`.** Journalen sender bevisst ikke pasientdata i forespørselen;
+  en tjeneste henter selv, med eget token, og oppslaget loggføres. Prefetch
+  ville gjort det raskere og loggen fattigere. Et veivalg.
 - **Interaksjonssjekken må få en vedlikeholdt kilde** (FEST). Dagens liste er
   tre oppføringer og er merket som demonstrasjon i koden. Et råd som ser
   autoritativt ut uten å være det, er verre enn ingen råd: tausheten blir lest
@@ -319,6 +326,15 @@ Profilaget er skilt ut i `src/lib/server/fhir/`, men no-basis-profilene er ikke
 lagt inn. De er publisert for R4; systemet bruker R5. Se
 [apne-punkter.md](apne-punkter.md).
 
+Gjort på kodeverkssiden: ICPC-2 (norsk utgave, fra Helsedirektoratets
+kodeverks-API bak Finnkode) er bundlet, med `CodeSystem/$lookup`,
+`$validate-code` og `ValueSet/$expand` på journalens eget endepunkt.
+Diagnoser avvises hvis koden ikke finnes, og føres under kodeverkets navn.
+ICD-10 (21 530 koder) og NCMP/NCSP ligger i samme API og kan bundles på samme
+måte; SNOMED CT norsk utgave svares av Helsedirektoratets Snowstorm
+(`snowstorm.terminologi.helsedirektoratet.no/fhir`) og bør heller
+proxyes enn bundles.
+
 ### 5.2 Full `$validate` mot profiler **[N]**
 
 `EPJ_HAPI_VALIDATE` slår på validering mot HAPI før skriving, men er av som
@@ -426,13 +442,16 @@ Ikke gjort:
   vurdering.
 - **Utvikleren kan ikke prøve appen selv.** Det burde finnes et sandkassemiljø
   med syntetiske pasienter, slik at en app kan testes før den sendes inn.
-- **R4 mot R5.** Journalen er R5. Flere apper der ute er R4 — blant annet
-  `sveltelims`, som skriver `DocumentReference.context.encounter` slik R4 gjør.
-  Enten må appene lære seg begge, eller så må journalen tilby en R4-visning.
-  Dette er et veivalg, ikke en feilretting.
-- **`Binary` er ikke eksponert.** Det stopper enhver app som vil lagre et
-  vedlegg. Løsningen står i `searchparams.ts`: utled pasienten fra
-  `DocumentReference`-en som peker på ressursen, og vurder tilgangen mot den.
+- ~~**R4 mot R5.**~~ Gjort for skriving: en R4-formet `DocumentReference`
+  (`context.encounter`, `authenticator`, `content.format`, `relatesTo.code`)
+  oversettes til R5 på vei inn. Journalen lagrer og svarer R5. Lesing i
+  R4-form er ikke tilbudt.
+- ~~**`Binary` er ikke eksponert.**~~ Gjort, men annerledes enn planlagt:
+  pasienten *registreres* når vedlegget skrives (fra launch-konteksten eller
+  `Binary.securityContext`), i `binary_patient`, i stedet for å utledes fra
+  `DocumentReference` — det kan også autorisere selve opplastingen, og et
+  vedlegg ingen har gjort krav på kan ikke leses av noen. Søk i `Binary` er
+  avvist for alle.
 
 ## 7. Mindre ting
 

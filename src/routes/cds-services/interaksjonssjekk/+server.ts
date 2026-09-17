@@ -1,5 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { HookCallerError, requireHookCaller } from '$srv/cds/signing';
+import { newId } from '$srv/util/ids';
 import { fhirClient } from '$srv/fhir/client';
 import type { FhirResource } from '$srv/fhir/types';
 
@@ -24,6 +26,8 @@ const INTERACTIONS: { a: string; b: string; text: string }[] = [
 ];
 
 interface Card {
+	/** Names the card, so feedback about it can say which one. */
+	uuid?: string;
 	summary: string;
 	detail?: string;
 	indicator: 'info' | 'warning' | 'critical';
@@ -40,6 +44,14 @@ function naming(resource: FhirResource): string {
 }
 
 export const POST: RequestHandler = async (event) => {
+	// Only the record itself may ask. Without this, anyone who found the URL
+	// could post a patient id and be told what the record knows about them.
+	try {
+		await requireHookCaller(event);
+	} catch (err) {
+		if (err instanceof HookCallerError) return json({ error: err.message }, { status: err.status });
+		throw err;
+	}
 	const body = (await event.request.json().catch(() => ({}))) as {
 		context?: {
 			patientId?: string;
@@ -75,6 +87,7 @@ export const POST: RequestHandler = async (event) => {
 			const other = pair.find((m) => m !== inDraft);
 			if (inDraft && other && existing.some((e) => e.includes(other))) {
 				cards.push({
+					uuid: newId(),
 					summary: `Interaksjon: ${rule.a} og ${rule.b}`,
 					detail: rule.text,
 					indicator: 'warning',
@@ -85,6 +98,7 @@ export const POST: RequestHandler = async (event) => {
 		for (const allergy of allergyNames) {
 			if (allergy && item.includes(allergy)) {
 				cards.push({
+					uuid: newId(),
 					summary: `Pasienten er registrert allergisk mot ${allergy}`,
 					indicator: 'critical',
 					source: { label: 'Interaksjonssjekk (demo)' }

@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { listServices, registerFromDiscovery, removeService, setServiceEnabled } from '$srv/cds/hooks';
+import { callerIssuer, callerJwksUrl, listServices, registerFromDiscovery, removeService, setServiceEnabled } from '$srv/cds/hooks';
+import { activeSigningKey } from '$srv/auth/keys';
 import { actorFromContext, log } from '$srv/audit';
 
 /**
@@ -14,7 +15,14 @@ import { actorFromContext, log } from '$srv/audit';
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx?.permissions.has('admin:apper')) error(403, 'Ingen tilgang.');
-	return { services: await listServices() };
+	const key = await activeSigningKey();
+	return {
+		services: await listServices(),
+		// What a service needs in order to check that it really was this record
+		// asking: where the record's keys are, and which one signs today.
+		signing: { issuer: callerIssuer(), jwksUrl: callerJwksUrl(), kid: key.kid },
+		ownServicesUrl: `${callerIssuer()}/cds-services`
+	};
 };
 
 export const actions: Actions = {

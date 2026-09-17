@@ -1,16 +1,41 @@
 <script lang="ts">
-	let { data } = $props();
+	let { data, form } = $props();
 	const g = $derived(data.grupper);
+	// A card set aside stays aside for this view; the service has been told.
+	const visible = $derived((data.cds?.cards ?? []).filter((c) => (c.uuid ?? c.summary) !== form?.cdsDismissed));
 </script>
 
-{#if data.cds?.cards?.length}
-	<!-- Advice from CDS Hooks services. Cards say something; they never do
-	     anything. Nothing here can write to the record or stop the user. -->
+{#if form?.cdsDone}<div class="varsel varsel-ok" role="status">{form.cdsDone}</div>{/if}
+{#if form?.cdsError}<div class="varsel varsel-feil" role="alert">{form.cdsError}</div>{/if}
+
+{#if visible.length}
+	<!-- Advice from CDS Hooks services. A card says something; a suggestion
+	     on it proposes something the clinician can do with one press - and
+	     that press is the clinician's write, judged like any other. Nothing
+	     here lets a service write or stop anyone. -->
 	<section class="cds-kort" aria-label="Beslutningsstøtte">
-		{#each data.cds.cards as card, i (i)}
+		{#each visible as card, i (card.uuid ?? i)}
 			<article class="varsel varsel-{card.indicator === 'critical' ? 'feil' : card.indicator === 'warning' ? 'advarsel' : 'info'}">
 				<strong>{card.summary}</strong>
 				{#if card.detail}<p>{card.detail}</p>{/if}
+				{#if card.suggestions?.length}
+					<div class="rad cds-forslag">
+						{#each card.suggestions as suggestion (suggestion.uuid ?? suggestion.label)}
+							<form method="POST" action="?/acceptSuggestion">
+								<input type="hidden" name="card" value={JSON.stringify(card)} />
+								<input type="hidden" name="suggestion" value={JSON.stringify(suggestion)} />
+								<button
+									type="submit"
+									class="liten"
+									class:primar={suggestion.isRecommended}
+									title={suggestion.actions?.map((a) => a.description).filter(Boolean).join(' ')}
+								>
+									{suggestion.label}
+								</button>
+							</form>
+						{/each}
+					</div>
+				{/if}
 				{#if card.links?.length}
 					<p>
 						{#each card.links as link (link.url)}
@@ -18,9 +43,21 @@
 						{/each}
 					</p>
 				{/if}
-				<small class="svak">
-					{card.serviceTitle ?? card.source?.label ?? 'Beslutningsstøtte'} · råd, ikke en avgjørelse
-				</small>
+				<div class="rad-mellom">
+					<small class="svak">
+						{card.serviceTitle ?? card.source?.label ?? 'Beslutningsstøtte'} · råd, ikke en avgjørelse
+					</small>
+					<form method="POST" action="?/dismissCard" class="rad">
+						<input type="hidden" name="card" value={JSON.stringify(card)} />
+						{#if card.overrideReasons?.length}
+							<select name="reason" aria-label="Grunn">
+								<option value="">Sett til side</option>
+								{#each card.overrideReasons as r (r.code)}<option value={r.code}>{r.display ?? r.code}</option>{/each}
+							</select>
+						{/if}
+						<button type="submit" class="liten">Sett til side</button>
+					</form>
+				</div>
 			</article>
 		{/each}
 	</section>

@@ -24,6 +24,40 @@
 			<ul>{#each form.alerts as v}<li>{v}</li>{/each}</ul>
 		{/if}
 	</div>
+	{#each form.signedCards ?? [] as card (card.uuid ?? card.summary)}
+		<div class="varsel varsel-{card.indicator === 'critical' ? 'feil' : card.indicator === 'warning' ? 'advarsel' : 'info'}">
+			<strong>{card.summary}</strong>
+			{#if card.detail}<p>{card.detail}</p>{/if}
+			<small class="svak">{card.serviceTitle ?? 'Beslutningsstøtte'} · etter signering</small>
+		</div>
+	{/each}
+{/if}
+
+{#if form?.needsConfirmation}
+	<!-- The hook had something to say. The prescription has not been written;
+	     the form comes back filled in, with the cards above it and one more
+	     button. Pressing it is the clinician saying they have read them. -->
+	<section class="kort cds-stopp" aria-label="Beslutningsstøtte før forskrivning">
+		<h3>Før resepten sendes</h3>
+		{#each form.advice.cards as card (card.uuid ?? card.summary)}
+			<div class="varsel varsel-{card.indicator === 'critical' ? 'feil' : card.indicator === 'warning' ? 'advarsel' : 'info'}">
+				<strong>{card.summary}</strong>
+				{#if card.detail}<p>{card.detail}</p>{/if}
+				<small class="svak">{card.serviceTitle ?? 'Beslutningsstøtte'} · råd, ikke en avgjørelse</small>
+			</div>
+		{/each}
+		{#if form.advice.failed?.length}
+			<p class="svak liten">Svarte ikke: {form.advice.failed.join(', ')}.</p>
+		{/if}
+		<form method="POST" action="?/prescribe" class="rad">
+			{#each Object.entries(form.draft) as [k, v] (k)}
+				<input type="hidden" name={k} value={v} />
+			{/each}
+			<input type="hidden" name="bekreftet" value="ja" />
+			<button type="submit" class="primar">Forskriv likevel</button>
+			<a class="knapp" href="/pasienter/{data.patientId}/legemidler">Avbryt</a>
+		</form>
+	</section>
 {/if}
 
 {#if data.list?.deviation?.length}

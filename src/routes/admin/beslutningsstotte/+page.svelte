@@ -19,6 +19,17 @@
 {/if}
 
 <section class="kort">
+	<div class="varsel varsel-info">
+		<strong>Slik kjenner en tjeneste igjen journalen.</strong> Hvert kall bærer et JWT i
+		<span class="mono">Authorization</span>, signert med journalens nøkkel. Tjenesten sjekker det
+		mot <a href={data.signing.jwksUrl} class="mono">{data.signing.jwksUrl}</a> —
+		utsteder <span class="mono">{data.signing.issuer}</span>, nøkkel-id
+		<span class="mono">{data.signing.kid}</span>. Journalens egne tjenester ligger på
+		<a href={data.ownServicesUrl} class="mono">{data.ownServicesUrl}</a> og kan registreres her
+		som enhver annen. Tjenester som svarer med forslag får dem vist som knapper på pasientens forside;
+		et forslag som utføres, skrives av behandleren gjennom vanlig tilgangskontroll.
+	</div>
+
 	<h3>Registrer tjeneste</h3>
 	<form method="POST" action="?/registrer">
 		<div class="feltrad">

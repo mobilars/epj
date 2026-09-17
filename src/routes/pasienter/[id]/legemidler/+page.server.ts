@@ -1,5 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
+import { callHook } from '$srv/cds/hooks';
+import { SYSTEM } from '$srv/fhir/codesystems';
 import { actorFromContext } from '$srv/audit';
 import { prescribe, fornye, getMedicationList, discontinue, synkHistory } from '$srv/integrations/sfm';
 import { config } from '$srv/config';
@@ -38,6 +40,50 @@ export const actions: Actions = {
 		const dosage = String(form.get('dosering') ?? '').trim();
 		if (!name || !dosage) return fail(400, { error: 'Legemiddel og dosering må fylles ut.' });
 
+		// Everything the form said, so the page can put it back if the
+		// clinician has to look at a warning first.
+		const draft = Object.fromEntries(
+			['navn', 'atc', 'styrke', 'form', 'dosering', 'indikasjon', 'mengde', 'reiterasjon', 'refusjonKode', 'refusjonHjemmel', 'hpr'].map((k) => [k, String(form.get(k) ?? '')])
+		);
+
+		/**
+		 * `medication-prescribe` fires while the prescription is still a draft.
+		 *
+		 * This is the moment advice is worth something - an interaction found
+		 * after the prescription has gone to e-resept is a phone call, not a
+		 * card. So the hook is asked first, and if anything comes back the
+		 * prescription waits: the page shows the cards and the same form, filled
+		 * in, with one more button. Pressing it says the clinician has read them.
+		 * That is the whole of what a card can do - it cannot refuse, only ask
+		 * for a second look.
+		 */
+		const confirmed = form.get('bekreftet') === 'ja';
+		const draftOrder = {
+			resourceType: 'MedicationRequest',
+			status: 'draft',
+			intent: 'order',
+			subject: { reference: `Patient/${event.params.id}` },
+			medication: {
+				concept: {
+					...(draft.atc ? { coding: [{ system: SYSTEM.ATC, code: draft.atc, display: name }] } : {}),
+					text: [name, draft.styrke, draft.form].filter(Boolean).join(' ')
+				}
+			},
+			dosageInstruction: [{ text: dosage }],
+			...(draft.indikasjon ? { reason: [{ concept: { text: draft.indikasjon } }] } : {})
+		};
+		if (!confirmed) {
+			const advice = await callHook('medication-prescribe', ctx, {
+				patientId: event.params.id,
+				patient: event.params.id,
+				medications: { resourceType: 'Bundle', type: 'collection', entry: [{ resource: draftOrder }] },
+				draftOrders: { resourceType: 'Bundle', type: 'collection', entry: [{ resource: draftOrder }] }
+			}).catch(() => ({ cards: [], failed: [] as string[] }));
+			if (advice.cards.length) {
+				return { advice, draft, needsConfirmation: true };
+			}
+		}
+
 		const response = await prescribe(
 			{
 				patientId: event.params.id,
@@ -61,7 +107,17 @@ export const actions: Actions = {
 
 		if (!response.ok) return fail(502, { error: response.error ?? 'Forskrivningen ble ikke gjennomført.' });
 		const alerts = (response.data as unknown as { alerts?: string[] })?.alerts ?? [];
-		return { ok: true, prescriptionId: response.prescriptionId, alerts };
+
+		// `order-sign` fires once the prescription is signed: the order is real
+		// now, and a service that keeps a medication list, or a register that
+		// wants to know, gets told. Cards here are read after the fact.
+		const signed = await callHook('order-sign', ctx, {
+			patientId: event.params.id,
+			patient: event.params.id,
+			draftOrders: { resourceType: 'Bundle', type: 'collection', entry: [{ resource: { ...draftOrder, status: 'active', identifier: [{ value: response.prescriptionId }] } }] }
+		}).catch(() => ({ cards: [], failed: [] as string[] }));
+
+		return { ok: true, prescriptionId: response.prescriptionId, alerts, signedCards: signed.cards };
 	},
 
 	discontinue: async (event) => {
