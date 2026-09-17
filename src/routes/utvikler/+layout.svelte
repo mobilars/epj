@@ -21,6 +21,7 @@
 			<a href="/utvikler/dokumentasjon" aria-current={her('/utvikler/dokumentasjon') ? 'page' : undefined}>
 				Dokumentasjon
 			</a>
+			<a href="/utvikler/api" aria-current={her('/utvikler/api') ? 'page' : undefined}>API-referanse</a>
 			<a href="/utvikler/vilkar" aria-current={her('/utvikler/vilkar') ? 'page' : undefined}>Vilkår</a>
 			<div class="hoyre-del">
 				<span>{data.developer.name || data.developer.email}</span>

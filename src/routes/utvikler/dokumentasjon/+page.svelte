@@ -3,7 +3,10 @@
 </script>
 
 <h1>Dokumentasjon</h1>
-<p class="svak">Journalen er en SMART on FHIR-server. En app trenger ikke annet enn dette.</p>
+<p class="svak">
+	Journalen er en SMART on FHIR-server. En app trenger ikke annet enn dette — og
+	<a href="/utvikler/api">API-referansen</a> for felt, scope, terminologi, vedlegg og CDS Hooks.
+</p>
 
 <section class="kort">
 	<h2>Endepunkter</h2>
