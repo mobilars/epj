@@ -6,6 +6,7 @@ import { listMessages, pendingKvitteringer } from '$srv/integrations/nhn/message
 import { listCard } from '$srv/integrations/helfo/billing';
 import { query } from '$srv/db';
 import { requireTenant } from '$srv/tenant/context';
+import { resolveLayout } from '$srv/workspace/layout';
 
 /** The work surface: today's appointments, unread messages and settlements waiting. */
 export const load: PageServerLoad = async (event) => {
@@ -18,6 +19,9 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	const today = new Date().toISOString().slice(0, 10);
+	// Which cards, in what order: the person's own arrangement, else the
+	// practice's, else all of them.
+	const layout = await resolveLayout('arbeidsflate', ctx.userId);
 	const canLese = ctx.permissions.has('journal:les');
 	const canMessage = ctx.permissions.has('melding:les');
 	const canSettlement = ctx.permissions.has('oppgjor:registrer') || ctx.permissions.has('oppgjor:send');
@@ -51,6 +55,7 @@ export const load: PageServerLoad = async (event) => {
 	const patientKart = Object.fromEntries(patients.map((p) => [p.id, p]));
 
 	return {
+		layout: layout.cards,
 		appointments: (appointments ? resources(appointments) : []).map((a) => {
 			const deltaker = ((a.participant as { actor?: { reference?: string; display?: string } }[] | undefined) ?? [])
 				.map((p) => p.actor?.reference)

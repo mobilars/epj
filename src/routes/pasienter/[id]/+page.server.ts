@@ -5,12 +5,13 @@ import { actorFromContext, log } from '$srv/audit';
 import { formatsDate, klinisksStatus, codeText, codeValue } from '$srv/fhir/display';
 import type { FhirResource } from '$srv/fhir/types';
 import { acceptedActions, callHook, sendFeedback, type Card, type Suggestion } from '$srv/cds/hooks';
+import { resolveLayout } from '$srv/workspace/layout';
 
 /** Clinical overview: diagnoses, medicines, allergies, latest measurements and notes. */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	const parent = await event.parent();
-	if (!ctx || !parent.patient) return { grupper: null, cds: { cards: [], failed: [] } };
+	if (!ctx || !parent.patient) return { grupper: null, cds: { cards: [], failed: [] }, layout: [] as string[] };
 
 	const bundle = await patientRecord(ctx, event.params.id, 400);
 	const all = resources(bundle);
@@ -31,8 +32,13 @@ export const load: PageServerLoad = async (event) => {
 		patient: event.params.id
 	}).catch(() => ({ cards: [], failed: [] as string[] }));
 
+	// Which cards, in what order: the person's own arrangement, else the
+	// practice's, else all of them.
+	const layout = await resolveLayout('pasientoversikt', ctx.userId);
+
 	return {
 		cds: advice,
+		layout: layout.cards,
 		grupper: {
 			diagnoses: of('Condition')
 				.map((c) => ({

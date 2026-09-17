@@ -12,6 +12,7 @@ export const load: LayoutServerLoad = async (event) => {
 	return {
 		canUsers: has('admin:brukere'),
 		canApper: has('admin:apper'),
-		canLog: has('admin:logg') || has('logg:innsyn')
+		canLog: has('admin:logg') || has('logg:innsyn'),
+		canSystem: has('admin:system')
 	};
 };
