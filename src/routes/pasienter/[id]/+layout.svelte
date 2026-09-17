@@ -1,5 +1,9 @@
 <script lang="ts">
 	import Nedtrekk from '$lib/components/Nedtrekk.svelte';
+
+	// Measured, so the side panel can stick just below the header whatever the
+	// header's height turns out to be on this screen.
+	let headerHeight = $state(0);
 	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
 	let { data, children }: { data: PatientLayoutData; children: Snippet } = $props();
@@ -101,6 +105,10 @@
 </script>
 
 {#if data.patient}
+	<!-- Banner and tabs stick together as one block. The banner alone was
+	     sticky, and the tab bar - with a higher z-index for its dropdowns -
+	     scrolled straight over it, one text on top of the other. -->
+	<div class="journalhode" bind:clientHeight={headerHeight}>
 	<div class="pasientbanner" class:nodrett={data.emergencyAccess}>
 		<strong>{data.patient.name}</strong>
 		<span class="mono">{data.patient.nationalIdMasked ?? ''}</span>
@@ -164,7 +172,9 @@
 		{/if}
 	</nav>
 
-	<div class="journalflate">
+	</div>
+
+	<div class="journalflate" style="--journalhode: {headerHeight}px">
 		<div class="journalinnhold">
 			{#if data.widePanel}
 				<!-- An app holding the wide place sits above the record's own content

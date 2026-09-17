@@ -237,11 +237,16 @@ tbody tr:hover { background: var(--flate-2); }
 .hoyre { text-align: right; }
 .tall { font-variant-numeric: tabular-nums; }
 
-/* Pasientbanner - alltid synlig når en journal er åpen */
-.pasientbanner {
+/* The record's header: banner and tabs, always in view while a record is open.
+   One sticky block rather than a sticky banner with the tabs scrolling past it -
+   the tabs carry a z-index for their dropdowns and were sliding over the name. */
+.journalhode {
 	position: sticky;
 	top: 0;
-	z-index: 20;
+	z-index: 40;
+	background: var(--bg);
+}
+.pasientbanner {
 	background: var(--primar-svak);
 	border-bottom: 2px solid var(--primar);
 	padding: 0.6rem 1.25rem;
@@ -254,7 +259,8 @@ tbody tr:hover { background: var(--flate-2); }
 .pasientbanner.nodrett { background: var(--fare-svak); border-bottom-color: var(--fare); }
 
 /* Fanerad */
-.faner { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--kant); margin-bottom: 1.15rem; flex-wrap: wrap; }
+.faner { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--kant); flex-wrap: wrap; background: var(--bg); }
+.journalhode + * { margin-top: 1.15rem; }
 .faner a {
 	padding: 0.5rem 0.85rem;
 	text-decoration: none;
@@ -301,7 +307,8 @@ main.bred { max-width: none; }
   padding: 0.55rem 0.15rem; border-bottom: 3px solid transparent;
 }
 .faner .fanelenke:hover, .faner .fanelenke[aria-expanded="true"] { color: var(--primar); }
-.hurtigpanel { position: sticky; top: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+/* Below the sticky header, by however tall the header is. */
+.hurtigpanel { position: sticky; top: calc(var(--journalhode, 0px) + 1rem); display: flex; flex-direction: column; gap: 1rem; }
 .hurtigpanel h2 { font-size: 1rem; margin-top: 0; }
 .hurtigpanel textarea { width: 100%; }
 .apppanel { padding-bottom: 0.6rem; }
