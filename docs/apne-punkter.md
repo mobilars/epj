@@ -18,6 +18,10 @@ om profilene skal tilpasses R5, eller om systemet skal ned til R4. Valget
 påvirker `searchparams.ts`, `validate.ts` og HAPI-konfigurasjonen, men ikke
 tilgangsmodellen.
 
+Delvis avlastet, men ikke avgjort: en R4-formet `DocumentReference` oversettes
+til R5 på vei inn, slik at apper som bare finnes i R4-utgave kan skrive til
+journalen. Lesing i R4-form er ikke tilbudt, og profilspørsmålet står igjen.
+
 ## Må verifiseres mot kilde
 
 ### Takstbeløp

@@ -278,17 +278,34 @@ verdt navnet:
 - Testet gjenoppretting. En sikkerhetskopi ingen har gjenopprettet fra er en
   antakelse.
 
-### 4.8 Vedlegg (Binary) med pasienttilknytning **[V]**
+### 4.7 Rader per virksomhet i databasen (RLS) **[N]**
 
-`Binary` ble tatt ut av de støttede ressurstypene i sikkerhetsgjennomgangen:
-typen har ingen `subject`, så tilgangskontrollen kunne ikke avgjøre hvilken
-pasient et vedlegg hørte til, og verken tjenstlig behov eller sperring lot seg
-håndheve. Se [sikkerhet.md](sikkerhet.md).
+Isolasjonen hviler i dag på at all kode filtrerer på `tenant_id`, og på at
+`krevTenant()` kaster når konteksten mangler. Det er testet
+(`tests/multitenancy.test.ts`), men det er fortsatt disiplin.
 
-Journalen har dermed ingen vei til skannede dokumenter, PDF-er og bilder. Skal
-den få det, må pasienten utledes fra den `DocumentReference` som peker på
-ressursen, og tilgangen vurderes mot den - ikke mot vedlegget selv. Det samme
-gjelder `Group`, som ble tatt ut av samme grunn.
+Row Level Security i PostgreSQL ville flyttet garantien til databasen. Det ble
+valgt bort fordi det krever å holde en tilkobling gjennom hele forespørselen,
+inkludert ventetid på SFM og NHN. Vurderingen bør tas opp igjen hvis
+tilkoblingsmodellen endres.
+
+### 4.8 Vedlegg (Binary) og grupper (Group) **[V]** - Binary gjort
+
+Begge ble tatt ut av de støttede ressurstypene i sikkerhetsgjennomgangen: ingen
+av dem har `subject`, så tilgangskontrollen kunne ikke avgjøre hvilken pasient
+ressursen hørte til, og verken tjenstlig behov eller sperring lot seg håndheve.
+Se [sikkerhet.md](sikkerhet.md).
+
+`Binary` er løst, men annerledes enn planlagt her. Pasienten *registreres* når
+vedlegget skrives - fra `Binary.securityContext`, ellers fra launch-konteksten -
+i tabellen `binary_patient`, i stedet for å utledes fra den `DocumentReference`
+som peker på ressursen. Det autoriserer også selve opplastingen, og et vedlegg
+ingen har gjort krav på kan ikke leses av noen. Søk i `Binary` er avvist for
+alle. Se punkt 6b.
+
+`Group` står fortsatt utenfor, og av samme grunn som før: medlemskapet i et
+kohortuttrekk kan selv være den følsomme opplysningen, og det finnes ingen
+tilsvarende eier å registrere ved skriving.
 
 ### 4.9 Gjenbruk av engangskoder **[N]**
 
@@ -304,17 +321,6 @@ trekker fra det som ble fjernet på siden. `total` kommer likevel fra HAPI, og
 kan dermed antyde at det finnes treff brukeren ikke får se. Å rette det krever
 enten at sperringen håndheves i selve spørringen, eller at `total` sløyfes når
 noe er filtrert bort.
-
-### 4.7 Rader per virksomhet i databasen (RLS) **[N]**
-
-Isolasjonen hviler i dag på at all kode filtrerer på `tenant_id`, og på at
-`krevTenant()` kaster når konteksten mangler. Det er testet
-(`tests/multitenancy.test.ts`), men det er fortsatt disiplin.
-
-Row Level Security i PostgreSQL ville flyttet garantien til databasen. Det ble
-valgt bort fordi det krever å holde en tilkobling gjennom hele forespørselen,
-inkludert ventetid på SFM og NHN. Vurderingen bør tas opp igjen hvis
-tilkoblingsmodellen endres.
 
 ---
 
@@ -442,6 +448,14 @@ Ikke gjort:
   vurdering.
 - **Utvikleren kan ikke prøve appen selv.** Det burde finnes et sandkassemiljø
   med syntetiske pasienter, slik at en app kan testes før den sendes inn.
+- ~~**Ingen API-dokumentasjon for apputviklere.**~~ Gjort: utviklerportalen har
+  en API-referanse som bygges fra journalens egne søkeparametere og kodeverk, og
+  derfor ikke kan love noe porten avviser.
+- ~~**Arbeidsflaten kunne ikke tilpasses.**~~ Gjort: virksomheten setter
+  standardoppsettet for arbeidsflaten og pasientoversikten under
+  `/admin/arbeidsflate`, og den enkelte ordner sitt eget under *Innstillinger*.
+  Den enkeltes valg går foran. Det som gjenstår er oppsett per rolle, og at bare
+  de to flatene kan settes - fanene og sidepanelet følger appkatalogen.
 - ~~**R4 mot R5.**~~ Gjort for skriving: en R4-formet `DocumentReference`
   (`context.encounter`, `authenticator`, `content.format`, `relatesTo.code`)
   oversettes til R5 på vei inn. Journalen lagrer og svarer R5. Lesing i
@@ -465,4 +479,7 @@ Ikke gjort:
 - Vedlegg i dialogmeldinger (PDF, bilder).
 - Flerspråklig grensesnitt. I dag bokmål; nynorsk og samisk er aktuelle.
 - Visning av hvem som er pålogget akkurat nå, for systemansvarlig.
-- «Åpne i ny fane» for SMART-apper med bevart pasientkontekst.
+- ~~«Åpne i ny fane» for SMART-apper med bevart pasientkontekst.~~ Gjort: en
+  app kan åpnes i eget vindu med pasienten i konteksten, og en virksomhet kan
+  gjøre det til appens faste visning for apper som trenger egne
+  informasjonskapsler.
