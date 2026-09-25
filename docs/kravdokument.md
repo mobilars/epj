@@ -78,6 +78,40 @@ _search`), og maskeres i sikkerhetsloggens søkestrenger.
 *Realisert:* `renseForLogg()` i `gateway.ts`, `maskerPersonnummer()`.
 *Testet:* `tests/gateway.test.ts`.
 
+**K-1.9 Journalnotatene skal kunne søkes i.**
+Søket leser alle pasientens notater gjennom vokteren, med tilgangskontroll og
+logging, og viser dem som inneholder alle søkeordene, med treffene markert.
+Det finnes ingen fritekstindeks over journalinnhold: en slik indeks ville vært
+en kopi av journalen som trengte samme vern som journalen selv. Søket stopper
+etter 2000 notater og sier fra om det.
+*Realisert:* `src/lib/server/journal/notesearch.ts`, `notater/+page.server.ts`.
+*Testet:* `tests/notesearch.test.ts`.
+
+**K-1.10 Et enkelt journalnotat skal kunne skrives ut.**
+Utskriften identifiserer virksomheten og pasienten med navn og fødselsnummer,
+viser forfatter, tidspunkt og versjon, og sier tydelig fra når notatet er
+feilført. Den blir svart på hvitt uten menyer, uansett tema på skjermen.
+Utskriften loggføres som utskrift og synes i pasientens innsynslogg.
+*Realisert:* `src/routes/pasienter/[id]/notater/[note]/utskrift/`.
+*Testet:* manuelt mot driftsmiljøet, september 2026.
+
+**K-1.11 Behandleren skal kunne bruke egne maler for journalnotater.**
+Malene er personlige og avgrenset til eier og virksomhet i hver spørring. De
+inneholder ikke pasientopplysninger og lagres utenfor journalen. Valg av mal
+virker uten JavaScript. Et notat som avvises, for eksempel for en ukjent
+diagnosekode, kommer tilbake uendret, slik at teksten ikke går tapt.
+*Realisert:* `src/lib/server/journal/templates.ts`, migrasjon `020_note_template.sql`.
+*Testet:* `tests/small-features.test.ts`.
+
+**K-1.12 Kontaktdiagnoser skal kodes etter ICPC-2 fra Helsedirektoratet.**
+Kodeverket er hentet fra Helsedirektoratets kodeverks-API, som ligger bak
+Finnkode, og følger med systemet. En kode som ikke finnes, eller som er et
+kapittel og ikke en diagnose, avvises. Navnet hentes fra kodeverket, aldri fra
+skjemaet. `CodeSystem/$lookup`, `$validate-code` og `ValueSet/$expand` svarer
+på journalens eget FHIR-endepunkt.
+*Realisert:* `src/lib/server/terminology/`.
+*Testet:* `tests/terminology.test.ts`.
+
 ## 2. Tilgangsstyring
 
 **K-2.1 Tilgang skal styres av rolle.**
@@ -168,6 +202,22 @@ utstedte tokens.
 *Realisert:* `settStatus()`, `tilbakekallForBruker()`.
 *Testet:* `tests/brukere.test.ts`, `tests/oauth.test.ts`.
 
+**K-3.8 HelseID-klienten skal følge NHNs sikkerhetsprofil.**
+Klientautentisering med `private_key_jwt` og PS256, PAR, PKCE og DPoP.
+Algoritmer HelseID ikke godtar, som RS256, stoppes ved oppstart. Helsepersonell
+logger inn på sikkerhetsnivå 4, og et token uten nivå avvises. Gjennomgått
+punkt for punkt mot SK1–SK10 og SB1–SB6; se [åpne punkter](apne-punkter.md).
+*Realisert:* `src/lib/server/auth/helseid.ts`, `config.ts`.
+*Testet:* `tests/helseid-level.test.ts`.
+
+**K-3.9 Systemansvarlig skal kunne se hvem som er pålogget, og avslutte økter.**
+Oversikten viser de øktene sesjonskontrollen fortsatt ville godtatt, med
+påloggingsmetode, siste aktivitet og enhet. En økt som avsluttes, avvises ved
+brukerens neste klikk. Avslutningen loggføres med navnet hentet fra databasen,
+ikke fra skjemaet.
+*Realisert:* `src/routes/admin/palogget/`, `src/lib/server/auth/activesessions.ts`.
+*Testet:* `tests/small-features.test.ts`.
+
 ## 4. API og tredjepartsapper
 
 **K-4.1 All funksjonalitet skal være tilgjengelig gjennom API-et.**
@@ -219,6 +269,49 @@ Feil returneres som `OperationOutcome`. Interne detaljer logges på serveren;
 klienten får en korrelasjons-id.
 *Realisert:* `outcome.ts`, `handleError` i `hooks.server.ts`.
 *Testet:* `e2e/smart.spec.ts`.
+
+**K-4.9 Beslutningsstøtte skal kunne kobles til gjennom CDS Hooks.**
+CDS Hooks 2.0 med `patient-view`, `medication-prescribe` og `order-sign`.
+`medication-prescribe` holder resepten tilbake til behandleren har sett
+kortene. Hver virksomhet har sitt eget tjenesteregister. Hvert kall er signert
+med virksomhetens nøkkel, og journalens egne tjenester krever signaturen. Et
+forslag kan bare *opprette* ressurser om pasienten kortet gjelder, og skrives
+gjennom vanlig tilgangskontroll. Journalen sender tilbakemelding om forslag som
+er godtatt eller overstyrt. Fire egne tjenester følger med: kritisk informasjon,
+manglende målinger, kalkulatorer (eGFR og KMI) og en interaksjonssjekk som er
+merket som demonstrasjon. Se [cds-hooks.md](cds-hooks.md).
+*Realisert:* `src/lib/server/cds/`, `src/routes/cds-services/`.
+*Testet:* `tests/cds.test.ts`.
+
+**K-4.10 Apper skal være en del av journalen, ikke et vindu ved siden av den.**
+Virksomheten kan gi en app egen fane, plass på den store flaten eller i
+sidepanelet, eller en plass i hovedmenyen uten pasient. En app kan vises i
+ramme, i eget vindu, eller i ramme etter pålogging i eget vindu. Avinstallering
+sperrer klienten og trekker tilbake tokenene. Trekker plattformen tilbake en
+godkjenning, sperres alle installasjoner i alle virksomheter.
+*Realisert:* `src/routes/admin/apper/`, `src/lib/server/auth/clients.ts`, `launchmode.ts`.
+*Testet:* `tests/launchmode.test.ts`, `tests/catalogue.test.ts`.
+
+**K-4.11 Apper skal kunne lagre vedlegg knyttet til pasienten.**
+`Binary` har ingen pasientreferanse. Pasienten registreres derfor når vedlegget
+skrives, fra launch-konteksten eller `Binary.securityContext`, og tilgangen
+vurderes mot den. Et vedlegg ingen har gjort krav på, kan ikke leses av noen.
+Søk i `Binary` avvises.
+*Realisert:* `src/lib/server/fhir/binary.ts`, migrasjon `017_binary_patient.sql`.
+*Testet:* `tests/gateway.test.ts`, `tests/access.test.ts`.
+
+**K-4.12 Apper skrevet mot R4 skal kunne skrive til journalen.**
+De fleste norske systemer og SMART-apper bruker R4. En R4-formet
+`DocumentReference` oversettes til R5 ved skriving. Journalen lagrer og svarer
+R5; lesing i R4-form tilbys ikke.
+*Realisert:* `src/lib/server/fhir/r4.ts`.
+*Testet:* `tests/r4.test.ts`.
+
+**K-4.13 Utviklere skal ha API-dokumentasjon som stemmer med systemet.**
+Utviklerportalen har en API-referanse bygget fra de søkeparameterne og
+kodeverkene journalen faktisk støtter. Den kan dermed ikke love noe vokteren
+avviser.
+*Realisert:* `src/routes/utvikler/api/`.
 
 ## 5. Sikkerhetslogg
 
@@ -472,19 +565,44 @@ Grensesnittet er bare tilgjengelig på plattformens eget vertsnavn.
 *Realisert:* [installasjon-docker.md](installasjon-docker.md),
 [installasjon-kubernetes.md](installasjon-kubernetes.md), `deploy/kubernetes/`.
 
+## 11. Arbeidsflate og brukervennlighet
+
+**K-11.1 Arbeidsflaten og pasientoversikten skal kunne tilpasses.**
+Virksomheten bestemmer standardoppsettet, og den enkelte kan ordne sitt eget.
+Den enkeltes valg går foran. Kort som ikke lenger finnes, ignoreres, og et
+oppsett uten kort godtas ikke.
+*Realisert:* `src/lib/server/workspace/layout.ts`, `/admin/arbeidsflate`, `/innstillinger`.
+*Testet:* `tests/layout.test.ts`.
+
+**K-11.2 Grensesnittet skal kunne brukes i mørkt tema, med tilstrekkelig kontrast.**
+Brukeren velger lyst, mørkt eller som maskinen er innstilt. Tekst på fylte
+knapper og i toppmenyen har minst 4,5:1 i kontrast i begge temaene. Valget
+skrives inn i siden på serveren, så skjermen ikke blinker hvit først.
+*Realisert:* `src/lib/styles/app.css`, `src/hooks.server.ts`.
+*Testet:* `tests/small-features.test.ts`.
+
+**K-11.3 Vanlige handlinger skal kunne gjøres fra tastaturet.**
+`/` søker, `?` viser hurtigtastene, `g` fulgt av en bokstav går til en side, og
+`n` starter et notat i journalen som er åpen. Hurtigtastene virker aldri mens
+markøren står i et felt. De kan slås av, slik WCAG 2.1.4 krever for
+enkelttegns-snarveier.
+*Realisert:* `src/lib/components/Shortcuts.svelte`.
+*Testet:* manuelt mot driftsmiljøet, september 2026.
+
 ---
 
 ## Sporing
 
 | Område | Krav | Enhetstester | Ende-til-ende |
 | --- | --- | --- | --- |
-| Journal og dokumentasjon | K-1.1 – K-1.8 | `kodeverk`, `fhir-validering`, `gateway` | `journal.spec.ts` |
+| Journal og dokumentasjon | K-1.1 – K-1.12 | `kodeverk`, `fhir-validering`, `gateway`, `notesearch`, `terminology`, `small-features` | `journal.spec.ts` |
 | Tilgangsstyring | K-2.1 – K-2.7 | `tilgang`, `scopes`, `brukere` | `tilgang.spec.ts` |
-| Autentisering | K-3.1 – K-3.7 | `brukere`, `totp`, `crypto`, `jws` | `palogging.spec.ts` |
-| API og apper | K-4.1 – K-4.8 | `oauth`, `scopes`, `gateway` | `smart.spec.ts` |
+| Autentisering | K-3.1 – K-3.9 | `brukere`, `totp`, `crypto`, `jws`, `helseid-level`, `small-features` | `palogging.spec.ts` |
+| API og apper | K-4.1 – K-4.13 | `oauth`, `scopes`, `gateway`, `cds`, `launchmode`, `r4` | `smart.spec.ts` |
 | Sikkerhetslogg | K-5.1 – K-5.5 | `audit` | `tilgang.spec.ts` |
 | Retting, sletting og innsyn | K-6.1 – K-6.8 | `utlevering` | `utlevering.spec.ts` |
 | Legemidler | K-7.1 – K-7.4 | `integrasjoner` | `journal.spec.ts` |
 | Meldinger | K-8.1 – K-8.5 | `xml-meldinger`, `integrasjoner` | — |
 | Oppgjør | K-9.1 – K-9.5 | `takster`, `integrasjoner` | `oppgjor.spec.ts` |
 | Multitenancy | K-10.11 – K-10.17 | `multitenancy` | — |
+| Arbeidsflate og brukervennlighet | K-11.1 – K-11.3 | `layout`, `small-features` | — |

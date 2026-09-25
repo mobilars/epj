@@ -248,8 +248,8 @@ Rettet i tre lag:
 
 `Binary` ble senere sluppet inn igjen på en annen måte: eieren *registreres*
 ved skriving i tabellen `binary_patient`, og et vedlegg ingen har gjort krav på
-kan ikke leses av noen. `Group` står fortsatt utenfor. Se
-[todo.md](todo.md) punkt 4.8.
+kan ikke leses av noen. Se [kravdokument.md](kravdokument.md) K-4.11. `Group`
+står fortsatt utenfor; se [todo.md](todo.md) punkt 4.8.
 
 Punkt 1 er en strukturell sperre, ikke en liste: en ny ressurstype uten
 pasientreferanse blir avvist inntil noen har tatt stilling til den. En test i

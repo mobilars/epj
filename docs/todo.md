@@ -7,6 +7,10 @@ pasientopplysninger, og det som gjør det til et bedre journalsystem.
 Ting som må *avklares eller verifiseres mot en kilde* står i
 [apne-punkter.md](apne-punkter.md). Denne listen er om arbeid som skal *gjøres*.
 
+Det som er bygget, står i [kravdokument.md](kravdokument.md), med begrunnelse
+og hvor det er testet. Når noe her blir gjort, flyttes det dit og tas ut av
+denne listen, i stedet for å bli stående overstrøket.
+
 Merking:
 
 - **[K]** Kritisk før klinisk bruk. Uten dette skal systemet ikke ta imot ekte
@@ -152,30 +156,15 @@ implementert. Begge krever avtale og godkjenning fra Norsk helsenett.
 
 ### 3.4 Flere meldingstyper **[N]**
 
-Bygget: dialogmelding, henvisning, epikrise, applikasjonskvittering. Ikke
-bygget: rekvisisjon og svarrapport for lab og radiologi (utover mottak),
-pleie- og omsorgsmeldinger (PLO), fødselsepikrise, og melding om
+Dialogmelding, henvisning, epikrise og applikasjonskvittering er bygget
+(K-8.1). Mangler: rekvisisjon og svarrapport for lab og radiologi (utover
+mottak), pleie- og omsorgsmeldinger (PLO), fødselsepikrise, og melding om
 legemiddelutlevering.
 
 ### 3.5 CDS Hooks: flere kroker, og en ekte kilde **[N]**
 
-Bygget: `patient-view`, `medication-prescribe` (fyrer før resepten sendes, og
-holder den tilbake til behandleren har sett kortene) og `order-sign` (etter
-signering). Tjenesteregister per virksomhet, kort på pasientens forside, og
-fire egne tjenester (`kritisk-informasjon`, `manglende-maalinger`,
-`kalkulatorer`, `interaksjonssjekk`). Se [cds-hooks.md](cds-hooks.md).
-
-- ~~**Signerte forespørsler.**~~ Gjort. Hvert kall bærer et JWT signert med
-  virksomhetens nøkkel; journalens egne tjenester krever det. Før dette svarte
-  de hvem som helst som fant adressen.
-- ~~**Suggestions.**~~ Gjort, i den trygge delen: et forslag kan bare *opprette*
-  ressurser om pasienten kortet gjaldt, og trykket er behandlerens skriving
-  gjennom vanlig tilgangskontroll. `update`/`delete` avvises.
-  `system-actions` er bevisst ikke bygget — det er en skriving uten et trykk.
-- ~~**Tilbakemelding (2.0).**~~ Gjort. Journalen sender `accepted`/`overridden`,
-  og egne tjenester tar imot.
-
-Ikke bygget:
+Det som er bygget, står i [kravdokument.md](kravdokument.md) K-4.9 og i
+[cds-hooks.md](cds-hooks.md). Gjenstår:
 
 - **`order-select` og `appointment-book`** — det finnes ennå ingen bestilling
   eller timebok å henge dem på. Se 2.1.
@@ -186,6 +175,9 @@ Ikke bygget:
   tre oppføringer og er merket som demonstrasjon i koden. Et råd som ser
   autoritativt ut uten å være det, er verre enn ingen råd: tausheten blir lest
   som en bekreftelse.
+
+`system-actions` er bevisst ikke bygget: det er en skriving i journalen uten at
+noen har trykket på noe.
 
 <https://cds-hooks.hl7.org/>
 
@@ -289,23 +281,16 @@ valgt bort fordi det krever å holde en tilkobling gjennom hele forespørselen,
 inkludert ventetid på SFM og NHN. Vurderingen bør tas opp igjen hvis
 tilkoblingsmodellen endres.
 
-### 4.8 Vedlegg (Binary) og grupper (Group) **[V]** - Binary gjort
+### 4.8 Grupper (Group) uten pasienttilknytning **[N]**
 
-Begge ble tatt ut av de støttede ressurstypene i sikkerhetsgjennomgangen: ingen
-av dem har `subject`, så tilgangskontrollen kunne ikke avgjøre hvilken pasient
-ressursen hørte til, og verken tjenstlig behov eller sperring lot seg håndheve.
-Se [sikkerhet.md](sikkerhet.md).
+`Group` ble tatt ut av de støttede ressurstypene i sikkerhetsgjennomgangen.
+Typen har ingen `subject`, så tilgangskontrollen kan ikke avgjøre hvilke
+pasienter en gruppe gjelder, og medlemskapet i et kohortuttrekk kan selv være
+den følsomme opplysningen. Se [sikkerhet.md](sikkerhet.md).
 
-`Binary` er løst, men annerledes enn planlagt her. Pasienten *registreres* når
-vedlegget skrives - fra `Binary.securityContext`, ellers fra launch-konteksten -
-i tabellen `binary_patient`, i stedet for å utledes fra den `DocumentReference`
-som peker på ressursen. Det autoriserer også selve opplastingen, og et vedlegg
-ingen har gjort krav på kan ikke leses av noen. Søk i `Binary` er avvist for
-alle. Se punkt 6b.
-
-`Group` står fortsatt utenfor, og av samme grunn som før: medlemskapet i et
-kohortuttrekk kan selv være den følsomme opplysningen, og det finnes ingen
-tilsvarende eier å registrere ved skriving.
+`Binary` hadde samme problem, og er løst ved at pasienten registreres når
+vedlegget skrives (K-4.11). For `Group` finnes det ingen tilsvarende eier å
+registrere, så den trenger en egen vurdering før den slippes inn.
 
 ### 4.9 Gjenbruk av engangskoder **[N]**
 
@@ -332,14 +317,11 @@ Profilaget er skilt ut i `src/lib/server/fhir/`, men no-basis-profilene er ikke
 lagt inn. De er publisert for R4; systemet bruker R5. Se
 [apne-punkter.md](apne-punkter.md).
 
-Gjort på kodeverkssiden: ICPC-2 (norsk utgave, fra Helsedirektoratets
-kodeverks-API bak Finnkode) er bundlet, med `CodeSystem/$lookup`,
-`$validate-code` og `ValueSet/$expand` på journalens eget endepunkt.
-Diagnoser avvises hvis koden ikke finnes, og føres under kodeverkets navn.
-ICD-10 (21 530 koder) og NCMP/NCSP ligger i samme API og kan bundles på samme
-måte; SNOMED CT norsk utgave svares av Helsedirektoratets Snowstorm
-(`snowstorm.terminologi.helsedirektoratet.no/fhir`) og bør heller
-proxyes enn bundles.
+ICPC-2 er på plass (K-1.12). ICD-10 (21 530 koder) og NCMP/NCSP ligger i det
+samme API-et hos Helsedirektoratet og kan legges inn på samme måte. SNOMED CT
+norsk utgave svares av Helsedirektoratets Snowstorm
+(`snowstorm.terminologi.helsedirektoratet.no/fhir`) og bør heller proxyes enn
+legges inn.
 
 ### 5.2 Full `$validate` mot profiler **[N]**
 
@@ -360,10 +342,7 @@ endringer i stedet for å spørre gjentatte ganger.
 
 ### 5.5 SMART on FHIR: gjenstående deler **[N]**
 
-Implementert: App Launch v2 med v1-kompatibilitet, EHR- og standalone launch,
-Backend Services med `private_key_jwt`, `.well-known/smart-configuration`.
-
-Ikke implementert: `smart-app-state` (appers lagring av tilstand), SMART Web
+Det som er bygget, står i K-4.2 og K-4.6. Ikke implementert: `smart-app-state` (appers lagring av tilstand), SMART Web
 Messaging, og Token Introspection for eksterne ressursservere. Kontroller også
 implementasjonsguiden fra Helsenorge punkt for punkt; se
 [smart-on-fhir.md](smart-on-fhir.md).
@@ -429,57 +408,27 @@ En test som starter bildet med manifestets miljø og sjekker
 
 ## 6b. Apper og plattform
 
-Journalen er delt opp i apper: notatfeltet, legemiddellisten og kritisk
-informasjon er SMART-apper, ikke sider journalen selv eier. En app kan ta over
-en fane, ligge i sidepanelet eller på den store flaten, og en virksomhet kan
-bytte den ut uten at vi slipper en ny versjon.
-
-Ikke gjort:
+Det som er bygget, står i K-4.9 til K-4.13. Gjenstår:
 
 - **Versjonering av kataloginnslag.** Endrer en utvikler en godkjent app, går
   den til vurdering på nytt — men virksomheter som allerede har installert den,
   får ingen beskjed om at det finnes en nyere utgave.
-- ~~**Avinstallering fjerner ikke klienten.**~~ Gjort: avinstallering sperrer
-  klienten og trekker tilbake tokenene. Trekker plattformen tilbake en
-  godkjenning, sperres alle installerte klienter i alle virksomheter samtidig,
-  og galleriet viser begrunnelsen til de som hadde appen.
 - **Ingen apper med bakgrunnstilgang i katalogen.** Alt i katalogen er
   offentlige klienter med PKCE. En backend-tjeneste trenger nøkler og en annen
   vurdering.
 - **Utvikleren kan ikke prøve appen selv.** Det burde finnes et sandkassemiljø
   med syntetiske pasienter, slik at en app kan testes før den sendes inn.
-- ~~**Ingen API-dokumentasjon for apputviklere.**~~ Gjort: utviklerportalen har
-  en API-referanse som bygges fra journalens egne søkeparametere og kodeverk, og
-  derfor ikke kan love noe porten avviser.
-- ~~**Arbeidsflaten kunne ikke tilpasses.**~~ Gjort: virksomheten setter
-  standardoppsettet for arbeidsflaten og pasientoversikten under
-  `/admin/arbeidsflate`, og den enkelte ordner sitt eget under *Innstillinger*.
-  Den enkeltes valg går foran. Det som gjenstår er oppsett per rolle, og at bare
-  de to flatene kan settes - fanene og sidepanelet følger appkatalogen.
-- ~~**R4 mot R5.**~~ Gjort for skriving: en R4-formet `DocumentReference`
-  (`context.encounter`, `authenticator`, `content.format`, `relatesTo.code`)
-  oversettes til R5 på vei inn. Journalen lagrer og svarer R5. Lesing i
-  R4-form er ikke tilbudt.
-- ~~**`Binary` er ikke eksponert.**~~ Gjort, men annerledes enn planlagt:
-  pasienten *registreres* når vedlegget skrives (fra launch-konteksten eller
-  `Binary.securityContext`), i `binary_patient`, i stedet for å utledes fra
-  `DocumentReference` — det kan også autorisere selve opplastingen, og et
-  vedlegg ingen har gjort krav på kan ikke leses av noen. Søk i `Binary` er
-  avvist for alle.
+- **Pålogging i eget vindu før ramme virket ikke med Spirare.** Visningsmåten
+  er bygget, men den fungerte ikke da den ble prøvd med Spirare i september
+  2026, og årsaken er ikke undersøkt. Den varige løsningen er uansett at en app
+  som startes med SMART-launch, ikke krever en egen HelseID-pålogging i
+  tillegg.
 
 ## 7. Mindre ting
 
-- Søk i journalnotater. I dag kan man bla, ikke søke i tekst.
-- Utskrift av enkeltnotat. Journalutleveringen tar hele journalen eller en
-  periode; noen ganger trengs bare ett notat.
-- Maler for journalnotater per behandler.
-- Hurtigtaster i journalen.
-- Mørk drakt. Fargevariablene er på plass i `app.css`, men ikke ferdigstilt.
 - Eksport av regningskort til regnskapssystem (SAF-T).
 - Vedlegg i dialogmeldinger (PDF, bilder).
 - Flerspråklig grensesnitt. I dag bokmål; nynorsk og samisk er aktuelle.
-- Visning av hvem som er pålogget akkurat nå, for systemansvarlig.
-- ~~«Åpne i ny fane» for SMART-apper med bevart pasientkontekst.~~ Gjort: en
-  app kan åpnes i eget vindu med pasienten i konteksten, og en virksomhet kan
-  gjøre det til appens faste visning for apper som trenger egne
-  informasjonskapsler.
+- Oppsett av arbeidsflaten per rolle. I dag settes det per virksomhet og per
+  person, og bare for arbeidsflaten og pasientoversikten.
+- Notatmaler som deles i virksomheten. I dag er malene personlige.
