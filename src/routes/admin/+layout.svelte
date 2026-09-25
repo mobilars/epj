@@ -7,6 +7,7 @@
 		[
 			{ href: '/admin', text: 'Oversikt', show: true },
 			{ href: '/admin/brukere', text: 'Brukere og roller', show: data.canUsers },
+			{ href: '/admin/palogget', text: 'Pålogget nå', show: data.canUsers || data.canSystem },
 			{ href: '/admin/apper', text: 'SMART-apper', show: data.canApper },
 			{ href: '/admin/arbeidsflate', text: 'Arbeidsflate', show: data.canSystem },
 			{ href: '/admin/logg', text: 'Sikkerhetslogg', show: data.canLog }
