@@ -3,6 +3,7 @@ import { config } from '$srv/config';
 import { ROLE_DEFINISJONER } from '$srv/authz/roles';
 import { listClients } from '$srv/auth/clients';
 import { recentPatients } from '$srv/journal/recent';
+import { SETTING, getSetting } from '$srv/auth/settings';
 
 /** Data shared by the whole application: who is signed in, and in which environment. */
 export const load: LayoutServerLoad = async (event) => {
@@ -36,9 +37,13 @@ export const load: LayoutServerLoad = async (event) => {
 	 */
 	const recent = ctx?.userId && ctx.permissions.has('journal:les') ? await recentPatients(ctx) : [];
 
+	// On unless the user has turned them off.
+	const shortcuts = ctx?.userId ? (await getSetting(ctx.userId, SETTING.SHORTCUTS)) !== 'off' : false;
+
 	return {
 		apps,
 		recentPatients: recent,
+		shortcuts,
 		user: ctx
 			? {
 					name: ctx.name,

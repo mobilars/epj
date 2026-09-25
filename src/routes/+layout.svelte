@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Nedtrekk from '$lib/components/Nedtrekk.svelte';
+	import Shortcuts from '$lib/components/Shortcuts.svelte';
 	import '$lib/styles/app.css';
 	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
@@ -14,6 +15,7 @@
 			miljo: Miljo;
 			apps: MenuApp[];
 			recentPatients: { id: string; name: string; age: number | null }[];
+			shortcuts: boolean;
 		};
 		children: Snippet;
 	} = $props();
@@ -149,5 +151,9 @@
 		<span>© 2026 APUS Roland AS</span>
 		<span aria-hidden="true">·</span>
 		<a href="/kildekode">Fri programvare (AGPL v3) — hent kildekoden</a>
+		{#if data.user && data.shortcuts}
+			<span aria-hidden="true">·</span>
+			<Shortcuts />
+		{/if}
 	</footer>
 </div>

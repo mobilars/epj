@@ -8,7 +8,7 @@
 	<div class="rad">
 		<div style="flex: 1 1 320px">
 			<label for="sok">Søk på navn eller fødselsnummer</label>
-			<input id="sok" name="sok" value={data.search} placeholder="Hansen, eller 11 siffer" autocomplete="off" />
+			<input id="sok" name="sok" value={data.search} placeholder="Hansen, eller 11 siffer" autocomplete="off" data-shortcut-search />
 		</div>
 		<button type="submit" class="primar" style="align-self: flex-end">Søk</button>
 	</div>

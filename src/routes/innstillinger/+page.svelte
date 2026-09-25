@@ -8,6 +8,44 @@
 {#if form?.error}<div class="varsel varsel-feil" role="alert">{form.error}</div>{/if}
 
 <section class="kort">
+	<h2>Utseende</h2>
+	<form method="POST" action="?/theme">
+		<fieldset class="temavalg">
+			<legend>Fargetema</legend>
+			<label class="avkryssing">
+				<input type="radio" name="tema" value="system" checked={data.theme === 'system'} />
+				Som maskinen er innstilt
+			</label>
+			<label class="avkryssing">
+				<input type="radio" name="tema" value="light" checked={data.theme === 'light'} />
+				Lyst
+			</label>
+			<label class="avkryssing">
+				<input type="radio" name="tema" value="dark" checked={data.theme === 'dark'} />
+				Mørkt
+			</label>
+		</fieldset>
+		<p class="svak">Utskrifter blir alltid svart på hvitt.</p>
+		<button type="submit" class="liten primar">Lagre</button>
+	</form>
+</section>
+
+<section class="kort">
+	<h2>Hurtigtaster</h2>
+	<p class="svak">
+		Enkeltaster som <kbd>/</kbd> for søk og <kbd>n</kbd> for nytt notat. Trykk <kbd>?</kbd> for å se alle.
+		Slå dem av hvis du bruker talestyring eller får dem ved et uhell.
+	</p>
+	<form method="POST" action="?/shortcuts">
+		<label class="avkryssing">
+			<input type="checkbox" name="hurtigtaster" value="ja" checked={data.shortcuts} />
+			Bruk hurtigtaster
+		</label>
+		<button type="submit" class="liten primar">Lagre</button>
+	</form>
+</section>
+
+<section class="kort">
 	<h2>Arbeidsflaten</h2>
 	<p class="svak">
 		Kortene du møter når du logger inn. Virksomheten har et oppsett for alle; her ordner du

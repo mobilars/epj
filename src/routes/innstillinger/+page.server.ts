@@ -1,7 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { clientAtPlacement, listClients } from '$srv/auth/clients';
-import { SETTING, clearSetting, getSetting, setSetting } from '$srv/auth/settings';
+import { SETTING, clearSetting, getSetting, isTheme, setSetting } from '$srv/auth/settings';
 import { CARDS, layoutFromForm, resolveLayout, saveUserLayout, type Surface } from '$srv/workspace/layout';
 
 const SURFACES: Surface[] = ['arbeidsflate', 'pasientoversikt'];
@@ -18,15 +18,19 @@ export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx?.userId) redirect(303, `/logg-inn?retur=${encodeURIComponent(event.url.pathname)}`);
 
-	const [apps, standard, chosen, arbeidsflate, pasientoversikt] = await Promise.all([
+	const [apps, standard, chosen, arbeidsflate, pasientoversikt, theme, shortcuts] = await Promise.all([
 		listClients(),
 		clientAtPlacement('side'),
 		getSetting(ctx.userId, SETTING.SIDE_APP),
 		resolveLayout('arbeidsflate', ctx.userId),
-		resolveLayout('pasientoversikt', ctx.userId)
+		resolveLayout('pasientoversikt', ctx.userId),
+		getSetting(ctx.userId, SETTING.THEME),
+		getSetting(ctx.userId, SETTING.SHORTCUTS)
 	]);
 
 	return {
+		theme: isTheme(theme) ? theme : 'system',
+		shortcuts: shortcuts !== 'off',
 		// Which cards each surface shows, and where the arrangement came from.
 		layouts: {
 			arbeidsflate: { ...arbeidsflate, cards: CARDS.arbeidsflate, chosen: arbeidsflate.cards },
@@ -41,6 +45,27 @@ export const load: PageServerLoad = async (event) => {
 };
 
 export const actions: Actions = {
+	/** Light, dark, or whatever the operating system says. */
+	theme: async (event) => {
+		const ctx = event.locals.auth;
+		if (!ctx?.userId) redirect(303, '/logg-inn');
+		const form = await event.request.formData();
+		const value = form.get('tema');
+		if (isTheme(value)) await setSetting(ctx.userId, SETTING.THEME, value);
+		else await clearSetting(ctx.userId, SETTING.THEME);
+		redirect(303, '/innstillinger');
+	},
+
+	/** Single-key shortcuts on or off. */
+	shortcuts: async (event) => {
+		const ctx = event.locals.auth;
+		if (!ctx?.userId) redirect(303, '/logg-inn');
+		const form = await event.request.formData();
+		if (form.get('hurtigtaster') === 'ja') await clearSetting(ctx.userId, SETTING.SHORTCUTS);
+		else await setSetting(ctx.userId, SETTING.SHORTCUTS, 'off');
+		redirect(303, '/innstillinger');
+	},
+
 	sidepanel: async (event) => {
 		const ctx = event.locals.auth;
 		if (!ctx?.userId) redirect(303, '/logg-inn');

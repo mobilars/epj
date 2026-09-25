@@ -12,8 +12,29 @@ import { requireTenant } from '../tenant/context';
 
 export const SETTING = {
 	/** Client id of the app in the narrow panel, or the record's own note editor. */
-	SIDE_APP: 'sidepanel-app'
+	SIDE_APP: 'sidepanel-app',
+	/** `light` or `dark`. Absent means follow the operating system. */
+	THEME: 'theme',
+	/** `off` turns the single-key shortcuts off (WCAG 2.1.4). Absent means on. */
+	SHORTCUTS: 'shortcuts'
 } as const;
+
+export type Theme = 'light' | 'dark';
+
+export const isTheme = (value: unknown): value is Theme => value === 'light' || value === 'dark';
+
+/**
+ * The value the page's `data-tema` attribute takes for a stored theme.
+ *
+ * The attribute's values were set by the stylesheet before this setting
+ * existed, so the mapping lives in one place rather than the stored value
+ * being chosen to match them.
+ */
+export function themeAttribute(theme: string | null): 'lys' | 'mork' | null {
+	if (theme === 'dark') return 'mork';
+	if (theme === 'light') return 'lys';
+	return null;
+}
 
 export async function getSetting(userId: string, key: string): Promise<string | null> {
 	const row = await one<{ value: string }>(

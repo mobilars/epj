@@ -23,6 +23,15 @@
 	--advarsel-svak: #fdf3e0;
 	--ok: #14682f;
 	--ok-svak: #e6f4ea;
+	/* Text on a filled button, and the masthead. White on the light theme's dark
+	   blue and red; on the dark theme those fills turn light, and white on them
+	   drops to about 2.5:1 - so these change with the theme instead of being
+	   written as #fff wherever a button is. */
+	--on-primary: #ffffff;
+	--on-danger: #ffffff;
+	--masthead: #0d3a5c;
+	--masthead-text: #ffffff;
+	color-scheme: light;
 	--radius: 6px;
 	--skygge: 0 1px 2px rgb(20 24 29 / 8%), 0 2px 8px rgb(20 24 29 / 6%);
 	--font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -47,7 +56,44 @@
 		--advarsel-svak: #302614;
 		--ok: #6cc78a;
 		--ok-svak: #16291c;
+		/* 6.9:1 on --primar and 7.6:1 on --fare, where white managed 2.5 and 2.3. */
+		--on-primary: #0b1a26;
+		--on-danger: #2a0a0c;
+		/* The masthead stays dark: --primar-mork turns light here, and a light
+		   masthead with light text was about 2:1. */
+		--masthead: #0e2a40;
+		--masthead-text: #e8ecf1;
+		color-scheme: dark;
 	}
+}
+
+/* Chosen under Innstillinger regardless of the system setting. The same values
+   as the block above - keep the two in step. */
+:root[data-tema='mork'] {
+	--bg: #12161b;
+	--flate: #1a2027;
+	--flate-2: #222a33;
+	--kant: #333d49;
+	--kant-sterk: #4a5764;
+	--tekst: #e8ecf1;
+	--tekst-svak: #a0acba;
+	--primar: #5aa9e6;
+	--primar-mork: #7cbdf0;
+	--primar-svak: #16283a;
+	--fare: #f08a8f;
+	--fare-svak: #33191b;
+	--advarsel: #e0b060;
+	--advarsel-svak: #302614;
+	--ok: #6cc78a;
+	--ok-svak: #16291c;
+	/* 6.9:1 on --primar and 7.6:1 on --fare, where white managed 2.5 and 2.3. */
+	--on-primary: #0b1a26;
+	--on-danger: #2a0a0c;
+	/* The masthead stays dark: --primar-mork turns light here, and a light
+	   masthead with light text was about 2:1. */
+	--masthead: #0e2a40;
+	--masthead-text: #e8ecf1;
+	color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -135,14 +181,14 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 .knapp-primar, button.primar {
 	background: var(--primar);
 	border-color: var(--primar);
-	color: #fff;
+	color: var(--on-primary);
 }
-.knapp-primar:hover, button.primar:hover { background: var(--primar-mork); border-color: var(--primar-mork); color: #fff; }
+.knapp-primar:hover, button.primar:hover { background: var(--primar-mork); border-color: var(--primar-mork); color: var(--on-primary); }
 
 button.fare, .knapp-fare {
 	background: var(--fare);
 	border-color: var(--fare);
-	color: #fff;
+	color: var(--on-danger);
 }
 button.diskret { border-color: transparent; background: transparent; }
 button.diskret:hover { background: var(--flate-2); }
@@ -277,8 +323,8 @@ tbody tr:hover { background: var(--flate-2); }
 /* Applikasjonsramme */
 .app { min-height: 100vh; display: flex; flex-direction: column; }
 .topplinje {
-	background: var(--primar-mork);
-	color: #fff;
+	background: var(--masthead);
+	color: var(--masthead-text);
 	padding: 0.55rem 1.25rem;
 	display: flex;
 	gap: 1.25rem;
@@ -290,8 +336,8 @@ tbody tr:hover { background: var(--flate-2); }
 	position: relative;
 	z-index: 60;
 }
-.topplinje a { color: #fff; text-decoration: none; font-weight: 500; padding: 0.3rem 0.5rem; border-radius: 4px; }
-.topplinje a:hover, .topplinje a[aria-current='page'] { background: rgb(255 255 255 / 15%); color: #fff; }
+.topplinje a { color: var(--masthead-text); text-decoration: none; font-weight: 500; padding: 0.3rem 0.5rem; border-radius: 4px; }
+.topplinje a:hover, .topplinje a[aria-current='page'] { background: rgb(255 255 255 / 15%); color: var(--masthead-text); }
 .topplinje .merkenavn { font-weight: 700; letter-spacing: 0.02em; font-size: 1.05rem; }
 .topplinje .hoyre-del { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem; }
 
@@ -332,7 +378,7 @@ main.bred { max-width: none; }
 .menyskjema { display: inline; }
 .topplinje .menylenke,
 .nedtrekk-panel .menylenke {
-  background: none; border: none; color: #fff; font: inherit; font-weight: 500;
+  background: none; border: none; color: var(--masthead-text); font: inherit; font-weight: 500;
   padding: 0.3rem 0.5rem; border-radius: 4px; cursor: pointer;
 }
 .topplinje .menylenke:hover, .topplinje .menylenke[aria-expanded='true'] { background: rgb(255 255 255 / 15%); }
@@ -422,7 +468,7 @@ main.bred { max-width: none; }
 .forsidetopp { margin-bottom: 1.25rem; }
 .forsidetopp .merkenavn {
   display: inline-block; font-weight: 700; letter-spacing: 0.08em; font-size: 0.78rem;
-  color: #fff; background: var(--primar); padding: 0.15rem 0.5rem; border-radius: 4px;
+  color: var(--on-primary); background: var(--primar); padding: 0.15rem 0.5rem; border-radius: 4px;
   margin-bottom: 0.6rem;
 }
 .forsidetopp h1 { margin: 0 0 0.15rem; font-size: 1.6rem; letter-spacing: -0.02em; }
@@ -465,4 +511,63 @@ main.bred { max-width: none; }
 
 .bunntekst a {
 	color: inherit;
+}
+
+/* --------------------------------------------------------------------------
+   Print.
+
+   A printout is a document about a patient, not a picture of the screen: no
+   menus, no tabs, no side panel, no buttons, and black on white whatever theme
+   the screen was in. `.kun-skjerm` marks anything else that is for the screen
+   only.
+   -------------------------------------------------------------------------- */
+@media print {
+	:root,
+	:root[data-tema] {
+		color-scheme: light;
+		--bg: #ffffff;
+		--flate: #ffffff;
+		--flate-2: #ffffff;
+		--kant: #999999;
+		--kant-sterk: #666666;
+		--tekst: #000000;
+		--tekst-svak: #333333;
+		--fare: #000000;
+		--advarsel: #000000;
+		--ok: #000000;
+	}
+
+	.topplinje,
+	.miljobanner,
+	.bunntekst,
+	.journalhode,
+	.hurtigpanel,
+	.apppanel,
+	.kun-skjerm {
+		display: none !important;
+	}
+
+	.journalflate {
+		display: block;
+	}
+
+	main {
+		padding: 0 !important;
+		max-width: none !important;
+	}
+
+	.kort {
+		box-shadow: none;
+		border: none;
+		padding: 0;
+	}
+
+	a {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	h1, h2, h3 {
+		break-after: avoid;
+	}
 }

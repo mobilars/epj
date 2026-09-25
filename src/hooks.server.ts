@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { config } from '$srv/config';
 import { clientIp, rateLimit, securityHeaders } from '$srv/http';
 import { getSession, tenantIdForSession } from '$srv/auth/session';
+import { SETTING, getSetting, themeAttribute } from '$srv/auth/settings';
 import { methodIsEnough } from '$srv/auth/login-level';
 import { getUser, rolesFor } from '$srv/auth/users';
 import { validateAccessToken } from '$srv/auth/tokens';
@@ -271,7 +272,22 @@ async function handleIContext(
 		}
 	}
 
-	const response = await resolve(event);
+	// The theme is written into the page on the server, so a dark screen never
+	// flashes white while a script works out what the user chose. Only page
+	// loads for a signed-in user ask; a failed lookup means the system default,
+	// never a failed page.
+	const userId = event.locals.auth?.userId;
+	const theme =
+		event.request.method === 'GET' && !apiSti && userId
+			? themeAttribute(await getSetting(userId, SETTING.THEME).catch(() => null))
+			: null;
+
+	const response = await resolve(
+		event,
+		theme
+			? { transformPageChunk: ({ html }) => html.replace('<html lang="nb">', `<html lang="nb" data-tema="${theme}">`) }
+			: undefined
+	);
 
 	for (const [k, v] of Object.entries(securityHeaders(isFhirApi))) {
 		response.headers.set(k, v);
