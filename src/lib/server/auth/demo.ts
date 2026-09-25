@@ -2,6 +2,8 @@ import { one, query } from '../db';
 import { decrypt } from '../util/crypto';
 import { requireTenant } from '../tenant/context';
 import { totpCode } from './totp';
+import { config } from '../config';
+import { allows } from './login-level';
 
 /**
  * The demo accounts.
@@ -16,6 +18,24 @@ import { totpCode } from './totp';
  * the two cannot drift apart - the page used to claim the one-time code was
  * `000000`, which was the input's placeholder rather than any real code.
  */
+
+/**
+ * Whether this organisation offers the demo accounts at all.
+ *
+ * The installation-wide switches are not enough on their own. They are shared
+ * by every organisation on the installation, platform administration included,
+ * and an organisation that requires HelseID refuses a password sign-in however
+ * the switches are set. Listing demo accounts there would offer buttons that
+ * cannot work, and hand out one-time codes for accounts nobody may use - so
+ * they follow the same rule as the password form they fill in.
+ */
+export function demoUsersOffered(): boolean {
+	return (
+		config.testLogin.aktivert &&
+		config.testLogin.showDemoUsers &&
+		allows(requireTenant().login_level, 'passord')
+	);
+}
 
 export const DEMO_PASSWORD = 'Testpassord1!';
 

@@ -62,7 +62,7 @@ describe('R4 on write', () => {
 		const r5 = normaliseFromR4({
 			resourceType: 'DocumentReference',
 			content: [{ attachment: { contentType: 'application/pdf', url: 'Binary/9' }, format }]
-		} as unknown as FhirResource) as { content: Record<string, unknown>[] };
+		} as unknown as FhirResource) as unknown as { content: Record<string, unknown>[] };
 		expect(r5.content[0].format).toBeUndefined();
 		expect(r5.content[0].profile).toEqual([{ valueCoding: format }]);
 		expect(r5.content[0].attachment).toEqual({ contentType: 'application/pdf', url: 'Binary/9' });
@@ -72,7 +72,7 @@ describe('R4 on write', () => {
 		const r5 = normaliseFromR4({
 			resourceType: 'DocumentReference',
 			relatesTo: [{ code: 'replaces', target: { reference: 'DocumentReference/2' } }]
-		} as unknown as FhirResource) as { relatesTo: Record<string, unknown>[] };
+		} as unknown as FhirResource) as unknown as { relatesTo: Record<string, unknown>[] };
 		expect(r5.relatesTo[0].code).toEqual({
 			coding: [{ system: 'http://hl7.org/fhir/document-relationship-type', code: 'replaces' }]
 		});

@@ -56,8 +56,11 @@
 			<span class="mono">X-Frame-Options: DENY</span>.
 		</li>
 		<li>
-			<strong>Binary og Group er ikke tilgjengelige.</strong> Ingen av dem har en pasientreferanse,
-			og da kan ikke tilgangen vurderes per pasient.
+			<strong>Binary knyttes til pasienten når det skrives.</strong> Typen har ingen
+			pasientreferanse, så journalen registrerer pasienten fra launch-konteksten eller fra
+			<span class="mono">Binary.securityContext</span>. Et vedlegg uten pasient kan ikke leses, og søk i
+			Binary avvises. <strong>Group er ikke tilgjengelig</strong>, fordi medlemskapet i en gruppe ikke
+			kan vurderes per pasient.
 		</li>
 	</ul>
 </section>

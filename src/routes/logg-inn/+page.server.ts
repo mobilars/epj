@@ -9,7 +9,7 @@ import { rateLimit } from '$srv/http';
 import { startMfaSetup } from '$srv/auth/mfa-setup';
 import { requireTenant } from '$srv/tenant/context';
 import { allows, methodIsEnough } from '$srv/auth/login-level';
-import { DEMO_PASSWORD, DEMO_TOTP_SECRET, demoUsersHere } from '$srv/auth/demo';
+import { DEMO_PASSWORD, DEMO_TOTP_SECRET, demoUsersHere, demoUsersOffered } from '$srv/auth/demo';
 
 /**
  * Sign-in.
@@ -35,9 +35,9 @@ export const load: PageServerLoad = async (event) => {
 		// cannot succeed is worse than no form.
 		testLogin: config.testLogin.aktivert && allows(requireTenant().login_level, 'passord'),
 		loginLevel: requireTenant().login_level,
-		demoUsers: config.testLogin.showDemoUsers ? await demoUsersHere() : [],
-		demoPassword: config.testLogin.showDemoUsers ? DEMO_PASSWORD : '',
-		demoTotpSecret: config.testLogin.showDemoUsers ? DEMO_TOTP_SECRET : '',
+		demoUsers: demoUsersOffered() ? await demoUsersHere() : [],
+		demoPassword: demoUsersOffered() ? DEMO_PASSWORD : '',
+		demoTotpSecret: demoUsersOffered() ? DEMO_TOTP_SECRET : '',
 		returnTo: trygtReturnTo(event.url.searchParams.get('retur')),
 		// The organisation the hostname resolves to - not the one in the
 		// configuration, which is only the fallback used to seed the first one.

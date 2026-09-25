@@ -1,6 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
 import { config } from '$srv/config';
+import { appsWithStatus } from '$srv/developer/catalogue';
 
 /**
  * Platform administration.
@@ -15,7 +16,13 @@ export const load: LayoutServerLoad = async (event) => {
 	if (!ctx.permissions.has('plattform:administrer')) {
 		error(403, 'Bare systemeier har tilgang til plattformadministrasjonen.');
 	}
+	// Apps waiting for someone here to review them. Shown on the tab, because
+	// a developer waiting on a decision should not depend on someone happening
+	// to open the right page.
+	const waitingApps = (await appsWithStatus('til-vurdering')).length;
+
 	return {
+		waitingApps,
 		platformHostname: config.tenant.platformHostname,
 		egetHostname: event.url.hostname
 	};
