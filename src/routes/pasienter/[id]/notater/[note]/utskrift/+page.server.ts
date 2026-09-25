@@ -3,6 +3,7 @@ import type { PageServerLoad } from './$types';
 import { readResource } from '$srv/fhir/internal';
 import { codeText, formatsDate } from '$srv/fhir/display';
 import { log, actorFromContext } from '$srv/audit';
+import { patientIdFromResource } from '$srv/authz/access';
 
 /**
  * One record note, laid out to be printed.
@@ -26,9 +27,10 @@ export const load: PageServerLoad = async (event) => {
 	const note = await readResource(ctx, 'Composition', event.params.note);
 
 	// The note has to belong to the patient in the address. Otherwise one
-	// patient's note would print under another patient's name.
-	const subject = (note.subject as { reference?: string } | undefined)?.reference;
-	if (subject !== `Patient/${event.params.id}`) error(404, 'Fant ikke notatet.');
+	// patient's note would print under another patient's name. Decided by the
+	// same rule the gateway uses, which reads a reference in any of the forms
+	// HAPI returns it in - relative, absolute, or with a version.
+	if (patientIdFromResource(note) !== event.params.id) error(404, 'Fant ikke notatet.');
 
 	await log(
 		{
