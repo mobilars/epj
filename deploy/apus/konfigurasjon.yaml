@@ -57,6 +57,11 @@ data:
   EPJ_DB_SSL: 'true'
   NODE_EXTRA_CA_CERTS: /etc/epj/postgres-ca/ca.crt
 
+  # Installation-wide, but each organisation decides for itself. The practice
+  # on epj.apps.apus.no requires HelseID (its login level is set under
+  # platform administration), so it offers neither a password form nor demo
+  # accounts. These stay on for platform administration, which is its own
+  # organisation and signs in with its own account.
   EPJ_TEST_LOGIN: 'true'
   EPJ_SHOW_DEMO_USERS: 'true'
 
@@ -64,8 +69,9 @@ data:
   # `epj-hemmeligheter`, never in git. `kid` is the RFC 7638 thumbprint of the
   # public key, and has been checked against the key itself.
   #
-  # This is a test client at NHN. Test sign-in stays on alongside it, so the
-  # demo users still work if HelseID is unavailable.
+  # This is a test client at NHN, and the only way into the practice. If NHN's
+  # test environment is down, lower the practice's login level from platform
+  # administration to let password sign-in back in.
   EPJ_HELSEID_ENABLED: 'true'
   EPJ_HELSEID_CLIENT_ID: 5179bc26-7699-4c36-8428-32cb7f06efe1
   EPJ_HELSEID_ISSUER: https://helseid-sts.test.nhn.no
