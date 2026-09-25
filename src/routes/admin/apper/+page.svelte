@@ -9,11 +9,19 @@
 	 * out where an app actually appears is the thing that made this page hard to
 	 * scan. Said once, in words, it can be read at a glance.
 	 */
+	// Kept here rather than imported, so that the server module holding the
+	// launch modes stays on the server.
+	const VISNING: Record<string, string> = {
+		frame: 'åpnes i ramme',
+		signin: 'pålogging i eget vindu, så i ramme',
+		window: 'åpnes i eget vindu'
+	};
+
 	function visesHvor(a: {
 		placement: string;
 		inPatientTabs: boolean;
 		inMainMenu: boolean;
-		openInNewTab: boolean;
+		launchMode: string;
 		launchUrl: string | null;
 	}): string {
 		if (!a.launchUrl) return 'Ingen launch-URL — kan ikke startes fra journalen';
@@ -23,7 +31,7 @@
 		if (a.inPatientTabs) steder.push('egen fane i journalen');
 		if (a.inMainMenu) steder.push('hovedmenyen');
 		if (!steder.length) steder.push('under «Apper» i journalen');
-		steder.push(a.openInNewTab ? 'åpnes i eget vindu' : 'åpnes i ramme');
+		steder.push(VISNING[a.launchMode] ?? VISNING.frame);
 		return steder.join(' · ');
 	}
 </script>
@@ -175,12 +183,24 @@
 								I hovedmenyen, uten pasient
 							</label>
 							<!-- A framed app is a third-party context, so the browser withholds
-							     the cookies it needs. Apps that carry a session through their own
-							     launch have to be their own top-level document. -->
-							<label class="avkryssing">
-								<input type="checkbox" name="iEgetVindu" value="ja" checked={a.openInNewTab} />
-								Åpnes i eget vindu i stedet for i en ramme
-							</label>
+							     the cookies it needs, and an identity provider will not be framed at
+							     all. Hence three answers rather than a checkbox: the middle one
+							     signs the user in as a window and frames the app afterwards. -->
+							<div class="felt">
+								<label for="visning-{a.clientId}">Hvordan appen åpnes</label>
+								<select id="visning-{a.clientId}" name="visningsmaate" class="plasseringsvalg">
+									<option value="frame" selected={a.launchMode === 'frame'}>I ramme i journalen</option>
+									<option value="signin" selected={a.launchMode === 'signin'}>
+										Pålogging i eget vindu, deretter i ramme
+									</option>
+									<option value="window" selected={a.launchMode === 'window'}>I eget vindu</option>
+								</select>
+								<p class="feltforklaring">
+									Velg pålogging i eget vindu når appen logger deg inn hos en egen
+									identitetstjeneste, for eksempel HelseID. Slike tjenester nekter å vises i en
+									ramme, og rammen blir stående tom.
+								</p>
+							</div>
 							<button type="submit" class="liten primar lagreknapp">Lagre visning</button>
 						</form>
 					</section>
@@ -406,6 +426,14 @@
 	.gruppe-hjelp {
 		margin: 0 0 0.6rem;
 		font-size: 0.82rem;
+		color: var(--tekst-svak);
+	}
+
+	/* Help that belongs to one control rather than to the whole group. */
+	.feltforklaring {
+		margin: 0.25rem 0 0;
+		font-size: 0.78rem;
+		line-height: 1.35;
 		color: var(--tekst-svak);
 	}
 

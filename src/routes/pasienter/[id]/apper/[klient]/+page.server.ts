@@ -4,6 +4,7 @@ import { listClients } from '$srv/auth/clients';
 import { createLaunch } from '$srv/auth/oauth';
 import { log, actorFromContext } from '$srv/audit';
 import { fhirBaseFor, requireTenant } from '$srv/tenant/context';
+import { launchModeOf } from '$srv/auth/launchmode';
 
 /**
  * A SMART app running inside the record.
@@ -29,14 +30,20 @@ export const load: PageServerLoad = async (event) => {
 	if (!client) error(404, 'Ukjent app.');
 	if (!client.launch_url) error(400, 'Appen har ingen launch-URL og kan ikke startes fra journalen.');
 
-	// An app that opens in its own window is launched from the button, not from
-	// this page, so there is no launch to mint here - and minting one would spend
-	// a single-use context nothing ever redeems.
-	if (client.open_in_new_tab) {
+	const startUrl = `/pasienter/${event.params.id}/apper/${client.client_id}/start`;
+	// An app launched from a button is launched when the button is pressed, not
+	// when this page is drawn: minting a launch here would spend a single-use
+	// context nothing ever redeems. That covers both the app that gets its own
+	// window and the app that signs in through one before it is framed.
+	const mode = launchModeOf(client);
+	const skipSignin = event.url.searchParams.get('vis') === 'ramme';
+	if (mode === 'window' || (mode === 'signin' && !skipSignin)) {
 		return {
 			app: { name: client.name, clientId: client.client_id },
 			launchUrl: null,
-			openInNewTab: true,
+			mode,
+			startUrl,
+			frameUrl: `${startUrl}?ramme=ja`,
 			patientId: event.params.id
 		};
 	}
@@ -68,7 +75,9 @@ export const load: PageServerLoad = async (event) => {
 	return {
 		app: { name: client.name, clientId: client.client_id },
 		launchUrl: url.toString() as string | null,
-		openInNewTab: false,
+		mode: 'frame' as const,
+		startUrl,
+		frameUrl: `${startUrl}?ramme=ja`,
 		patientId: event.params.id
 	};
 };

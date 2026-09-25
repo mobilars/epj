@@ -31,6 +31,21 @@ REGISTER_INN=registry.container-registry.svc.cluster.local:5000/epj
 REGISTER_UT=localhost:32000/epj      # slik nodene selv slår det opp
 RULL_UT=nei
 
+# Which cluster to talk to. Several clusters answer to this workstation, and the
+# one that happens to be current is not always the one this overlay belongs to.
+# Name the target instead of assuming it:
+#
+#   KUBE_CONTEXT=microk8s-kjeller deploy/apus/bygg.sh --rull-ut
+#
+# Left empty it uses whatever context is current, exactly as before.
+KUBE_CONTEXT=${KUBE_CONTEXT:-}
+KCTX=()
+if [ -n "$KUBE_CONTEXT" ]; then
+  KCTX=(--context "$KUBE_CONTEXT")
+  echo "Klynge: $KUBE_CONTEXT"
+fi
+kubectl() { command kubectl ${KCTX[@]+"${KCTX[@]}"} "$@"; }
+
 [ "${1:-}" = "--rull-ut" ] && RULL_UT=ja
 
 cd "$(git rev-parse --show-toplevel)"

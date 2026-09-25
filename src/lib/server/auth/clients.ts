@@ -5,6 +5,7 @@ import { newId, newToken } from '../util/ids';
 import { verify as verifyJws, decodeWithoutVerification, type Jwk } from './jws';
 import { config } from '../config';
 import { getJsonUtenfra, checkOutboundUrl, OutboundError } from '../util/outbound';
+import { launchModeFlags, type LaunchMode } from './launchmode';
 
 export type ClientCategory = 'smart-ehr' | 'smart-standalone' | 'backend' | 'internal';
 
@@ -32,6 +33,8 @@ export interface OAuthClient {
 	in_patient_tabs: boolean;
 	/** Launch as its own top-level document, so the app's cookies are first-party. */
 	open_in_new_tab: boolean;
+	/** Sign the user in through a window of its own, then frame the app. */
+	top_level_signin: boolean;
 	/** `ingen`, `hoved` (the wide surface) or `side` (the narrow panel). */
 	placement: string;
 	/** Route segment of the record tab this app answers for, or null. */
@@ -42,7 +45,7 @@ export interface OAuthClient {
 
 const FIELD = `client_id, tenant_id, name, type, client_category, secret_hash, jwks, jwks_uri, redirect_uris,
 	allowed_scopes, grant_types, require_pkce, require_consent, logo_url, databehandleravtale, launch_url,
-	in_main_menu, in_patient_tabs, open_in_new_tab, placement, replaces_tab, status, created_at`;
+	in_main_menu, in_patient_tabs, open_in_new_tab, top_level_signin, placement, replaces_tab, status, created_at`;
 
 export async function getClient(clientId: string): Promise<OAuthClient | null> {
 	return one<OAuthClient>(`SELECT ${FIELD} FROM oauth_client WHERE client_id = $1 AND tenant_id = $2`, [
@@ -235,17 +238,24 @@ export async function setInPatientTabs(clientId: string, inPatientTabs: boolean)
 }
 
 /**
- * Whether the app gets its own window.
+ * How the app is put in front of the user: framed, framed after a sign-in of
+ * its own, or as its own window.
  *
  * A frame puts the app in a third-party context, where the browser blocks the
  * cookies it sets during its own launch. Apps that carry a session between
  * their launch endpoint and their redirect target need to be their own
- * top-level document for that to work.
+ * top-level document for that to work. Apps that only need it while an identity
+ * provider draws a login page can sign in as a window and be framed afterwards.
+ *
+ * Both flags are written in one statement so the pair the table forbids is
+ * never even momentarily true.
  */
-export async function setOpenInNewTab(clientId: string, openInNewTab: boolean): Promise<void> {
-	await exec('UPDATE oauth_client SET open_in_new_tab = $2 WHERE client_id = $1 AND tenant_id = $3', [
-		clientId, openInNewTab, requireTenant().id
-	]);
+export async function setLaunchMode(clientId: string, mode: LaunchMode): Promise<void> {
+	const { openInNewTab, topLevelSignin } = launchModeFlags(mode);
+	await exec(
+		'UPDATE oauth_client SET open_in_new_tab = $2, top_level_signin = $3 WHERE client_id = $1 AND tenant_id = $4',
+		[clientId, openInNewTab, topLevelSignin, requireTenant().id]
+	);
 }
 
 export async function setKlientstatus(clientId: string, status: 'aktiv' | 'sperret'): Promise<void> {

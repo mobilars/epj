@@ -27,6 +27,10 @@ export const GET: RequestHandler = async (event) => {
 	if (!client) error(404, 'Ukjent app.');
 	if (!client.launch_url) error(400, 'Appen har ingen launch-URL og kan ikke startes fra journalen.');
 
+	// The same route serves the sign-in window and the frame that follows it.
+	// Only the log tells them apart, and it should say which one this was.
+	const framed = event.url.searchParams.get('ramme') === 'ja';
+
 	const launchId = await createLaunch({
 		clientId: client.client_id,
 		userId: ctx.userId,
@@ -42,7 +46,7 @@ export const GET: RequestHandler = async (event) => {
 			outcome: '0',
 			patientId: event.params.id,
 			entityRef: `Device/${client.client_id}`,
-			details: { app: client.name, innrammet: false }
+			details: { app: client.name, innrammet: framed }
 		},
 		actorFromContext(ctx)
 	);

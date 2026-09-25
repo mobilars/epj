@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { listClients, registerClient, setKlientstatus, type ClientCategory , setInMainMenu, setInPatientTabs, setOpenInNewTab, updateClient, setPlacement, setRequireConsent, type Placement } from '$srv/auth/clients';
+import { listClients, registerClient, setKlientstatus, type ClientCategory , setInMainMenu, setInPatientTabs, setLaunchMode, updateClient, setPlacement, setRequireConsent, type Placement } from '$srv/auth/clients';
+import { isLaunchMode, launchModeOf } from '$srv/auth/launchmode';
 import { createLaunch } from '$srv/auth/oauth';
 import { describeScope } from '$srv/authz/scopes';
 import { log, actorFromContext } from '$srv/audit';
@@ -44,7 +45,7 @@ export const load: PageServerLoad = async (event) => {
 			launchUrl: k.launch_url,
 			inMainMenu: k.in_main_menu,
 			inPatientTabs: k.in_patient_tabs,
-			openInNewTab: k.open_in_new_tab,
+			launchMode: launchModeOf(k),
 			placement: k.placement,
 			requireConsent: k.require_consent,
 			hasKeys: Boolean(k.jwks || k.jwks_uri),
@@ -186,16 +187,17 @@ export const actions: Actions = {
 		if (!['ingen', 'hoved', 'side'].includes(placement)) return fail(400, { error: 'Ukjent plassering.' });
 		const inPatientTabs = form.get('iPasientfaner') === 'ja';
 		const inMainMenu = form.get('iHovedmeny') === 'ja';
-		const openInNewTab = form.get('iEgetVindu') === 'ja';
+		const modeValue = form.get('visningsmaate');
+		if (!isLaunchMode(modeValue)) return fail(400, { error: 'Ukjent visningsmåte.' });
 
 		await setPlacement(clientId, placement);
 		await setInPatientTabs(clientId, inPatientTabs);
 		await setInMainMenu(clientId, inMainMenu);
-		await setOpenInNewTab(clientId, openInNewTab);
+		await setLaunchMode(clientId, modeValue);
 		await log(
 			{
 				type: 'admin', subtype: 'app:visning', action: 'U', outcome: '0', entityRef: `Device/${clientId}`,
-				details: { placement, inPatientTabs, inMainMenu, openInNewTab }
+				details: { placement, inPatientTabs, inMainMenu, launchMode: modeValue }
 			},
 			actorFromContext(ctx)
 		);

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AppSignIn from '$lib/components/AppSignIn.svelte';
 	let { data } = $props();
 </script>
 
@@ -15,7 +16,7 @@
 	</span>
 </div>
 
-{#if data.openInNewTab}
+{#if data.mode === 'window'}
 	<section class="kort">
 		<h3>Appen åpnes i sitt eget vindu</h3>
 		<p class="svak">
@@ -26,6 +27,8 @@
 			<a class="knapp-primar" href="/apper/{data.app.clientId}/start" target="_blank" rel="noopener">Åpne {data.app.name}</a>
 		</p>
 	</section>
+{:else if data.mode === 'signin'}
+	<AppSignIn name={data.app.name} startUrl={data.startUrl} frameUrl={data.frameUrl} />
 {:else}
 	<iframe class="appramme" src={data.launchUrl} title={data.app.name} allow="clipboard-write"></iframe>
 {/if}
