@@ -71,7 +71,18 @@ steps:
       - until nc -z postgres 5432; do sleep 1; done
       - npm test
 
+  # Runs only when a pipeline is started by hand, never on a push.
+  #
+  # The Playwright image is close to 1 GB to download and several times that
+  # unpacked, and the nodes have 15 GB disks. Pulled onto k8s3 on a push, it
+  # took the node under its eviction threshold: the step was evicted before it
+  # ran a single test, and the disk pressure took the container registry down
+  # with it, since the registry's storage lives on that node. Until the nodes
+  # have room for it, this step is a decision someone makes, not a side effect
+  # of pushing.
   ende-til-ende:
+    when:
+      - event: manual
     image: mcr.microsoft.com/playwright:v1.63.0-noble
     environment:
       <<: *test_env
