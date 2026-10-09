@@ -171,8 +171,12 @@
 			<tr>
 				<td class="mono">{data.base}/apne/pasient#tlf=&lt;telefonnummer&gt;</td>
 				<td>
-					Nummeret det ringes fra, etter <span class="mono">#</span>, med eller uten landskode.
-					Én pasient åpnes direkte. Deler flere nummeret, velger brukeren fra en liste.
+					Nummeret det ringes fra, etter <span class="mono">#</span>, slik sentralen har det:
+					<span class="mono">99887766</span>, <span class="mono">998 87 766</span>,
+					<span class="mono">+47 99 88 77 66</span> og <span class="mono">tel:004799887766</span> er
+					samme nummer. Journalen sammenligner tallene, ikke skrivemåten, også mot det som står
+					på pasienten. Én pasient åpnes direkte. Deler flere nummeret, velger brukeren fra en
+					liste.
 				</td>
 			</tr>
 			<tr>

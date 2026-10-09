@@ -319,12 +319,15 @@ telefonnummeret det ringes fra, med fødselsnummer eller med journalens
 pasient-id. Adressen gir ingen tilgang: den virker bare på en økt som allerede
 er logget inn med HelseID, og det brukeren får se, avgjøres av pasientsiden som
 ellers. Telefonnummer og fødselsnummer går i fragmentet etter `#`, som aldri
-sendes til en tjener, og avvises i spørredelen (se K-1.8). Et telefonnummer
-søkes opp i de vanlige skrivemåtene; deler flere pasienter nummeret, velger
-brukeren selv. En lenke fulgt fra en annen nettside må bekreftes før journalen
+sendes til en tjener, og avvises i spørredelen (se K-1.8). Telefonnumre
+sammenlignes som tall, ikke som tekst: `99887766`, `998 87 766` og
+`+47 99 88 77 66` er samme nummer, både i lenken og slik de står på pasienten.
+Oppslaget bruker en tabell i minnet over hvem som har hvilket nummer; den
+lagres ingen steder, og pasientene hentes gjennom vokteren som brukeren. Deler
+flere pasienter nummeret, velger brukeren selv. En lenke fulgt fra en annen nettside må bekreftes før journalen
 åpnes. Åpningen loggføres med kilden.
 *Realisert:* `src/routes/apne/pasient/`, `src/lib/server/journal/openlink.ts`.
-*Testet:* `tests/openlink.test.ts`.
+*Testet:* `tests/openlink.test.ts`, `tests/phoneindex.test.ts`.
 
 ## 5. Sikkerhetslogg
 

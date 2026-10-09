@@ -30,7 +30,8 @@
 			// Not valid encoding: read it as it stands.
 		}
 		const number = /^#(?:fnr|fodselsnummer)=(\d{11})$/.exec(hash)?.[1];
-		const phone = /^#(?:tlf|telefon|phone)=([+\d][\d\s\-().]{3,24})$/.exec(hash)?.[1];
+		// Any spelling: the server reduces it to digits, or refuses it.
+		const phone = /^#(?:tlf|telefon|phone)=(.{1,64})$/.exec(hash)?.[1];
 		if (resolveForm && numberField && phoneField && (number || phone)) {
 			if (number) numberField.value = number;
 			else if (phone) phoneField.value = phone;

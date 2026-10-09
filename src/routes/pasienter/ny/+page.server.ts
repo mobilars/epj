@@ -14,6 +14,7 @@ import { exec } from '$srv/db';
 import { requireTenant } from '$srv/tenant/context';
 import { newId } from '$srv/util/ids';
 import { compactPhone } from '$srv/journal/openlink';
+import { forgetPhoneTable } from '$srv/journal/phoneindex';
 
 /**
  * Registering a patient.
@@ -153,6 +154,8 @@ export const actions: Actions = {
 			actorFromContext(ctx)
 		);
 
+		// So a call from the new patient's number finds them straight away.
+		forgetPhoneTable(requireTenant().id);
 		redirect(303, `/pasienter/${patientId}`);
 	}
 };

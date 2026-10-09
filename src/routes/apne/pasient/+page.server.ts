@@ -17,6 +17,8 @@ import {
 	type OpenedBy
 } from '$srv/journal/openlink';
 import { toPatientDisplay } from '$srv/fhir/display';
+import { lookupKey, patientIdsWithPhone } from '$srv/journal/phoneindex';
+import type { FhirResource } from '$srv/fhir/types';
 
 /**
  * Opens a patient's record from another program. See `openlink.ts` for the
@@ -146,15 +148,34 @@ export const actions: Actions = {
 
 		const phone = form.get('tlf');
 		if (phone !== null && phone !== '') {
-			const variants = phoneVariants(phone);
-			if (!variants) return fail(400, { state: 'bad-phone' as const });
+			// The number as digits with a country code, whatever the exchange
+			// sent: spaces, hyphens, `tel:`, either spelling of the prefix.
+			const key = lookupKey(phone);
+			if (!key) return fail(400, { state: 'bad-phone' as const });
 
-			// One search for every way the number may have been typed. A comma
-			// separates alternatives in a FHIR search, and none of the variants
-			// can contain one.
-			const matches = resources(
-				await searchResources(g.ctx, 'Patient', { phone: variants.join(','), _count: 20, _sort: 'family' })
-			);
+			// Two ways of finding the patients, and the union of them.
+			//
+			// The table knows who has the number however it was written on the
+			// record, but is a few minutes old. The search knows the record as it
+			// is now, but only the common spellings. Both go through the gateway
+			// as the user: the table supplies ids, never patients.
+			const { ids } = await patientIdsWithPhone(key);
+			const variants = phoneVariants(`+${key}`) ?? [];
+			const [byTable, bySpelling] = await Promise.all([
+				ids.length
+					? searchResources(g.ctx, 'Patient', { _id: ids.slice(0, 50).join(','), _count: 50 })
+					: null,
+				variants.length
+					? searchResources(g.ctx, 'Patient', { phone: variants.join(','), _count: 20 })
+					: null
+			]);
+			const found = new Map<string, FhirResource>();
+			for (const bundle of [byTable, bySpelling]) {
+				for (const patient of bundle ? resources(bundle) : []) {
+					if (patient.id) found.set(patient.id as string, patient);
+				}
+			}
+			const matches = [...found.values()];
 			await log(
 				{
 					type: 'rest', subtype: 'pasientsøk', action: 'E', outcome: '0',
@@ -177,13 +198,16 @@ export const actions: Actions = {
 			return {
 				state: 'choose' as const,
 				source,
-				matches: matches.map(toPatientDisplay).map((p) => ({
-					id: p.id,
-					name: p.name,
-					nationalIdMasked: p.nationalIdMasked,
-					age: p.age,
-					gender: p.gender
-				}))
+				matches: matches
+					.map(toPatientDisplay)
+					.sort((a, b) => a.name.localeCompare(b.name, 'nb'))
+					.map((p) => ({
+						id: p.id,
+						name: p.name,
+						nationalIdMasked: p.nationalIdMasked,
+						age: p.age,
+						gender: p.gender
+					}))
 			};
 		}
 
