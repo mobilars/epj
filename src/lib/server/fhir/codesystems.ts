@@ -11,6 +11,14 @@ export const SYSTEM = {
 	FNR: 'urn:oid:2.16.578.1.12.4.1.4.1',
 	DNR: 'urn:oid:2.16.578.1.12.4.1.4.2',
 	HNR: 'urn:oid:2.16.578.1.12.4.1.4.3',
+	/**
+	 * A number that looks like a national identity number and is not one: its
+	 * check digits do not add up. Test patients have them, and so does a number
+	 * taken down wrongly at the desk. It is kept under a system of the record's
+	 * own, never under the national ones, so that nothing reading the record -
+	 * an app, a prescription, a claim - can take it for a real `fødselsnummer`.
+	 */
+	UNVERIFIED_NATIONAL_ID: 'urn:epj:identifier:unverified-national-id',
 	// Health personnel and organisation
 	HPR: 'urn:oid:2.16.578.1.12.4.1.4.4',
 	ORGNR: 'urn:oid:2.16.578.1.12.4.1.4.101',

@@ -1,20 +1,13 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { searchResources, writeResource, resources } from '$srv/fhir/internal';
-import {
-	SYSTEM,
-	genderFromNationalId,
-	isDNumber,
-	maskerNationalId,
-	validDateDel,
-	validNorwegianNationalId
-} from '$srv/fhir/codesystems';
+import { writeResource } from '$srv/fhir/internal';
+import { isDNumber, maskerNationalId, validNorwegianNationalId } from '$srv/fhir/codesystems';
 import { log, actorFromContext } from '$srv/audit';
 import { exec } from '$srv/db';
 import { requireTenant } from '$srv/tenant/context';
 import { newId } from '$srv/util/ids';
-import { compactPhone } from '$srv/journal/openlink';
 import { forgetPhoneTable } from '$srv/journal/phoneindex';
+import { applyDetails, detailsAsFormValues, detailsFromForm, detailsProblem, patientsWithNationalId } from '$srv/journal/patientdetails';
 
 /**
  * Registering a patient.
@@ -33,12 +26,19 @@ import { forgetPhoneTable } from '$srv/journal/phoneindex';
  * The national identity number is checked against its own check digits before
  * anything is written, and the register is searched for it first: two records
  * for the same person is the mistake that is hardest to undo afterwards.
+ *
+ * A number that fails the check can still be saved, for a test patient or one
+ * whose number has to be corrected later, but only after a warning and an
+ * explicit yes. It is then filed as unverified rather than as a national
+ * number - see `patientdetails.ts`.
  */
 
 interface Form {
 	error?: string;
 	values?: Record<string, string>;
 	duplicate?: { id: string; name: string };
+	/** The number failed its check digits. Saving needs the user to say so. */
+	confirmIdentity?: string;
 }
 
 export const load: PageServerLoad = async (event) => {
@@ -66,32 +66,22 @@ export const actions: Actions = {
 		}
 
 		const form = await event.request.formData();
-		const text = (name: string) => String(form.get(name) ?? '').trim();
-		const nationalId = text('fodselsnummer').replace(/\s/g, '');
-		const family = text('etternavn');
-		const given = text('fornavn');
-		const values = {
-			fodselsnummer: nationalId,
-			etternavn: family,
-			fornavn: given,
-			telefon: text('telefon'),
-			adresse: text('adresse'),
-			postnummer: text('postnummer'),
-			poststed: text('poststed')
-		};
+		const details = detailsFromForm(form);
+		const nationalId = details.nationalId;
+		const values = detailsAsFormValues(details);
 		const back = (message: string, extra: Partial<Form> = {}) =>
 			fail(400, { error: message, values, ...extra } as Form);
 
-		if (!family || !given) return back('Fornavn og etternavn må fylles ut.');
-		if (!validNorwegianNationalId(nationalId)) {
-			return back('Ugyldig fødselsnummer eller D-nummer (kontrollsiffer stemmer ikke).');
+		const problem = detailsProblem(details, form.get('bekreftUgyldig') === 'ja');
+		if (problem?.kind === 'error') return back(problem.message);
+		if (problem?.kind === 'confirm-identity') {
+			return fail(400, { values, confirmIdentity: problem.message } as Form);
 		}
 
-		// Look before writing. The search runs as the user, so a hit they may not
-		// see is reported without saying who it is - see below.
-		const existing = resources(
-			await searchResources(ctx, 'Patient', { identifier: `${SYSTEM.FNR}|${nationalId}`, _count: 1 })
-		);
+		// Look before writing, under every system the number could be filed
+		// under. The search runs as the user, so a hit they may not see is
+		// reported without saying who it is - see below.
+		const existing = await patientsWithNationalId(ctx, nationalId);
 		if (existing.length) {
 			const patient = existing[0];
 			const name = ((patient.name as { family?: string; given?: string[] }[]) ?? [])[0];
@@ -103,31 +93,8 @@ export const actions: Actions = {
 			});
 		}
 
-		const birthDate = validDateDel(nationalId) ?? undefined;
-		const created = await writeResource(ctx, {
-			resourceType: 'Patient',
-			identifier: [{ system: SYSTEM.FNR, value: nationalId, use: 'official' }],
-			active: true,
-			name: [{ use: 'official', family, given: [given] }],
-			gender: genderFromNationalId(nationalId),
-			birthDate,
-			// Stored without spacing, so the number is found however a caller's
-			// exchange or the next person writes it.
-			...(values.telefon ? { telecom: [{ system: 'phone', value: compactPhone(values.telefon), use: 'mobile' }] } : {}),
-			...(values.adresse || values.postnummer || values.poststed
-				? {
-						address: [
-							{
-								use: 'home',
-								...(values.adresse ? { line: [values.adresse] } : {}),
-								...(values.postnummer ? { postalCode: values.postnummer } : {}),
-								...(values.poststed ? { city: values.poststed } : {}),
-								country: 'NO'
-							}
-						]
-					}
-				: {})
-		});
+		const verified = validNorwegianNationalId(nationalId);
+		const created = await writeResource(ctx, applyDetails({ resourceType: 'Patient', active: true } as never, details));
 		const patientId = created.id as string;
 
 		// The relationship is what gives access to the record afterwards, and it
@@ -149,7 +116,12 @@ export const actions: Actions = {
 				entityRef: `Patient/${patientId}`,
 				// The number is masked in the log: it identifies the person directly,
 				// and the reference above already says which record this concerns.
-				details: { fodselsnummer: maskerNationalId(nationalId), dNumber: isDNumber(nationalId) }
+				details: {
+					fodselsnummer: maskerNationalId(nationalId),
+					dNumber: verified && isDNumber(nationalId),
+					// Saved on the user's say-so although the check digits were wrong.
+					unverified: !verified
+				}
 			},
 			actorFromContext(ctx)
 		);

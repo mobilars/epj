@@ -16,6 +16,35 @@
 		</div>
 	{/if}
 
+	<!-- The number failed its check digits. Said plainly, with what saving it
+	     anyway means, and saved only when the box is ticked. -->
+	{#if form?.confirmIdentity}
+		<div class="varsel varsel-advarsel" role="alert">
+			<p><strong>Ugyldig fødselsnummer.</strong> {form.confirmIdentity}</p>
+			<div class="rad">
+				<div class="felt" style="flex: 0 1 200px">
+					<label for="fodselsdato">Fødselsdato</label>
+					<input id="fodselsdato" name="fodselsdato" type="date" value={value('fodselsdato')} />
+				</div>
+				<div class="felt" style="flex: 0 1 200px">
+					<label for="kjonn">Kjønn</label>
+					<select id="kjonn" name="kjonn">
+						<option value="" selected={!value('kjonn')}>Ikke oppgitt</option>
+						<option value="female" selected={value('kjonn') === 'female'}>Kvinne</option>
+						<option value="male" selected={value('kjonn') === 'male'}>Mann</option>
+						<option value="other" selected={value('kjonn') === 'other'}>Annet</option>
+					</select>
+				</div>
+			</div>
+			<small>Fødselsdato og kjønn kan ikke leses ut av et ugyldig nummer. Fyll dem inn her om du vil.</small>
+			<label class="avkryssing">
+				<input type="checkbox" name="bekreftUgyldig" value="ja" />
+				Lagre pasienten med dette nummeret likevel
+			</label>
+			<small>Eller rett nummeret under og registrer på nytt.</small>
+		</div>
+	{/if}
+
 	<div class="felt">
 		<label for="fodselsnummer">Fødselsnummer eller D-nummer</label>
 		<input

@@ -18,12 +18,15 @@ test.describe('journal', () => {
 		await expect(page.getByRole('link', { name: /Bakken/ })).toHaveCount(0);
 	});
 
-	test('avviser søk på ugyldig fødselsnummer', async ({ page }) => {
+	// A number that fails its check digits is searched for all the same, since
+	// a patient may have been saved with one, and the user is told what it is.
+	test('searches for an invalid national identity number and says that it is invalid', async ({ page }) => {
 		await page.goto('/pasienter');
 		await waitOnHydration(page);
 		await page.getByLabel(/Søk på navn/).fill('13086510036');
 		await page.getByRole('button', { name: 'Søk' }).click();
-		await expect(page.getByText('Ugyldig fødselsnummer')).toBeVisible();
+		await expect(page.getByText('ikke et gyldig fødselsnummer')).toBeVisible();
+		await expect(page.getByRole('link', { name: 'Registrer ny pasient' })).toBeVisible();
 	});
 
 	test('viser pasientbanner og klinisk oversikt', async ({ page }) => {

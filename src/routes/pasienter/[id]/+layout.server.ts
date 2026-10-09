@@ -126,6 +126,8 @@ export const load: LayoutServerLoad = async (event) => {
 		canUtlevere: ctx.permissions.has('journal:utlever'),
 		canSkrive: ctx.permissions.has('journal:skriv'),
 		canRestrict: ctx.permissions.has('pasient:sperr'),
+		// Whoever may register a patient may correct one's details.
+		canEditDetails: ctx.permissions.has('pasient:opprett'),
 		requireIsOneTimeCode: config.security.requireMfa && ctx.amr !== 'helseid'
 	};
 };

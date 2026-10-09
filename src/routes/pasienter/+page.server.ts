@@ -2,7 +2,8 @@ import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { resources, searchResources } from '$srv/fhir/internal';
 import { toPatientDisplay } from '$srv/fhir/display';
-import { SYSTEM, validNorwegianNationalId } from '$srv/fhir/codesystems';
+import { validNorwegianNationalId } from '$srv/fhir/codesystems';
+import { identitySearch } from '$srv/journal/patientdetails';
 import { log, actorFromContext } from '$srv/audit';
 import { query } from '$srv/db';
 import { requireTenant } from '$srv/tenant/context';
@@ -46,20 +47,14 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	const isFnr = /^\d{11}$/.test(search);
-	if (isFnr && !validNorwegianNationalId(search)) {
-		return {
-			search,
-			match: [],
-			countMine: mine.length,
-			sokteAfterFnr: true,
-			canRegister: ctx.permissions.has('pasient:opprett'),
-			error: 'Ugyldig fødselsnummer (kontrollsiffer stemmer ikke).'
-		};
-	}
 
+	// Eleven digits are searched for whether or not the check digits add up,
+	// and under every system a number can be filed under: a patient saved with
+	// an unverified number has to be findable by it.
 	const bundle = isFnr
-		? await searchResources(ctx, 'Patient', { identifier: `${SYSTEM.FNR}|${search}`, _count: 20 })
+		? await searchResources(ctx, 'Patient', { identifier: identitySearch(search), _count: 20 })
 		: await searchResources(ctx, 'Patient', { name: search, _count: 40, _sort: 'family' });
+	const invalidNumber = isFnr && !validNorwegianNationalId(search);
 
 	await log(
 		{
@@ -74,6 +69,8 @@ export const load: PageServerLoad = async (event) => {
 		match: resources(bundle).map(toPatientDisplay),
 		countMine: mine.length,
 		sokteAfterFnr: isFnr,
-		canRegister: ctx.permissions.has('pasient:opprett')
+		canRegister: ctx.permissions.has('pasient:opprett'),
+		// Said, not enforced: the search has been done all the same.
+		...(invalidNumber ? { notice: 'Dette er ikke et gyldig fødselsnummer: kontrollsifrene stemmer ikke.' } : {})
 	};
 };

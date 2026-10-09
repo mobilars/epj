@@ -1,7 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { resources, searchResources } from '$srv/fhir/internal';
-import { SYSTEM, validNorwegianNationalId } from '$srv/fhir/codesystems';
+import { identitySearch } from '$srv/journal/patientdetails';
 import { actorFromContext, log } from '$srv/audit';
 import type { AuthContext } from '$srv/authz/context';
 import { isConfigured as helseIdConfigured } from '$srv/auth/helseid';
@@ -212,19 +212,14 @@ export const actions: Actions = {
 		}
 
 		const number = form.get('fnr');
-		if (!isIdentityNumberShape(number) || !validNorwegianNationalId(number)) {
-			return fail(400, { state: 'bad-number' as const });
-		}
+		if (!isIdentityNumberShape(number)) return fail(400, { state: 'bad-number' as const });
 
-		// A fødselsnummer and a D-nummer are filed under different systems.
-		let matches = resources(
-			await searchResources(g.ctx, 'Patient', { identifier: `${SYSTEM.FNR}|${number}`, _count: 2 })
+		// Under every system a number can be filed under, the unverified one
+		// included: a test patient saved with a number that fails its check has
+		// to open by it too.
+		const matches = resources(
+			await searchResources(g.ctx, 'Patient', { identifier: identitySearch(number), _count: 2 })
 		);
-		if (matches.length === 0) {
-			matches = resources(
-				await searchResources(g.ctx, 'Patient', { identifier: `${SYSTEM.DNR}|${number}`, _count: 2 })
-			);
-		}
 
 		await log(
 			{

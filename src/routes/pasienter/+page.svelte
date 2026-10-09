@@ -17,8 +17,8 @@
 	</small>
 </form>
 
-{#if data.error}
-	<div class="varsel varsel-feil">{data.error}</div>
+{#if data.notice}
+	<div class="varsel varsel-advarsel" role="status">{data.notice}</div>
 {/if}
 
 <div class="kort">

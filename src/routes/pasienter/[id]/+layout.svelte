@@ -12,7 +12,7 @@
 
 	type PatientLayoutData = {
 		patientId: string;
-		patient: { name: string; nationalIdMasked: string | null; age: number | null; gender: string; phone: string | null; dod: boolean } | null;
+		patient: { name: string; nationalIdMasked: string | null; nationalIdUnverified?: boolean; age: number | null; gender: string; phone: string | null; dod: boolean } | null;
 		nektet: string | null;
 		minimaltName: string | null;
 		emergencyAccess: boolean;
@@ -21,6 +21,7 @@
 		canUtlevere: boolean;
 		canSkrive: boolean;
 		canRestrict: boolean;
+		canEditDetails?: boolean;
 		tabApps: Record<string, { name: string; clientId: string }>;
 		sidePanel: PanelApp | null;
 		widePanel: PanelApp | null;
@@ -70,6 +71,7 @@
 	 * last so the apps - which are used during the consultation - come first.
 	 */
 	const merFaner = $derived([
+		...(data.canEditDetails ? [fane('rediger', 'Pasientopplysninger')] : []),
 		fane('logg', 'Innsynslogg'),
 		...(data.canUtlevere ? [fane('utlevering', 'Utlevering')] : []),
 		...(data.canRestrict ? [fane('sperring', 'Sperring')] : [])
@@ -112,7 +114,10 @@
 	<div class="pasientbanner" class:nodrett={data.emergencyAccess}>
 		<strong>{data.patient.name}</strong>
 		<span class="mono">{data.patient.nationalIdMasked ?? ''}</span>
-		<span>{data.patient.age} år · {data.patient.gender}</span>
+		{#if data.patient.nationalIdUnverified}
+			<span class="merke merke-advarsel" title="Kontrollsifrene stemmer ikke. Nummeret brukes ikke mot Helfo, reseptformidleren eller i meldinger.">Ikke gyldig fødselsnummer</span>
+		{/if}
+		<span>{#if data.patient.age !== null}{data.patient.age} år · {/if}{data.patient.gender}</span>
 		{#if data.patient.phone}<span class="svak">{data.patient.phone}</span>{/if}
 		{#if data.patient.dod}<span class="merke merke-fare">Død</span>{/if}
 		{#if data.blocked}<span class="merke merke-advarsel">Sperret journal</span>{/if}

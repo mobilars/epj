@@ -9,8 +9,16 @@ import type { CodeableConcept, FhirResource } from './types';
 export interface PatientDisplay {
 	id: string;
 	name: string;
+	/**
+	 * A real national identity number, or null. Never the unverified kind:
+	 * messages, claims and printouts read this, and must not send or print a
+	 * number that failed its check as though it were one.
+	 */
 	nationalId: string | null;
+	/** For showing on screen: the real number, or the unverified one, masked. */
 	nationalIdMasked: string | null;
+	/** The number shown failed its check digits and was saved on someone's say-so. */
+	nationalIdUnverified: boolean;
 	birthDate: string | null;
 	age: number | null;
 	gender: string;
@@ -29,6 +37,8 @@ export function toPatientDisplay(p: FhirResource): PatientDisplay {
 	const offisielt = name.find((n) => n.use === 'official') ?? name[0];
 	const identifikatorer = (p.identifier as { system?: string; value?: string }[] | undefined) ?? [];
 	const fnr = identifikatorer.find((i) => i.system === SYSTEM.FNR || i.system === SYSTEM.DNR)?.value ?? null;
+	// Shown where the real number would be, masked and marked as what it is.
+	const unverified = fnr ? null : (identifikatorer.find((i) => i.system === SYSTEM.UNVERIFIED_NATIONAL_ID)?.value ?? null);
 	const telecom = (p.telecom as { system?: string; value?: string }[] | undefined) ?? [];
 	const address = (p.address as { line?: string[]; postalCode?: string; city?: string }[] | undefined)?.[0];
 	const gp = (p.generalPractitioner as { display?: string; reference?: string }[] | undefined)?.[0];
@@ -38,7 +48,8 @@ export function toPatientDisplay(p: FhirResource): PatientDisplay {
 		id: (p.id as string) ?? '',
 		name: [offisielt?.given?.join(' '), offisielt?.family].filter(Boolean).join(' ') || 'Uten navn',
 		nationalId: fnr,
-		nationalIdMasked: fnr ? maskerNationalId(fnr) : null,
+		nationalIdMasked: fnr ? maskerNationalId(fnr) : unverified ? maskerNationalId(unverified) : null,
+		nationalIdUnverified: Boolean(unverified),
 		birthDate,
 		age: birthDate ? ageFrom(birthDate) : null,
 		gender: GENDER[(p.gender as string) ?? 'unknown'] ?? 'Ukjent',

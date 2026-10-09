@@ -68,9 +68,19 @@ Ved nødrettstilgang skifter banneret farge og merkes.
 
 **K-1.7 Fødselsnummer skal valideres før det lagres.**
 Mod11-kontroll på begge kontrollsiffer, kontroll av datodel, og støtte for
-D-nummer og H-nummer.
-*Realisert:* `src/lib/server/fhir/kodeverk.ts`.
-*Testet:* `tests/kodeverk.test.ts`.
+D-nummer og H-nummer. Alt som skrives som fødselsnummer, D-nummer eller
+H-nummer gjennom API-et, avvises hvis kontrollen feiler.
+
+Et nummer som ikke består kontrollen, kan likevel lagres på en pasient fra
+journalens egne skjemaer, for testpasienter og for nummer som må rettes
+senere. Brukeren får da en advarsel og må bekrefte. Nummeret lagres som *ikke
+gyldig*, under journalens eget identifikatorsystem og aldri som fødselsnummer,
+slik at det ikke kan bli sendt til Helfo, reseptformidleren eller i meldinger
+som om det var ekte. Det vises merket i pasientbanneret, kan søkes opp, og
+lagringen loggføres som ubekreftet.
+*Realisert:* `src/lib/server/fhir/codesystems.ts`, `validate.ts`,
+`src/lib/server/journal/patientdetails.ts`.
+*Testet:* `tests/codesystems.test.ts`, `tests/patientdetails.test.ts`.
 
 **K-1.8 Fødselsnummer skal ikke eksponeres unødig.**
 Vises maskert i grensesnittet, sendes aldri i URL-er (søk går som `POST
@@ -111,6 +121,16 @@ skjemaet. `CodeSystem/$lookup`, `$validate-code` og `ValueSet/$expand` svarer
 på journalens eget FHIR-endepunkt.
 *Realisert:* `src/lib/server/terminology/`.
 *Testet:* `tests/terminology.test.ts`.
+
+**K-1.13 Pasientens egne opplysninger skal kunne rettes.**
+Navn, fødselsnummer, fødselsdato, kjønn, telefon, e-post og adresse kan endres
+av dem som kan registrere pasienter. Endringen går gjennom vokteren, gir en ny
+versjon der den forrige er tatt vare på, og loggføres med hvilke opplysninger
+som ble endret, ikke hva de ble endret til. Bare det skjemaet dekker, endres;
+andre identifikatorer, flere telefonnumre og fastlege står urørt. Et nummer en
+annen pasient allerede har, avvises.
+*Realisert:* `src/routes/pasienter/[id]/rediger/`, `src/lib/server/journal/patientdetails.ts`.
+*Testet:* `tests/patientdetails.test.ts`.
 
 ## 2. Tilgangsstyring
 
@@ -611,7 +631,7 @@ enkelttegns-snarveier.
 
 | Område | Krav | Enhetstester | Ende-til-ende |
 | --- | --- | --- | --- |
-| Journal og dokumentasjon | K-1.1 – K-1.12 | `kodeverk`, `fhir-validering`, `gateway`, `notesearch`, `terminology`, `small-features` | `journal.spec.ts` |
+| Journal og dokumentasjon | K-1.1 – K-1.13 | `kodeverk`, `fhir-validering`, `gateway`, `notesearch`, `terminology`, `small-features`, `patientdetails` | `journal.spec.ts` |
 | Tilgangsstyring | K-2.1 – K-2.7 | `tilgang`, `scopes`, `brukere` | `tilgang.spec.ts` |
 | Autentisering | K-3.1 – K-3.9 | `brukere`, `totp`, `crypto`, `jws`, `helseid-level`, `small-features` | `palogging.spec.ts` |
 | API og apper | K-4.1 – K-4.14 | `oauth`, `scopes`, `gateway`, `cds`, `launchmode`, `r4`, `openlink` | `smart.spec.ts` |
