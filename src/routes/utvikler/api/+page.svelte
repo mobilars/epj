@@ -169,6 +169,13 @@
 				<td>Journalens egen pasient-id, den du får fra <span class="mono">Patient</span> på FHIR-endepunktet.</td>
 			</tr>
 			<tr>
+				<td class="mono">{data.base}/apne/pasient#tlf=&lt;telefonnummer&gt;</td>
+				<td>
+					Nummeret det ringes fra, etter <span class="mono">#</span>, med eller uten landskode.
+					Én pasient åpnes direkte. Deler flere nummeret, velger brukeren fra en liste.
+				</td>
+			</tr>
+			<tr>
 				<td class="mono">{data.base}/apne/pasient#fnr=&lt;11 siffer&gt;</td>
 				<td>Fødselsnummer eller D-nummer, etter <span class="mono">#</span>.</td>
 			</tr>
@@ -181,10 +188,10 @@
 			pasienten blir slått opp. Det brukeren får se, avgjøres som om de hadde søkt seg fram selv.
 		</li>
 		<li>
-			<strong>Fødselsnummer skal stå etter <span class="mono">#</span>, aldri etter
-			<span class="mono">?</span>.</strong> Det som står etter <span class="mono">?</span>, skrives i
-			logger underveis. Det som står etter <span class="mono">#</span>, sendes aldri til en tjener.
-			Et fødselsnummer i spørredelen blir avvist.
+			<strong>Telefonnummer og fødselsnummer skal stå etter <span class="mono">#</span>, aldri
+			etter <span class="mono">?</span>.</strong> Det som står etter <span class="mono">?</span>,
+			skrives i logger underveis. Det som står etter <span class="mono">#</span>, sendes aldri til
+			en tjener. Står nummeret i spørredelen, blir lenken avvist.
 		</li>
 		<li>
 			Legg gjerne til <span class="mono">&amp;kilde=&lt;navn&gt;</span> (små bokstaver, tall og
@@ -195,9 +202,9 @@
 			nettside, må brukeren bekrefte først.
 		</li>
 		<li>
-			For å finne pasient-id fra et telefonnummer: søk
-			<span class="mono">Patient?phone=&lt;nummer&gt;</span> med Backend Services og scope
-			<span class="mono">system/Patient.rs</span>.
+			Programmet trenger ingen egen tilgang til journalen for dette. Vil det selv vise hvem som
+			ringer, kan det søke <span class="mono">Patient?phone=&lt;nummer&gt;</span> med Backend
+			Services og scope <span class="mono">system/Patient.rs</span>.
 		</li>
 	</ul>
 </section>

@@ -13,6 +13,7 @@ import { log, actorFromContext } from '$srv/audit';
 import { exec } from '$srv/db';
 import { requireTenant } from '$srv/tenant/context';
 import { newId } from '$srv/util/ids';
+import { compactPhone } from '$srv/journal/openlink';
 
 /**
  * Registering a patient.
@@ -109,7 +110,9 @@ export const actions: Actions = {
 			name: [{ use: 'official', family, given: [given] }],
 			gender: genderFromNationalId(nationalId),
 			birthDate,
-			...(values.telefon ? { telecom: [{ system: 'phone', value: values.telefon, use: 'mobile' }] } : {}),
+			// Stored without spacing, so the number is found however a caller's
+			// exchange or the next person writes it.
+			...(values.telefon ? { telecom: [{ system: 'phone', value: compactPhone(values.telefon), use: 'mobile' }] } : {}),
 			...(values.adresse || values.postnummer || values.poststed
 				? {
 						address: [

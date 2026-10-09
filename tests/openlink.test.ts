@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+	compactPhone,
 	identityInQuery,
 	isIdentityNumberShape,
+	isOpenedBy,
 	isPatientId,
 	needsConfirmation,
 	openUrlForId,
+	phoneVariants,
 	sourceLabel
 } from '../src/lib/server/journal/openlink';
 
@@ -83,5 +86,65 @@ describe('open-patient link', () => {
 	it('builds the address for a patient id', () => {
 		expect(openUrlForId('90', null)).toBe('/apne/pasient?id=90');
 		expect(openUrlForId('90', 'callmanager')).toBe('/apne/pasient?id=90&kilde=callmanager');
+	});
+
+	it('refuses a phone number in the query string as well', () => {
+		expect(identityInQuery(query('tlf=99887766'))).toBe(true);
+		expect(identityInQuery(query('telefon=%2B4799887766'))).toBe(true);
+		expect(identityInQuery(query('phone=99887766'))).toBe(true);
+	});
+});
+
+/**
+ * A switchboard has a phone number, and the record stores numbers as they
+ * were typed. The same number has to be found however either side wrote it.
+ */
+describe('phone lookup', () => {
+	const all = ['99887766', '+4799887766', '4799887766', '004799887766', '998 87 766', '99 88 77 66', '+47 998 87 766', '+47 99 88 77 66'];
+
+	it('spells a Norwegian number every common way, whatever form it arrives in', () => {
+		for (const input of ['99887766', '+4799887766', '004799887766', '4799887766', '998 87 766', '+47 99 88 77 66', ' 99-88-77-66 ']) {
+			const variants = phoneVariants(input);
+			expect(variants, input).not.toBeNull();
+			for (const form of all) expect(variants, `${input} -> ${form}`).toContain(form);
+		}
+	});
+
+	it('gives the same set for the same number', () => {
+		expect(new Set(phoneVariants('99887766'))).toEqual(new Set(phoneVariants('+47 998 87 766')));
+	});
+
+	it('searches a foreign number as it came and in compact international form', () => {
+		const variants = phoneVariants('+46 70 123 45 67')!;
+		expect(variants).toContain('+46701234567');
+		expect(variants).toContain('0046701234567');
+		// Not mistaken for a Norwegian number.
+		expect(variants.some((v) => v.startsWith('+47'))).toBe(false);
+	});
+
+	it('refuses what is not a phone number', () => {
+		expect(phoneVariants('anonymous')).toBeNull();
+		expect(phoneVariants('')).toBeNull();
+		expect(phoneVariants('123')).toBeNull();
+		expect(phoneVariants('99887766,*')).toBeNull();
+		expect(phoneVariants('9988 7766 x12')).toBeNull();
+		expect(phoneVariants(null)).toBeNull();
+		expect(phoneVariants(99887766)).toBeNull();
+	});
+
+	it('never produces a value that could break out of a search list', () => {
+		for (const v of phoneVariants('+47 998 87 766')!) expect(v).toMatch(/^\+?[\d ]+$/);
+	});
+
+	it('stores a number without its spacing', () => {
+		expect(compactPhone(' 998 87 766 ')).toBe('99887766');
+		expect(compactPhone('+47 99-88-77-66')).toBe('+4799887766');
+	});
+
+	it('names the three ways a patient can be pointed at, and no others', () => {
+		expect(isOpenedBy('id')).toBe(true);
+		expect(isOpenedBy('telefon')).toBe(true);
+		expect(isOpenedBy('fødselsnummer')).toBe(true);
+		expect(isOpenedBy('navn')).toBe(false);
 	});
 });

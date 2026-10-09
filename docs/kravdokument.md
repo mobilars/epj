@@ -315,12 +315,14 @@ avviser.
 
 **K-4.14 Andre programmer skal kunne åpne journalen på en bestemt pasient.**
 Et sentralbord eller køsystem åpner `/apne/pasient` i brukerens nettleser, med
-journalens pasient-id eller med fødselsnummer. Adressen gir ingen tilgang: den
-virker bare på en økt som allerede er logget inn med HelseID, og det brukeren
-får se, avgjøres av pasientsiden som ellers. Fødselsnummer går i fragmentet
-etter `#`, som aldri sendes til en tjener, og avvises i spørredelen (se K-1.8).
-En lenke fulgt fra en annen nettside må bekreftes før journalen åpnes.
-Åpningen loggføres med kilden.
+telefonnummeret det ringes fra, med fødselsnummer eller med journalens
+pasient-id. Adressen gir ingen tilgang: den virker bare på en økt som allerede
+er logget inn med HelseID, og det brukeren får se, avgjøres av pasientsiden som
+ellers. Telefonnummer og fødselsnummer går i fragmentet etter `#`, som aldri
+sendes til en tjener, og avvises i spørredelen (se K-1.8). Et telefonnummer
+søkes opp i de vanlige skrivemåtene; deler flere pasienter nummeret, velger
+brukeren selv. En lenke fulgt fra en annen nettside må bekreftes før journalen
+åpnes. Åpningen loggføres med kilden.
 *Realisert:* `src/routes/apne/pasient/`, `src/lib/server/journal/openlink.ts`.
 *Testet:* `tests/openlink.test.ts`.
 

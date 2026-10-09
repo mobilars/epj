@@ -8,17 +8,22 @@ import { isConfigured as helseIdConfigured } from '$srv/auth/helseid';
 import {
 	identityInQuery,
 	isIdentityNumberShape,
+	isOpenedBy,
 	isPatientId,
 	needsConfirmation,
 	openUrlForId,
-	sourceLabel
+	phoneVariants,
+	sourceLabel,
+	type OpenedBy
 } from '$srv/journal/openlink';
+import { toPatientDisplay } from '$srv/fhir/display';
 
 /**
  * Opens a patient's record from another program. See `openlink.ts` for the
  * rules and why they are what they are.
  *
  *   /apne/pasient?id=<record's patient id>[&kilde=<label>]
+ *   /apne/pasient#tlf=<phone number>
  *   /apne/pasient#fnr=<fødselsnummer>
  *
  * Nothing is resolved, and nothing about any patient is shown, until the
@@ -51,7 +56,7 @@ function loginUrl(returnTo: string | null): string {
 	return returnTo ? `${start}?retur=${encodeURIComponent(returnTo)}` : start;
 }
 
-async function logOpening(ctx: AuthContext, patientId: string, by: 'id' | 'fødselsnummer', source: string | null) {
+async function logOpening(ctx: AuthContext, patientId: string, by: OpenedBy, source: string | null) {
 	// The read itself is logged by the patient page. This says how the user
 	// came to be there, which the read alone cannot.
 	await log(
@@ -100,19 +105,24 @@ export const load: PageServerLoad = async (event) => {
 };
 
 export const actions: Actions = {
-	/** The user confirmed a link that came from another site. */
+	/**
+	 * Opens one patient the user pointed at: confirming a link that came from
+	 * another site, or picking one of several who share a phone number.
+	 */
 	open: async (event) => {
 		const g = gate(event);
 		if (!g.ok) return fail(403, { state: g.state });
 		const form = await event.request.formData();
 		const id = form.get('id');
 		if (!isPatientId(id)) return fail(400, { state: 'bad-id' as const });
-		await logOpening(g.ctx, id, 'id', sourceLabel(form.get('kilde')));
+		const via = form.get('via');
+		await logOpening(g.ctx, id, isOpenedBy(via) ? via : 'id', sourceLabel(form.get('kilde')));
 		redirect(303, `/pasienter/${id}`);
 	},
 
 	/**
-	 * Finds the patient with a national identity number and opens the record.
+	 * Finds the patient by phone number or national identity number, and opens
+	 * the record.
 	 *
 	 * Posted by the page from the URL fragment. The search goes through the
 	 * gateway like any other, so it is bounded by what the user may see and is
@@ -123,8 +133,53 @@ export const actions: Actions = {
 		const g = gate(event);
 		if (!g.ok) return fail(403, { state: g.state });
 		const form = await event.request.formData();
-		const number = form.get('fnr');
 		const source = sourceLabel(form.get('kilde'));
+		const canRegister = g.ctx.permissions.has('pasient:opprett');
+
+		const phone = form.get('tlf');
+		if (phone !== null && phone !== '') {
+			const variants = phoneVariants(phone);
+			if (!variants) return fail(400, { state: 'bad-phone' as const });
+
+			// One search for every way the number may have been typed. A comma
+			// separates alternatives in a FHIR search, and none of the variants
+			// can contain one.
+			const matches = resources(
+				await searchResources(g.ctx, 'Patient', { phone: variants.join(','), _count: 20, _sort: 'family' })
+			);
+			await log(
+				{
+					type: 'rest', subtype: 'pasientsøk', action: 'E', outcome: '0',
+					details: { type: 'telefon', match: matches.length, source: source ?? 'ukjent' }
+				},
+				actorFromContext(g.ctx)
+			);
+
+			if (matches.length === 0) return fail(404, { state: 'no-phone-match' as const, canRegister });
+			if (matches.length === 1) {
+				const id = matches[0].id as string;
+				if (!isPatientId(id)) error(500, 'Pasienten har en id journalen ikke kan lenke til.');
+				await logOpening(g.ctx, id, 'telefon', source);
+				redirect(303, `/pasienter/${id}`);
+			}
+
+			// A number shared by several: a household, or a parent's number on the
+			// children's records. Shown to choose from, as a search would show
+			// them, and opened by the user rather than by a guess.
+			return {
+				state: 'choose' as const,
+				source,
+				matches: matches.map(toPatientDisplay).map((p) => ({
+					id: p.id,
+					name: p.name,
+					nationalIdMasked: p.nationalIdMasked,
+					age: p.age,
+					gender: p.gender
+				}))
+			};
+		}
+
+		const number = form.get('fnr');
 		if (!isIdentityNumberShape(number) || !validNorwegianNationalId(number)) {
 			return fail(400, { state: 'bad-number' as const });
 		}
@@ -141,18 +196,13 @@ export const actions: Actions = {
 
 		await log(
 			{
-				type: 'rest',
-				subtype: 'pasientsøk',
-				action: 'E',
-				outcome: '0',
+				type: 'rest', subtype: 'pasientsøk', action: 'E', outcome: '0',
 				details: { type: 'fødselsnummer', match: matches.length, source: source ?? 'ukjent' }
 			},
 			actorFromContext(g.ctx)
 		);
 
-		if (matches.length === 0) {
-			return fail(404, { state: 'not-found' as const, canRegister: g.ctx.permissions.has('pasient:opprett') });
-		}
+		if (matches.length === 0) return fail(404, { state: 'not-found' as const, canRegister });
 		if (matches.length > 1) return fail(409, { state: 'not-unique' as const });
 
 		const id = matches[0].id as string;
