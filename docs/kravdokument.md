@@ -313,6 +313,17 @@ kodeverkene journalen faktisk støtter. Den kan dermed ikke love noe vokteren
 avviser.
 *Realisert:* `src/routes/utvikler/api/`.
 
+**K-4.14 Andre programmer skal kunne åpne journalen på en bestemt pasient.**
+Et sentralbord eller køsystem åpner `/apne/pasient` i brukerens nettleser, med
+journalens pasient-id eller med fødselsnummer. Adressen gir ingen tilgang: den
+virker bare på en økt som allerede er logget inn med HelseID, og det brukeren
+får se, avgjøres av pasientsiden som ellers. Fødselsnummer går i fragmentet
+etter `#`, som aldri sendes til en tjener, og avvises i spørredelen (se K-1.8).
+En lenke fulgt fra en annen nettside må bekreftes før journalen åpnes.
+Åpningen loggføres med kilden.
+*Realisert:* `src/routes/apne/pasient/`, `src/lib/server/journal/openlink.ts`.
+*Testet:* `tests/openlink.test.ts`.
+
 ## 5. Sikkerhetslogg
 
 **K-5.1 Alle oppslag og endringer skal logges.**
@@ -598,7 +609,7 @@ enkelttegns-snarveier.
 | Journal og dokumentasjon | K-1.1 – K-1.12 | `kodeverk`, `fhir-validering`, `gateway`, `notesearch`, `terminology`, `small-features` | `journal.spec.ts` |
 | Tilgangsstyring | K-2.1 – K-2.7 | `tilgang`, `scopes`, `brukere` | `tilgang.spec.ts` |
 | Autentisering | K-3.1 – K-3.9 | `brukere`, `totp`, `crypto`, `jws`, `helseid-level`, `small-features` | `palogging.spec.ts` |
-| API og apper | K-4.1 – K-4.13 | `oauth`, `scopes`, `gateway`, `cds`, `launchmode`, `r4` | `smart.spec.ts` |
+| API og apper | K-4.1 – K-4.14 | `oauth`, `scopes`, `gateway`, `cds`, `launchmode`, `r4`, `openlink` | `smart.spec.ts` |
 | Sikkerhetslogg | K-5.1 – K-5.5 | `audit` | `tilgang.spec.ts` |
 | Retting, sletting og innsyn | K-6.1 – K-6.8 | `utlevering` | `utlevering.spec.ts` |
 | Legemidler | K-7.1 – K-7.4 | `integrasjoner` | `journal.spec.ts` |

@@ -156,6 +156,53 @@
 </section>
 
 <section class="kort">
+	<h2>Åpne en pasient fra et annet program</h2>
+	<p>
+		Et sentralbord, et køsystem eller en laboratorieklient vet ofte hvilken pasient det gjelder før
+		journalen gjør det. Programmet åpner da denne adressen i brukerens nettleser, og journalen går
+		rett til pasienten:
+	</p>
+	<table>
+		<tbody>
+			<tr>
+				<td class="mono">{data.base}/apne/pasient?id=&lt;pasient-id&gt;</td>
+				<td>Journalens egen pasient-id, den du får fra <span class="mono">Patient</span> på FHIR-endepunktet.</td>
+			</tr>
+			<tr>
+				<td class="mono">{data.base}/apne/pasient#fnr=&lt;11 siffer&gt;</td>
+				<td>Fødselsnummer eller D-nummer, etter <span class="mono">#</span>.</td>
+			</tr>
+		</tbody>
+	</table>
+	<ul>
+		<li>
+			<strong>Adressen gir ingen tilgang.</strong> Den virker bare når brukeren allerede er logget inn
+			med HelseID i den nettleseren. Ellers får brukeren beskjed om å logge inn, og ingenting om
+			pasienten blir slått opp. Det brukeren får se, avgjøres som om de hadde søkt seg fram selv.
+		</li>
+		<li>
+			<strong>Fødselsnummer skal stå etter <span class="mono">#</span>, aldri etter
+			<span class="mono">?</span>.</strong> Det som står etter <span class="mono">?</span>, skrives i
+			logger underveis. Det som står etter <span class="mono">#</span>, sendes aldri til en tjener.
+			Et fødselsnummer i spørredelen blir avvist.
+		</li>
+		<li>
+			Legg gjerne til <span class="mono">&amp;kilde=&lt;navn&gt;</span> (små bokstaver, tall og
+			bindestrek). Navnet står i innsynsloggen, så pasienten kan se hvordan journalen ble åpnet.
+		</li>
+		<li>
+			Åpnet fra et program på maskinen går lenken rett til pasienten. Følges den fra en annen
+			nettside, må brukeren bekrefte først.
+		</li>
+		<li>
+			For å finne pasient-id fra et telefonnummer: søk
+			<span class="mono">Patient?phone=&lt;nummer&gt;</span> med Backend Services og scope
+			<span class="mono">system/Patient.rs</span>.
+		</li>
+	</ul>
+</section>
+
+<section class="kort">
 	<h2>Feil</h2>
 	<p>
 		Alt fra <span class="mono">/fhir</span> svarer med <span class="mono">OperationOutcome</span> og
