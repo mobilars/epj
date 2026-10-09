@@ -93,7 +93,15 @@ export const load: PageServerLoad = async (event) => {
 		};
 	}
 
-	if (id === null) return { state: 'fragment' as const, source };
+	// The page reads the number from the fragment. A link followed from another
+	// site waits for the user here too, before anything is looked up.
+	if (id === null) {
+		return {
+			state: 'fragment' as const,
+			source,
+			confirm: needsConfirmation(event.request.headers.get('sec-fetch-site'))
+		};
+	}
 	if (!isPatientId(id)) return { state: 'bad-id' as const };
 
 	if (needsConfirmation(event.request.headers.get('sec-fetch-site'))) {

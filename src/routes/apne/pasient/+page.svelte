@@ -10,6 +10,8 @@
 	let phoneField = $state<HTMLInputElement | null>(null);
 	// The fragment held nothing this page can use.
 	let nothingToOpen = $state(false);
+	// The link came from another site: the number is read, and waits for a click.
+	let awaitingConfirm = $state(false);
 
 	onMount(() => {
 		// The fragment may hold a phone number or a national identity number.
@@ -32,7 +34,8 @@
 		if (resolveForm && numberField && phoneField && (number || phone)) {
 			if (number) numberField.value = number;
 			else if (phone) phoneField.value = phone;
-			resolveForm.submit();
+			if (data.confirm) awaitingConfirm = true;
+			else resolveForm.submit();
 		} else {
 			nothingToOpen = true;
 		}
@@ -149,6 +152,16 @@
 			<button type="submit" class="primar">Åpne journalen</button>
 			<a class="knapp" href="/">Avbryt</a>
 		</form>
+	{:else if awaitingConfirm}
+		<h1>Åpne pasientjournal?</h1>
+		<p>
+			Du fulgte en lenke som ber journalen slå opp og åpne en pasient. Gjør du det, loggføres
+			oppslaget på deg, som ellers.
+		</p>
+		<p class="handlinger">
+			<button type="button" class="primar" onclick={() => resolveForm?.submit()}>Slå opp og åpne</button>
+			<a class="knapp" href="/">Avbryt</a>
+		</p>
 	{:else if nothingToOpen}
 		<h1>Ingen pasient i lenken</h1>
 		<p>Lenken sa ikke hvilken pasient som skulle åpnes.</p>
