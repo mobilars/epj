@@ -12,8 +12,20 @@
 # manuelt med `deploy/apus/bygg.sh`, som kjører byggejobben ferdig og rydder
 # etter seg.
 #
-# Rekkefølgen er valgt slik at det som feiler oftest, feiler først: typene, så
-# enhetstestene, så nettleseren.
+# One step: install, type check, build. That is what breaks most often and
+# what a push should not be allowed to break, and it takes a couple of minutes.
+#
+# Tests are run by hand, not here:
+#
+#   npm test                 unit tests. The ones that need a database run only
+#                            when EPJ_TEST_DATABASE_URL points at a PostgreSQL
+#                            they may create and drop databases in.
+#   npx playwright test      browser tests, against a local server.
+#
+# They were taken out because the cluster cannot carry them. The Playwright
+# image is close to 1 GB to download; pulled onto a node with a 15 GB disk it
+# took the node under its eviction threshold and the container registry down
+# with it. The database tests took close to five minutes on their own.
 #
 # Alle steg har tak på minne og CPU. Uten tak er det ingenting som hindrer et
 # byggetrinn i å ta ned noden - og med den resten av klyngen.
@@ -37,21 +49,8 @@ variables:
         requests: {cpu: 250m, memory: 512Mi}
         limits: {cpu: '1', memory: 1536Mi}
 
-services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: epj
-      POSTGRES_PASSWORD: epj
-      POSTGRES_DB: epj
-    backend_options:
-      kubernetes:
-        resources:
-          requests: {cpu: 100m, memory: 128Mi}
-          limits: {cpu: 500m, memory: 512Mi}
-
 steps:
-  typekontroll:
+  check:
     image: *node
     environment: *test_env
     backend_options: *lite_tak
@@ -59,45 +58,6 @@ steps:
       - npm ci
       - npm run check
       - npm run build
-
-  enhetstester:
-    image: *node
-    environment:
-      <<: *test_env
-      EPJ_TEST_DATABASE_URL: postgres://epj:epj@postgres:5432/postgres
-    backend_options: *lite_tak
-    commands:
-      - npm ci
-      - until nc -z postgres 5432; do sleep 1; done
-      - npm test
-
-  # Runs only when a pipeline is started by hand, never on a push.
-  #
-  # The Playwright image is close to 1 GB to download and several times that
-  # unpacked, and the nodes have 15 GB disks. Pulled onto k8s3 on a push, it
-  # took the node under its eviction threshold: the step was evicted before it
-  # ran a single test, and the disk pressure took the container registry down
-  # with it, since the registry's storage lives on that node. Until the nodes
-  # have room for it, this step is a decision someone makes, not a side effect
-  # of pushing.
-  ende-til-ende:
-    when:
-      - event: manual
-    image: mcr.microsoft.com/playwright:v1.63.0-noble
-    environment:
-      <<: *test_env
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '0'
-      EPJ_BASE_URL: http://127.0.0.1:4173
-      E2E_DATABASE_URL: postgres://epj:epj@postgres:5432/epj_e2e
-    backend_options:
-      kubernetes:
-        resources:
-          requests: {cpu: 500m, memory: 1Gi}
-          limits: {cpu: '1', memory: 2Gi}
-    commands:
-      - npm ci
-      - until nc -z postgres 5432; do sleep 1; done
-      - npx playwright test
 
   varsle-e-post:
     image: drillster/drone-email
