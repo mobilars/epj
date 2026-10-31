@@ -31,7 +31,8 @@ seg ikke vise i en ramme, samme problem som med Spirare. Appen måtte også fåt
 fødselsnummeret for å hente billetten.
 
 Skillet som finnes: SFMs skjermbilde kjører fra NHNs eget domene og får bare en
-billett, og koden ligger samlet under `integrations/sfm/`.
+billett, og koden ligger samlet i `src/apps/sfm/`. Plattformen vet bare at en app kan be om
+et scope ved pålogging og om å få beholde tokenet (`login-extensions.ts`).
 
 **Merk:** En app registrert med `replacesTab: 'legemidler'` overtar fanen. Da
 vises appen og ikke SFM, også når `EPJ_SFM_FULL` er på. Demo-appen Legemidler er
@@ -63,14 +64,14 @@ Tre ting er strengere enn NHNs eksempelkode:
 
 | Hva | Hvor |
 | --- | --- |
-| Sesjonsgateway, engangsverdi, billett | `src/lib/server/integrations/sfm/session-gateway.ts` |
-| Kryptert lagring og fornying av token | `src/lib/server/integrations/sfm/tokens.ts` |
-| `authorization_details` for multi-tenant | `src/lib/server/integrations/sfm/authorization.ts` |
-| Meldingsutvekslingen med rammen | `src/lib/sfm/handshake.ts` |
-| Rammen | `src/lib/components/SfmFrame.svelte` |
-| Start for én pasient | `src/routes/pasienter/[id]/legemidler/sfm-sesjon/` |
-| Holder økten i live | `src/routes/sfm/oppfrisk/` |
-| Lokal simulator av portalen | `src/routes/sfm-simulator/` |
+| Sesjonsgateway, engangsverdi, billett | `src/apps/sfm/server/session-gateway.ts` |
+| Kryptert lagring og fornying av token | `src/platform/server/auth/helseid-session-tokens.ts` |
+| `authorization_details` for multi-tenant | `src/apps/sfm/server/authorization.ts` |
+| Meldingsutvekslingen med rammen | `src/apps/sfm/handshake.ts` |
+| Rammen | `src/apps/sfm/components/SfmFrame.svelte` |
+| Start for én pasient | `src/apps/sfm/routes/pasienter/[id]/legemidler/sfm-sesjon/` |
+| Holder økten i live | `src/apps/sfm/routes/sfm/oppfrisk/` |
+| Lokal simulator av portalen | `src/apps/sfm/routes/sfm-simulator/` |
 | Lagring | migrasjon `021_sfm_session.sql` |
 
 Hvert oppslag loggføres som `sfm:åpne`. Når brukeren logger ut, avsluttes

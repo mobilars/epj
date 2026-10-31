@@ -3,7 +3,8 @@ import * as oidc from 'openid-client';
 import { helseIdConfiguration } from '$srv/auth/helseid';
 import { config } from '$srv/config';
 import { requireTenant } from '$srv/tenant/context';
-import { sfmAccess, type SfmAccess } from './tokens';
+import { helseIdAccess, type HelseIdAccess } from '$srv/auth/helseid-session-tokens';
+import { sfmConfig } from './config';
 
 /**
  * SFM's session gateway: what the record's server does so that SFM's own screen
@@ -96,8 +97,8 @@ function requestHeaders(): Record<string, string> {
 	};
 }
 
-async function post(operation: string, path: string, body: unknown, access: SfmAccess): Promise<Response> {
-	const base = config.integrations.sfm.sessionGatewayUrl.replace(/\/$/, '');
+async function post(operation: string, path: string, body: unknown, access: HelseIdAccess): Promise<Response> {
+	const base = sfmConfig.sessionGatewayUrl.replace(/\/$/, '');
 	if (!base) throw new Error('SFM session gateway is not configured (EPJ_SFM_SESSION_URL)');
 	const response = await oidc.fetchProtectedResource(
 		await helseIdConfiguration(),
@@ -129,7 +130,7 @@ export async function openSfm(sessionId: string, patientPid: string): Promise<Sf
 		};
 	}
 
-	const access = await sfmAccess(sessionId);
+	const access = await helseIdAccess(sessionId);
 	if (!access) return null;
 
 	const session = (await (await post('session', GATEWAY_PATH.createSession, { nonce: nonceHash }, access)).json()) as {
@@ -154,7 +155,7 @@ export async function openSfm(sessionId: string, patientPid: string): Promise<Sf
 /** Keeps SFM's session alive: renews the token, and tells SFM when it changed. */
 export async function refreshSfm(sessionId: string): Promise<boolean> {
 	if (simulated()) return true;
-	const access = await sfmAccess(sessionId);
+	const access = await helseIdAccess(sessionId);
 	if (!access) return false;
 	if (access.renewed) await post('refresh', GATEWAY_PATH.refreshSession, undefined, access);
 	return true;
@@ -164,7 +165,7 @@ export async function refreshSfm(sessionId: string): Promise<boolean> {
 export async function endSfm(sessionId: string): Promise<void> {
 	if (simulated()) return;
 	try {
-		const access = await sfmAccess(sessionId);
+		const access = await helseIdAccess(sessionId);
 		if (access) await post('end', GATEWAY_PATH.endSession, undefined, access);
 	} catch (err) {
 		console.error('[sfm] could not end the session', (err as Error).message);

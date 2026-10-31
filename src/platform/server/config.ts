@@ -257,16 +257,6 @@ export const config = {
 	integrations: {
 		/** `mock` runs everything locally without network. `live` requires an endpoint + client certificate. */
 		mode: (env.EPJ_INTEGRATION_MODE ?? 'mock') as 'mock' | 'live',
-		sfm: {
-			/**
-			 * SFM's own screen in the Legemidler tab (SFM Full). Off by default,
-			 * because it adds the SFM scope to the HelseID sign-in, and a client
-			 * not yet granted that scope would have every sign-in refused.
-			 */
-			full: bool('EPJ_SFM_FULL', false),
-			sessionGatewayUrl: env.EPJ_SFM_SESSION_URL ?? '',
-			scope: env.EPJ_SFM_SCOPE ?? 'e-helse:sfm.api/sfm.api2'
-		},
 		nhn: {
 			messageServerUrl: env.EPJ_NHN_MESSAGE_SERVER_URL ?? '',
 			herId: env.EPJ_ORG_HER_ID ?? '0000000',

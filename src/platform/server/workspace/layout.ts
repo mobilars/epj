@@ -1,4 +1,5 @@
 import { exec, one } from '../db';
+import { appManifests } from '$apps/registry';
 import { requireTenant } from '../tenant/context';
 import { getSetting, setSetting, clearSetting } from '../auth/settings';
 
@@ -31,21 +32,13 @@ export interface CardDefinition {
 	description: string;
 }
 
+/** The timebook is the platform's own; everything else comes from an app. */
 export const CARDS: Record<Surface, CardDefinition[]> = {
 	arbeidsflate: [
 		{ id: 'timebok', title: 'Timeboken', description: 'Dagens og kommende timer.' },
-		{ id: 'meldinger', title: 'Nye meldinger', description: 'Ubehandlede meldinger i innboksen.' },
-		{ id: 'oppgjor', title: 'Oppgjør', description: 'Regningskort som er klare for innsending.' }
+		...appManifests.flatMap((app) => app.workspaceCards ?? [])
 	],
-	pasientoversikt: [
-		{ id: 'diagnoser', title: 'Diagnoser og problemer', description: 'Aktive diagnoser med ICPC-2-kode.' },
-		{ id: 'kritisk', title: 'Kritisk informasjon', description: 'Allergier og intoleranser.' },
-		{ id: 'legemidler', title: 'Legemidler i bruk', description: 'Aktive resepter.' },
-		{ id: 'maalinger', title: 'Siste målinger og prøvesvar', description: 'De nyeste observasjonene.' },
-		{ id: 'notater', title: 'Siste journalnotater', description: 'De siste konsultasjonsnotatene.' },
-		{ id: 'kontakter', title: 'Kontakter', description: 'Konsultasjoner og andre kontakter.' },
-		{ id: 'vaksiner', title: 'Vaksiner', description: 'Registrerte vaksinasjoner, når det finnes noen.' }
-	]
+	pasientoversikt: appManifests.flatMap((app) => app.patientCards ?? [])
 };
 
 export const LAYOUT_KEY = (surface: Surface) => `layout:${surface}`;

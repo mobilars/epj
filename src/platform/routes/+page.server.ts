@@ -2,8 +2,7 @@ import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { resources, searchResources } from '$srv/fhir/internal';
 import { toPatientDisplay } from '$srv/fhir/display';
-import { listMessages, pendingKvitteringer } from '$apps/messages/server/nhn/message-queue';
-import { listCard } from '$apps/billing/server/helfo/billing';
+import { workspaceCardLoaders, workspaceNotices } from '$apps/registry.server';
 import { query } from '$srv/db';
 import { requireTenant } from '$srv/tenant/context';
 import { resolveLayout } from '$srv/workspace/layout';
@@ -23,20 +22,22 @@ export const load: PageServerLoad = async (event) => {
 	// practice's, else all of them.
 	const layout = await resolveLayout('arbeidsflate', ctx.userId);
 	const canLese = ctx.permissions.has('journal:les');
-	const canMessage = ctx.permissions.has('melding:les');
-	const canSettlement = ctx.permissions.has('oppgjor:registrer') || ctx.permissions.has('oppgjor:send');
 
-	const [appointments, messages, card, emergencyAccess, outsideReceipt] = await Promise.all([
+	// Each app fills its own card, and only for the cards this person shows.
+	const loading = layout.cards.filter((id) => workspaceCardLoaders[id]);
+
+	const [appointments, cardData, emergencyAccess, notices] = await Promise.all([
 		canLese
 			? searchResources(ctx, 'Appointment', { date: `ge${today}`, _count: 25, _sort: 'date' }).catch(() => null)
 			: Promise.resolve(null),
-		canMessage ? listMessages({ direction: 'inn', status: 'mottatt', limit: 15 }) : Promise.resolve([]),
-		canSettlement ? listCard({ status: 'klar', limit: 500 }) : Promise.resolve([]),
+		Promise.all(loading.map(async (id) => [id, await workspaceCardLoaders[id](ctx)] as const)).then((pairs) =>
+			Object.fromEntries(pairs)
+		),
 		query<{ patient_id: string; expires_at: string; justification: string }>(
 			'SELECT patient_id, expires_at, justification FROM break_glass WHERE user_id = $1 AND tenant_id = $2 AND expires_at > now() ORDER BY expires_at',
 			[ctx.userId, requireTenant().id]
 		),
-		canMessage ? pendingKvitteringer(60) : Promise.resolve([])
+		workspaceNotices(ctx)
 	]);
 
 	const patientIder = [
@@ -69,18 +70,8 @@ export const load: PageServerLoad = async (event) => {
 				patient: pid ? (patientKart[pid] ?? null) : null
 			};
 		}),
-		messages: messages.map((m) => ({
-			id: m.id,
-			type: m.message_type,
-			sender: m.recipient_name ?? m.sender_her_id ?? 'Ukjent',
-			created_at: m.created_at,
-			patientId: m.patient_id
-		})),
-		settlement: {
-			countKlare: card.length,
-			sumReimbursementOre: card.reduce((s, k) => s + k.reimbursement_ore, 0)
-		},
+		cardData,
 		emergencyAccess: emergencyAccess.map((n) => ({ patientId: n.patient_id, expires_at: n.expires_at, justification: n.justification })),
-		outsideReceipt: outsideReceipt.length
+		notices
 	};
 };

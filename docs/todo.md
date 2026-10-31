@@ -33,7 +33,7 @@ slettingen av den som har myndighet. Retting etter § 42 hører til samme flyt, 
 skal alltid være en tilføyelse - den opprinnelige teksten skal fortsatt kunne
 leses.
 
-Berører: `src/lib/server/journal/`, ny tabell for begjæringer, `admin`-flate.
+Berører: `src/platform/server/journal/`, ny tabell for begjæringer, `admin`-flate.
 
 ### 1.2 Jobbplanlegging **[K]**
 
@@ -333,7 +333,7 @@ noe er filtrert bort.
 
 ### 5.1 Norske basisprofiler **[V]**
 
-Profilaget er skilt ut i `src/lib/server/fhir/`, men no-basis-profilene er ikke
+Profilaget er skilt ut i `src/platform/server/fhir/`, men no-basis-profilene er ikke
 lagt inn. De er publisert for R4; systemet bruker R5. Se
 [apne-punkter.md](apne-punkter.md).
 
@@ -456,18 +456,14 @@ Det som er bygget, står i K-4.9 til K-4.13. Gjenstår:
 
 ## 6c. Skille plattform og apper **[V]**
 
-Målbildet er at plattformen er ramme, tilgang og appstyring, og at appene står for
-funksjonene. Se [arkitektur.md](arkitektur.md#plattform-og-apper). I dag ligger
-notater, legemidler, meldinger og oppgjør inne i plattformen. Foreslått rekkefølge:
+Skillet er synlig og håndhevet: koden ligger i `src/platform/` og `src/apps/<navn>/`,
+hver app har et manifest, og en test feiler hvis grensen brytes. Se
+[arkitektur.md](arkitektur.md#plattform-og-apper), som også lister det som gjenstår.
 
-1. **Gjøre skillet synlig.** Flytte funksjonene inn i egne mapper, uten å endre
-   adresser, og samle `integrations/`, `journal/` og `cds/` etter funksjon.
-2. **Håndheve det.** Et manifest per modul i stedet for faste faner i plattformens
-   kode, og en test som feiler når plattformkode importerer en modul, eller en modul
-   går utenom plattformens offentlige grensesnitt.
-3. **Flytte ut.** Gjøre funksjoner om til ekte apper, én om gangen. Notater og
-   legemidler først, fordi det allerede finnes demonstrasjonsapper for begge.
-   Meldinger, oppgjør og SFM trenger en tjenerdel og må vurderes hver for seg.
+Neste steg er å **flytte ut**: gjøre funksjoner om til ekte apper, én om gangen.
+Notater og legemidler først, fordi det allerede finnes demonstrasjonsapper for begge.
+Meldinger, oppgjør og SFM trenger en tjenerdel og må vurderes hver for seg, og kan
+like gjerne bli værende i kodebasen som byttbare plattformapper.
 
 ## 7. Mindre ting
 

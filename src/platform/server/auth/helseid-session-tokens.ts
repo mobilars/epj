@@ -1,15 +1,15 @@
 import type { JWK } from 'jose';
 import * as oidc from 'openid-client';
-import { dpopHandleFor, helseIdConfiguration, type HelseIdTokens } from '$srv/auth/helseid';
-import { exec, one, transaction } from '$srv/db';
-import { requireTenant } from '$srv/tenant/context';
-import { decrypt, encrypt } from '$srv/util/crypto';
+import { dpopHandleFor, helseIdConfiguration, type HelseIdTokens } from './helseid';
+import { exec, one, transaction } from '../db';
+import { requireTenant } from '../tenant/context';
+import { decrypt, encrypt } from '../util/crypto';
 
 /**
- * The signed-in clinician's HelseID token, kept for calls to SFM.
+ * The signed-in clinician's HelseID token, kept for services that act as them.
  *
  * Encrypted at rest, tied to the session, and never sent to the browser. It is
- * only stored while SFM is switched on (`EPJ_SFM_FULL`), and it is gone when the
+ * only stored while an app has asked for it (`login-extensions.ts`), and gone when the
  * session is: signing out deletes it, and a session that ended any other way
  * stops it being readable at once and has it swept up at the next sign-in.
  */
@@ -23,10 +23,10 @@ interface Stored {
 	dpop: { privateJwk: JWK; publicJwk: JWK };
 }
 
-export interface SfmAccess {
+export interface HelseIdAccess {
 	accessToken: string;
 	dpop: oidc.DPoPHandle;
-	/** The token changed just now, so SFM's session has to be told. */
+	/** The token changed just now, so whoever holds a session on it has to be told. */
 	renewed: boolean;
 }
 
@@ -48,7 +48,7 @@ export async function forgetHelseIdTokens(sessionId: string): Promise<void> {
 	await exec('DELETE FROM helseid_session_token WHERE session_id = $1', [sessionId]);
 }
 
-/** True when this session has a token to call SFM with. */
+/** True when this session has a token. */
 export async function hasHelseIdTokens(sessionId: string): Promise<boolean> {
 	return Boolean(await readRow(sessionId));
 }
@@ -71,7 +71,7 @@ async function readRow(sessionId: string, lock = false) {
  * The renewal holds a row lock, because a refresh token is single-use: two tabs
  * renewing at once would otherwise spend it twice.
  */
-export async function sfmAccess(sessionId: string): Promise<SfmAccess | null> {
+export async function helseIdAccess(sessionId: string): Promise<HelseIdAccess | null> {
 	const row = await readRow(sessionId);
 	if (!row) return null;
 	if (new Date(row.expires_at).getTime() - Date.now() > RENEW_MARGIN_MS) {

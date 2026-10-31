@@ -4,7 +4,7 @@ import { endSession } from '$srv/auth/session';
 import { actorFromContext, log } from '$srv/audit';
 import { config } from '$srv/config';
 import { isConfigured } from '$srv/auth/helseid';
-import { endSfm } from '$apps/sfm/server/session-gateway';
+import { notifySignOut } from '$srv/auth/login-extensions';
 
 /**
  * Signing out.
@@ -19,7 +19,7 @@ export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (ctx) {
 		await log({ type: 'login', subtype: 'logout', action: 'E', outcome: '0' }, actorFromContext(ctx));
-		if (ctx.sessionId && config.integrations.sfm.full) await endSfm(ctx.sessionId);
+		if (ctx.sessionId) await notifySignOut(ctx.sessionId);
 	}
 	await endSession(event.cookies);
 
@@ -35,7 +35,7 @@ export const actions: Actions = {
 		const ctx = event.locals.auth;
 		if (ctx) {
 			await log({ type: 'login', subtype: 'logout', action: 'E', outcome: '0' }, actorFromContext(ctx));
-			if (ctx.sessionId && config.integrations.sfm.full) await endSfm(ctx.sessionId);
+			if (ctx.sessionId) await notifySignOut(ctx.sessionId);
 		}
 		await endSession(event.cookies);
 		redirect(303, '/logg-ut');

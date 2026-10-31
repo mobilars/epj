@@ -186,7 +186,7 @@ implementert (se [åpne punkter](apne-punkter.md)).
 
 ## Oppgradering
 
-Migrasjoner er versjonerte SQL-filer i `src/lib/server/db/migrations/`, kjørt i
+Migrasjoner er versjonerte SQL-filer i `src/platform/server/db/migrations/`, kjørt i
 rekkefølge og bare én gang. De kjører automatisk ved oppstart, eller manuelt med
 `npm run migrer`.
 

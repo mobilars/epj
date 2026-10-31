@@ -1,6 +1,11 @@
 <script lang="ts">
 	import Nedtrekk from '$lib/components/Nedtrekk.svelte';
 	import Shortcuts from '$lib/components/Shortcuts.svelte';
+	import { appManifests } from '$apps/registry';
+
+	const menuEntries = appManifests
+		.flatMap((app) => (app.mainMenu ? [app.mainMenu] : []))
+		.sort((a, b) => a.order - b.order);
 	import '$lib/styles/app.css';
 	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
@@ -105,12 +110,11 @@
 					{/if}
 				</div>
 			{/if}
-			{#if has('melding:les')}
-				<a href="/meldinger" aria-current={page.url.pathname.startsWith('/meldinger') ? 'page' : undefined}>Meldinger</a>
-			{/if}
-			{#if has('oppgjor:registrer') || has('oppgjor:send')}
-				<a href="/oppgjor" aria-current={page.url.pathname.startsWith('/oppgjor') ? 'page' : undefined}>Oppgjør</a>
-			{/if}
+			{#each menuEntries as entry (entry.href)}
+				{#if entry.anyOf.some((permission) => has(permission))}
+					<a href={entry.href} aria-current={page.url.pathname.startsWith(entry.href) ? 'page' : undefined}>{entry.label}</a>
+				{/if}
+			{/each}
 			{#if has('admin:brukere') || has('admin:apper') || has('admin:logg')}
 				<a href="/admin" aria-current={page.url.pathname.startsWith('/admin') ? 'page' : undefined}>Administrasjon</a>
 			{/if}

@@ -7,7 +7,7 @@ import { one, exec, transaction } from '../db';
 import { requireTenant, issuerFor } from '../tenant/context';
 import { createUser, getUser, rolesFor, type User } from './users';
 import type { Role } from '../authz/roles';
-import { sfmAuthorizationDetails } from '$apps/sfm/server/authorization';
+import { loginExtensions } from './login-extensions';
 
 /**
  * HelseID as identity provider.
@@ -211,11 +211,11 @@ export async function startLogin(cookies: Cookies, returnTo: string): Promise<st
 		maxAge: 600
 	});
 
-	const { sfm } = config.integrations;
+	const extensions = loginExtensions();
 	const parameters: Record<string, string> = {
 		redirect_uri: redirectUri(),
-		// SFM acts as the signed-in clinician, so its scope belongs to this sign-in.
-		scope: [...config.integrations.healthId.scopes, ...(sfm.full ? [sfm.scope] : [])].join(' '),
+		// A service that acts as the signed-in person needs its scope in this sign-in.
+		scope: [...config.integrations.healthId.scopes, ...extensions.flatMap((e) => e.scopes())].join(' '),
 		state,
 		nonce,
 		code_challenge: codeChallenge,
@@ -226,11 +226,11 @@ export async function startLogin(cookies: Cookies, returnTo: string): Promise<st
 	// first (RFC 9126), so the parameters never travel through the browser. The
 	// push is authenticated with the same client assertion as the token call.
 	//
-	// A multi-tenant client also says which practice and which SFM journal this
-	// is. That goes in a signed request object, short-lived like the assertion,
-	// so it cannot be altered on the way.
-	const details = sfm.full ? sfmAuthorizationDetails(requireTenant()) : null;
-	const outgoing = details
+	// A multi-tenant client also says which practice and journal this is. That
+	// goes in a signed request object, short-lived like the assertion, so it
+	// cannot be altered on the way.
+	const details = extensions.flatMap((e) => e.authorizationDetails?.(requireTenant()) ?? []);
+	const outgoing = details.length
 		? (
 				await oidc.buildAuthorizationUrlWithJAR(
 					configuration,
@@ -283,7 +283,7 @@ export function endFlow(cookies: Cookies): void {
 	cookies.delete(STATE_COOKIE, { path: '/' });
 }
 
-/** What SFM needs kept from a sign-in. Only returned while SFM is switched on. */
+/** What is kept from a sign-in, when an app has asked for it. */
 export interface HelseIdTokens {
 	accessToken: string;
 	refreshToken: string | null;
@@ -366,7 +366,7 @@ export async function completeLogin(cookies: Cookies, currentUrl: URL): Promise<
 		);
 		const verified = tokens.claims();
 		if (!verified) return { ok: false, error: 'HelseID returnerte ikke id_token' };
-		if (config.integrations.sfm.full && flowState.dpop) {
+		if (loginExtensions().some((e) => e.keepTokens()) && flowState.dpop) {
 			kept = {
 				accessToken: tokens.access_token,
 				refreshToken: tokens.refresh_token ?? null,

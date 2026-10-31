@@ -1,6 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
+import '$apps/registry.server';
 import { config } from '$srv/config';
 import { clientIp, rateLimit, securityHeaders } from '$srv/http';
 import { getSession, tenantIdForSession } from '$srv/auth/session';

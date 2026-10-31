@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { completeLogin, endFlow } from '$srv/auth/helseid';
 import { createSession } from '$srv/auth/session';
 import { log } from '$srv/audit';
-import { storeHelseIdTokens } from '$apps/sfm/server/tokens';
+import { storeHelseIdTokens } from '$srv/auth/helseid-session-tokens';
 
 /** Callback from HelseID after authentication. */
 export const GET: RequestHandler = async (event) => {
@@ -41,10 +41,10 @@ export const GET: RequestHandler = async (event) => {
 	}
 
 	const sessionId = await createSession(result.user.id, 'helseid', event.locals.clientIp, event.request.headers.get('user-agent'), event.cookies);
-	// A failure here costs SFM, not the sign-in: the Legemidler tab says so.
+	// A failure here costs the app that wanted the token, not the sign-in.
 	if (result.tokens) {
 		await storeHelseIdTokens(sessionId, result.tokens).catch((err) => {
-			console.error('[sfm] could not keep the HelseID token', (err as Error).message);
+			console.error('[login] could not keep the HelseID token', (err as Error).message);
 		});
 	}
 	await log(

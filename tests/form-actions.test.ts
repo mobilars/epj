@@ -31,7 +31,8 @@ describe('skjemahandlinger', () => {
 	const routesDir = path.join('src', 'platform', 'routes');
 	const appRoutes = fs.readdirSync(path.join('src', 'apps'), { withFileTypes: true })
 		.filter((e) => e.isDirectory())
-		.map((e) => path.join('src', 'apps', e.name, 'routes'))
+		// An app's components hold forms too, such as the note in the record's side panel.
+		.flatMap((e) => [path.join('src', 'apps', e.name, 'routes'), path.join('src', 'apps', e.name, 'components')])
 		.filter((dir) => fs.existsSync(dir));
 	const pages = [routesDir, ...appRoutes].flatMap((dir) => pagesWithForms(dir));
 

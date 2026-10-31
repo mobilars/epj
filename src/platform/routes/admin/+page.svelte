@@ -10,7 +10,7 @@
 			<li>Skjemaversjon: <span class="mono">{data.schemaVersion}</span></li>
 			<li>Aktive brukere: <strong class="tall">{data.countUsers}</strong></li>
 			<li>Registrerte apper: <strong class="tall">{data.countApper}</strong></li>
-			<li>Meldinger uten kvittering: <strong class="tall">{data.pendingKvitteringer}</strong></li>
+			{#each data.facts as fact (fact.label)}<li>{fact.label}: <strong class="tall">{fact.value}</strong></li>{/each}
 		</ul>
 	</section>
 

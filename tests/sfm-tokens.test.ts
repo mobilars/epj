@@ -5,7 +5,7 @@ import {
 	forgetHelseIdTokens,
 	hasHelseIdTokens,
 	storeHelseIdTokens
-} from '../src/apps/sfm/server/tokens';
+} from '../src/platform/server/auth/helseid-session-tokens';
 import { endSessionById } from '../src/platform/server/auth/activesessions';
 import { newId } from '../src/platform/server/util/ids';
 

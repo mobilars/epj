@@ -2,6 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from '$routetypes/pasienter/[id]/legemidler/sfm-sesjon/$types';
 import { actorFromContext, log } from '$srv/audit';
 import { config } from '$srv/config';
+import { sfmConfig } from '$apps/sfm/server/config';
 import { toPatientDisplay } from '$srv/fhir/display';
 import { readResource } from '$srv/fhir/internal';
 import { openSfm } from '$apps/sfm/server/session-gateway';
@@ -18,7 +19,7 @@ import { openSfm } from '$apps/sfm/server/session-gateway';
  * the page has to pass on, and nothing that identifies the patient.
  */
 export const POST: RequestHandler = async (event) => {
-	if (!config.integrations.sfm.full) error(404, 'Ikke tilgjengelig');
+	if (!sfmConfig.full) error(404, 'Ikke tilgjengelig');
 	const ctx = event.locals.auth;
 	if (!ctx?.sessionId || ctx.mate !== 'session') error(401, 'Ikke innlogget');
 	if (event.request.headers.get('origin') !== event.url.origin) error(403, 'Kryssopphavs-kall avvist');

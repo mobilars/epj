@@ -28,39 +28,85 @@
 Plattformen skal ikke vite hva en resept er. Den vet hvem du er, hvilken pasient du
 står i, hva du har lov til, og hvilke apper virksomheten har valgt.
 
-### Dagens kode mot målbildet
+### Hvor koden ligger
 
-Dette er ikke der koden er i dag. Under `src/routes/` ligger plattform og
-funksjoner side om side, og ingenting skiller dem:
+Koden er delt i `src/platform/` og `src/apps/<navn>/`. Alt som hører til en app ligger
+i appens mappe, både sider og tjenerkode:
 
-| Hva | Hvor | Tilhører |
+| Hva | Hvor | Kan byttes ut? |
 | --- | --- | --- |
-| Pålogging, OAuth, FHIR-fasaden | `logg-inn/`, `logg-ut/`, `oauth/`, `fhir/` | Plattformen |
-| Administrasjon, utviklerportal, innstillinger | `admin/`, `systemadmin/`, `utvikler/`, `innstillinger/` | Plattformen |
-| Appvisning, åpne pasient fra andre programmer | `apper/`, `pasienter/[id]/apper/`, `apne/` | Plattformen |
-| Pasientramme, pasientsøk, pasientopplysninger | `pasienter/`, `pasienter/[id]/+layout`, `rediger/` | Plattformen |
-| Sperring, nødrett, innsynslogg, utlevering | `pasienter/[id]/sperring/`, `nodrett/`, `logg/`, `utlevering/` | Plattformen: lovpålagt, skal ikke kunne byttes ut |
-| Journalnotater | `pasienter/[id]/notater/` | App |
-| Legemidler og SFM | `pasienter/[id]/legemidler/`, `sfm/` | App |
-| Meldinger | `meldinger/`, `pasienter/[id]/meldinger/` | App |
-| Oppgjør | `oppgjor/`, `pasienter/[id]/oppgjor/` | App |
-| Pasientoversikt og arbeidsflate | `pasienter/[id]/+page`, `+page` | Kort fra apper, ramme fra plattformen |
-| Beslutningsstøtte | `cds-services/` | Apper |
+| Journalnotater, også hurtignotatet i sidepanelet | `src/apps/notes/` | Ja. Det finnes en demonstrasjonsapp |
+| Legemidler | `src/apps/medications/` | Ja. Det finnes en demonstrasjonsapp |
+| Sentral forskrivningsmodul | `src/apps/sfm/` | Ja, men trenger legens eget HelseID-token ([sfm.md](sfm.md)) |
+| Meldinger | `src/apps/messages/` | Ja, men trenger en tjenerdel med nøkler mot NHN |
+| Oppgjør | `src/apps/billing/` | Ja, men trenger en tjenerdel med nøkler mot Helfo |
+| Pasientoversikten | `src/apps/overview/` | Ja |
+| Beslutningsstøtte | `src/apps/cds-services/` | Ja, gjennom CDS Hooks |
+| FHIR-utforskeren | `src/apps/fhir-browser/` | Ja |
+| Pålogging, OAuth, FHIR-fasaden med vokteren | `src/platform/` | Nei: dette er det appene står på |
+| Administrasjon, utviklerportal, innstillinger, appkatalog | `src/platform/` | Nei |
+| Pasientramme, pasientsøk, pasientopplysninger | `src/platform/` | Nei |
+| Sperring, nødrett, innsynslogg, utlevering | `src/platform/` | Nei: lovpålagt, skal ikke kunne byttes ut |
+| Arbeidsflatens ramme og timeboken, kodeverk | `src/platform/` | Nei |
 
 De ekte eksterne appene ligger ikke i `src/` i det hele tatt. De kjører for seg, på
-egne adresser, og demonstrasjonsappene ligger i `deploy/apus/demo-app/`. Det samme
-skillet finnes i `src/lib/server/`: `integrations/`, `journal/` og `cds/` er stort sett
-funksjoner, resten er plattform.
+egne adresser, og demonstrasjonsappene ligger i `deploy/apus/demo-app/`. Appene i
+`src/apps/` er i samme kodebase og på samme adresse, men følger de samme grensene,
+slik at en virksomhet kan legge en ekstern app i en fane i stedet.
 
-### Veien dit
+### Slik henger det sammen
 
-Se [todo.md](todo.md) punkt 6c. Kortversjonen: først synliggjøre skillet i koden,
-så håndheve det, og til slutt flytte funksjoner ut til ekte apper, én om gangen.
+SvelteKit leser sider fra bare én mappe, `src/platform/routes/`. Der ligger det derfor
+en fil på én linje for hver side en app har, og den peker inn i appens mappe:
+
+```ts
+// Mounts the notes app.
+export { actions, load } from '$apps/notes/routes/pasienter/[id]/notater/+page.server';
+```
+
+Hver app beskriver seg selv i en `manifest.ts`: faner, menypunkter, snarveier og kort.
+Plattformen tegner dem uten å ha en egen liste over hva de er.
+
+Plattformen kjenner appene bare gjennom tre filer, som også er det eneste stedet en
+app legges til eller fjernes:
+
+| Fil | Innhold |
+| --- | --- |
+| `src/apps/registry.ts` | Manifestene |
+| `src/apps/slots.ts` | Komponenter som vises i plattformens flater: kort og sidepanel |
+| `src/apps/registry.server.ts` | Tjenerdelen: data til kortene, varsler, tall til administrasjonen, behov ved pålogging |
+
+`tests/architecture.test.ts` feiler hvis
+
+- plattformen importerer en app på noen annen måte
+- en app importerer en annen app uten å ha oppgitt det i `dependsOn` (i dag bare
+  legemidler, som viser SFM)
+- nettleserkode i en app importerer tjenerkode. SvelteKit vokter bare `$lib/server`,
+  så denne grensen må testen holde
+- en side i en app mangler sin fil i `src/platform/routes/`, eller filen peker på noe
+  som ikke finnes
+- en app ikke er registrert, eller to apper krever samme fane, tast eller kort
+
+**Slik legger du til en app:** Lag `src/apps/<navn>/` med `manifest.ts` og `routes/`,
+legg manifestet i `registry.ts`, og legg de korte filene i `src/platform/routes/`.
+Testen sier fra om det mangler noe.
+
+### Det som gjenstår
+
+Skillet er håndhevet i importene, men noe plattformkode vet fortsatt om appene:
+
+- Virksomhetens SFM-felt ligger i plattformens virksomhetsregister og i skjemaet for
+  plattformadministrasjon.
+- Tillatelsene, som `melding:les` og `oppgjor:send`, ligger i plattformens rollemodell.
+- Oversiktskortene er ett skjermbilde i `overview`, som leser kliniske data direkte fra
+  FHIR. Andre apper kan ikke bidra med egne kort der ennå.
+- Det å bytte ut en innebygd app virker for faner og sidepanel. Hovedmeny, snarveier og
+  kort følger den innebygde appen.
 
 Ikke alt kan bli en vanlig SMART-app. Meldinger og oppgjør trenger nøkler mot NHN og
 Helfo og må ha en tjenerdel, og SFM krever legens eget HelseID-token
-([sfm.md](sfm.md)). De blir enten apper med egen tjener eller innebygde moduler med
-de samme grensene som en app.
+([sfm.md](sfm.md)). De blir enten apper med egen tjener eller blir værende her, med de
+samme grensene som en app. Se [todo.md](todo.md) punkt 6c.
 
 ## Hvorfor grensene går der de går
 
@@ -113,7 +159,7 @@ HAPI kjenner ikke norske regler om tjenstlig behov, sperring eller nødrett, og
 skal ikke gjøre det. Derfor ligger den på et internt nett uten publiserte porter
 og uten rute ut, og all trafikk går gjennom fasaden.
 
-### Vokteren — `src/lib/server/fhir/gateway.ts`
+### Vokteren — `src/platform/server/fhir/gateway.ts`
 
 Alt som skal til eller fra kliniske data passerer her. For hver forespørsel:
 
@@ -294,44 +340,30 @@ treg maskin på et legekontor klokka åtte om morgenen.
 ## Filstruktur
 
 ```
-src/lib/server/
-  config.ts              konfigurasjon fra miljøvariabler
-  db/                    PostgreSQL, migrasjoner
-  fhir/
-    client.ts            tynn HTTP-klient mot HAPI
-    gateway.ts           vokteren — eneste vei til kliniske data
-    internt.ts           journalens egen inngang, gjennom vokteren
-    kodeverk.ts          norske OID-er, fødselsnummer, organisasjonsnummer
-    validate.ts          strukturell validering og norske profilregler
-    searchparams.ts      søkeparametere og pasientkompartment
-    visning.ts           presentasjonshjelpere
-  authz/
-    roles.ts             rollemodell for et fastlegekontor
-    scopes.ts            SMART-scope, parsing og innsnevring
-    tilgang.ts           tilgangsbeslutningen
-  auth/
-    helseid.ts           HelseID som identitetsleverandør
-    oauth.ts             autorisasjonskodeflyt
-    tokens.ts            utstedelse og validering av tokens
-    jws.ts               ES256/RS256/PS256 mot node:crypto
-    totp.ts              RFC 6238
-  audit/                 hash-lenket sikkerhetslogg
-  journal/
-    utlevering.ts        journalutskrift i FHIR-dokument og lesbart format
-  tenant/
-    kontekst.ts          virksomhetskontekst (AsyncLocalStorage)
-    tenant.ts            virksomhetsregisteret
-    partisjon.ts         partisjonsadministrasjon i HAPI
-  integrasjoner/
-    sfm/                 Sentral forskrivningsmodul
-    nhn/                 hodemelding, fagmeldinger, AppRec, kø
-    helfo/               takster, regningskort, oppgjør, frikort
-src/routes/
-  fhir/[...sti]/         FHIR R5-endepunktet
-  oauth/                 autorisasjon, token, introspeksjon, JWKS
-  .well-known/           SMART- og OpenID-oppsett
-  pasienter/[id]/        journalen
-  pasienter/[id]/utlevering/  utlevering av journal
-  systemadmin/           plattformadministrasjon, på tvers av virksomheter
-  meldinger/, oppgjor/, admin/
+src/hooks.server.ts      inngangen for hver forespørsel
+src/platform/            plattformen
+  app-manifest.ts        det en app sier om seg selv
+  components/            felles komponenter og rammen rundt eksterne apper
+  routes/                alle adresser: plattformens egne sider, og korte filer for appenes
+  styles/
+  server/
+    config.ts            konfigurasjon fra miljøvariabler
+    db/                  PostgreSQL, migrasjoner
+    fhir/                vokteren (gateway.ts), HAPI-klient, validering, kodeverk
+    authz/               rollemodell, SMART-scope, tilgangsbeslutningen
+    auth/                HelseID, OAuth, tokens, økter, tilleggene appene ber om ved pålogging
+    audit/               hash-lenket sikkerhetslogg
+    journal/             pasientopplysninger, utlevering, åpning fra andre programmer
+    tenant/              virksomhetskontekst, register, partisjoner i HAPI
+    terminology/         ICPC-2 og søk i kodeverk
+    workspace/           oppsett av arbeidsflate og pasientoversikt
+    cds/                 klienten som kaller CDS Hooks
+    developer/           utviklerportalen
+src/apps/                appene
+  registry.ts, slots.ts, registry.server.ts   det eneste plattformen ser av dem
+  <navn>/
+    manifest.ts          faner, menypunkter, snarveier og kort
+    routes/              appens sider, med samme stier som adressene
+    components/          komponenter
+    server/              tjenerkode
 ```

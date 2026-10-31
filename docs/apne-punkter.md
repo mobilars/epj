@@ -26,7 +26,7 @@ journalen. Lesing i R4-form er ikke tilbudt, og profilspørsmålet står igjen.
 
 ### Takstbeløp
 
-Alle takster i `src/lib/server/integrasjoner/helfo/takster.ts` er merket
+Alle takster i `src/apps/billing/server/helfo/tariffs.ts` er merket
 `verifisert: false`. Beløpene er et arbeidsgrunnlag, ikke hentet fra tariffen.
 Normaltariff for privat allmennpraksis forhandles årlig og trer i kraft 1. juli,
 med enkelte endringer 1. januar.
@@ -42,7 +42,7 @@ må oppdateres på samme måte.
 ### Kodeverks-OID-er
 
 Personidentifikatorene og de kliniske kodeverkene i
-`src/lib/server/fhir/kodeverk.ts` er kontrollert. Disse er ikke verifisert mot
+`src/platform/server/fhir/codesystems.ts` er kontrollert. Disse er ikke verifisert mot
 Volven, og står i `IKKE_VERIFISERTE_SYSTEMER`:
 
 * takstkoder (`urn:oid:2.16.578.1.12.4.1.1.8214`),

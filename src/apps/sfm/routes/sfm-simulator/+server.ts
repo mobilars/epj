@@ -2,6 +2,7 @@ import { error } from '@sveltejs/kit';
 import { randomBytes } from 'node:crypto';
 import type { RequestHandler } from '$routetypes/sfm-simulator/$types';
 import { config } from '$srv/config';
+import { sfmConfig } from '$apps/sfm/server/config';
 
 /**
  * Stands in for SFM's patient portal when the record runs without NHN.
@@ -14,7 +15,7 @@ import { config } from '$srv/config';
  * record's menus into the frame.
  */
 export const GET: RequestHandler = () => {
-	if (config.integrations.mode !== 'mock' || !config.integrations.sfm.full) error(404, 'Ikke tilgjengelig');
+	if (config.integrations.mode !== 'mock' || !sfmConfig.full) error(404, 'Ikke tilgjengelig');
 
 	const nonce = randomBytes(16).toString('base64');
 	const html = `<!doctype html>

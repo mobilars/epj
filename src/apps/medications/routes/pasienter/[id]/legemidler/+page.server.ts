@@ -5,6 +5,7 @@ import { SYSTEM } from '$srv/fhir/codesystems';
 import { actorFromContext } from '$srv/audit';
 import { prescribe, fornye, getMedicationList, discontinue, synkHistory } from '$apps/medications/server';
 import { config } from '$srv/config';
+import { sfmConfig } from '$apps/sfm/server/config';
 
 /**
  * Medication list and prescribing through Sentral forskrivningsmodul.
@@ -20,7 +21,7 @@ export const load = (async (event) => {
 
 	// SFM Full: SFM's own screen is the medication module, and the frame fetches
 	// everything it needs. The page below has nothing to load.
-	if (config.integrations.sfm.full) {
+	if (sfmConfig.full) {
 		return { list: null, history: [], canForskrive: false, mode: config.integrations.mode, sfmFull: true };
 	}
 
@@ -38,7 +39,7 @@ export const load = (async (event) => {
 
 export const actions = {
 	prescribe: async (event) => {
-		if (config.integrations.sfm.full) return fail(409, { error: 'Forskrivning skjer i SFM.' });
+		if (sfmConfig.full) return fail(409, { error: 'Forskrivning skjer i SFM.' });
 		const ctx = event.locals.auth;
 		if (!ctx) redirect(303, '/logg-inn');
 		if (!ctx.permissions.has('resept:forskriv')) return fail(403, { error: 'Rollen din kan ikke forskrive legemidler.' });
@@ -129,7 +130,7 @@ export const actions = {
 	},
 
 	discontinue: async (event) => {
-		if (config.integrations.sfm.full) return fail(409, { error: 'Forskrivning skjer i SFM.' });
+		if (sfmConfig.full) return fail(409, { error: 'Forskrivning skjer i SFM.' });
 		const ctx = event.locals.auth;
 		if (!ctx) redirect(303, '/logg-inn');
 		if (!ctx.permissions.has('resept:forskriv')) return fail(403, { error: 'Rollen din kan ikke seponere legemidler.' });
@@ -145,7 +146,7 @@ export const actions = {
 	},
 
 	fornye: async (event) => {
-		if (config.integrations.sfm.full) return fail(409, { error: 'Forskrivning skjer i SFM.' });
+		if (sfmConfig.full) return fail(409, { error: 'Forskrivning skjer i SFM.' });
 		const ctx = event.locals.auth;
 		if (!ctx) redirect(303, '/logg-inn');
 		if (!ctx.permissions.has('resept:fornye')) return fail(403, { error: 'Rollen din kan ikke fornye resepter.' });

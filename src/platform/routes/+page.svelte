@@ -1,7 +1,7 @@
 <script lang="ts">
+	import { workspaceCards } from '$apps/slots';
 	let { data } = $props();
 
-	const kroner = (ore: number) => (ore / 100).toLocaleString('nb-NO', { style: 'currency', currency: 'NOK' });
 	const klokke = (iso?: string) =>
 		iso ? new Date(iso).toLocaleString('nb-NO', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
 </script>
@@ -23,12 +23,12 @@
 	</div>
 {/if}
 
-{#if data.outsideReceipt > 0}
+{#each data.notices as notice (notice.href)}
 	<div class="varsel varsel-advarsel">
-		{data.outsideReceipt} sendte meldinger mangler applikasjonskvittering.
-		<a href="/meldinger?filter=uten-kvittering">Se hvilke</a>
+		{notice.text}
+		<a href={notice.href}>{notice.linkText}</a>
 	</div>
-{/if}
+{/each}
 
 <!-- The cards, in the order the person or the practice arranged them. A
      card not in the layout is not drawn; its page is still where it was. -->
@@ -55,32 +55,9 @@
 					</ul>
 				{/if}
 			</section>
-		{:else if card === 'meldinger'}
-			<section class="kort">
-				<h2>Nye meldinger</h2>
-				{#if data.messages.length === 0}
-					<p class="svak">Ingen ubehandlede meldinger.</p>
-				{:else}
-					<ul class="tidslinje">
-						{#each data.messages as m (m.id)}
-							<li>
-								<a href="/meldinger/{m.id}">{m.type}</a> fra {m.sender}<br />
-								<span class="svak">{klokke(m.created_at)}</span>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-				<a class="knapp liten" href="/meldinger">Åpne innboks</a>
-			</section>
-		{:else if card === 'oppgjor'}
-			<section class="kort">
-				<h2>Oppgjør</h2>
-				<p>
-					<strong class="tall">{data.settlement.countKlare}</strong> regningskort er klare for innsending.<br />
-					Samlet refusjon: <strong class="tall">{kroner(data.settlement.sumReimbursementOre)}</strong>
-				</p>
-				<a class="knapp liten" href="/oppgjor">Gå til oppgjør</a>
-			</section>
+		{:else if workspaceCards[card] && data.cardData[card]}
+			{@const Card = workspaceCards[card]}
+			<Card data={data.cardData[card]} />
 		{/if}
 	{/each}
 </div>

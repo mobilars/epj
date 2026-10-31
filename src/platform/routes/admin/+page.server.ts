@@ -5,19 +5,19 @@ import { fhirClient } from '$srv/fhir/client';
 import { currentVersion } from '$srv/db/migrate';
 import { config } from '$srv/config';
 import { requireTenant } from '$srv/tenant/context';
-import { pendingKvitteringer } from '$apps/messages/server/nhn/message-queue';
+import { adminFacts } from '$apps/registry.server';
 
 /** Operations overview: dependency health, log integrity and cases to follow up. */
 export const load: PageServerLoad = async () => {
 	const tenant = requireTenant();
 	const tenantId = tenant.id;
-	const [countUsers, countApper, chain, emergencyAccess, fhirOppe, kvitteringer] = await Promise.all([
+	const [countUsers, countApper, chain, emergencyAccess, fhirOppe, facts] = await Promise.all([
 		one<{ n: number }>("SELECT count(*)::int AS n FROM user_account WHERE status = 'aktiv' AND tenant_id = $1", [tenantId]),
 		one<{ n: number }>("SELECT count(*)::int AS n FROM oauth_client WHERE status = 'aktiv' AND tenant_id = $1", [tenantId]),
 		verifyLogChain().catch(() => ({ valid: false, checked: 0 })),
 		unreviewedEmergencyAccess().catch(() => []),
 		fhirClient.isTilgjengelig(),
-		pendingKvitteringer(60).catch(() => [])
+		adminFacts()
 	]);
 
 	return {
@@ -32,7 +32,7 @@ export const load: PageServerLoad = async () => {
 			patientId: n.patient_id ?? ''
 		})),
 		fhirOppe,
-		pendingKvitteringer: kvitteringer.length,
+		facts,
 		schemaVersion: await currentVersion().catch(() => 0),
 		miljo: {
 			integrations: config.integrations.mode,

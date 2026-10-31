@@ -17,6 +17,7 @@
 	 * listens to nothing.
 	 */
 	import { goto } from '$app/navigation';
+	import { appManifests } from '$apps/registry';
 	import { page } from '$app/state';
 	import { tick } from 'svelte';
 
@@ -36,18 +37,16 @@
 	const everywhere: Target[] = [
 		{ key: 'a', href: '/', label: 'Arbeidsflaten' },
 		{ key: 'p', href: '/pasienter', label: 'Pasienter' },
-		{ key: 'm', href: '/meldinger', label: 'Meldinger' },
+		...appManifests.flatMap((app) => (app.goKey ? [app.goKey] : [])),
 		{ key: 'i', href: '/innstillinger', label: 'Innstillinger' }
 	];
 
+	const patientGoKeys = appManifests.flatMap((app) => (app.patientGoKey ? [app.patientGoKey] : []));
+	const patientActions = appManifests.flatMap((app) => (app.patientAction ? [app.patientAction] : []));
+	const recordHref = (id: string, segment: string) => `/pasienter/${id}${segment ? `/${segment}` : ''}`;
+
 	const inRecord = $derived<Target[]>(
-		patientId
-			? [
-					{ key: 'o', href: `/pasienter/${patientId}`, label: 'Oversikt' },
-					{ key: 'n', href: `/pasienter/${patientId}/notater`, label: 'Journalnotater' },
-					{ key: 'l', href: `/pasienter/${patientId}/legemidler`, label: 'Legemidler' }
-				]
-			: []
+		patientId ? patientGoKeys.map((t) => ({ key: t.key, label: t.label, href: recordHref(patientId, t.segment) })) : []
 	);
 
 	function clearPrefix() {
@@ -98,6 +97,13 @@
 			return;
 		}
 
+		const action = patientId ? patientActions.find((a) => a.key === event.key) : null;
+		if (action && patientId) {
+			event.preventDefault();
+			goAndFocus(recordHref(patientId, action.segment), action.focusId);
+			return;
+		}
+
 		switch (event.key) {
 			case '?':
 				event.preventDefault();
@@ -110,12 +116,6 @@
 			case 'g':
 				prefix = 'g';
 				prefixTimer = setTimeout(clearPrefix, 1500);
-				return;
-			case 'n':
-				if (patientId) {
-					event.preventDefault();
-					goAndFocus(`/pasienter/${patientId}/notater`, 'subjektivt');
-				}
 				return;
 		}
 	}
@@ -145,10 +145,12 @@
 	<h3>I en pasientjournal</h3>
 	<table>
 		<tbody>
-			<tr><td><kbd>n</kbd></td><td>Nytt journalnotat</td></tr>
-			<tr><td><kbd>g</kbd> <kbd>o</kbd></td><td>Oversikt</td></tr>
-			<tr><td><kbd>g</kbd> <kbd>n</kbd></td><td>Journalnotater</td></tr>
-			<tr><td><kbd>g</kbd> <kbd>l</kbd></td><td>Legemidler</td></tr>
+			{#each patientActions as action (action.key)}
+				<tr><td><kbd>{action.key}</kbd></td><td>{action.label}</td></tr>
+			{/each}
+			{#each patientGoKeys as t (t.key)}
+				<tr><td><kbd>g</kbd> <kbd>{t.key}</kbd></td><td>{t.label}</td></tr>
+			{/each}
 		</tbody>
 	</table>
 </dialog>

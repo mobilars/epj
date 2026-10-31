@@ -1,6 +1,8 @@
 <script lang="ts">
 	import Nedtrekk from '$lib/components/Nedtrekk.svelte';
 	import ExternalFrame from '$lib/components/ExternalFrame.svelte';
+	import { appManifests } from '$apps/registry';
+	import { patientSidePanel as SidePanel } from '$apps/slots';
 
 	// Measured, so the side panel can stick just below the header whatever the
 	// header's height turns out to be on this screen.
@@ -57,13 +59,14 @@
 	 */
 	const EXTERNAL_TITLE = 'Ekstern app – ikke en del av journalen';
 
-	const faner = $derived([
-		fane('', 'Oversikt'),
-		fane('notater', 'Journalnotater'),
-		fane('legemidler', 'Legemidler'),
-		fane('meldinger', 'Meldinger'),
-		fane('oppgjor', 'Oppgjør')
-	]);
+	const appTabs = appManifests
+		.flatMap((app) => (app.patientTab ? [app.patientTab] : []))
+		.sort((a, b) => a.order - b.order);
+	const patientLinks = appManifests
+		.flatMap((app) => (app.patientLink ? [app.patientLink] : []))
+		.sort((a, b) => a.order - b.order);
+
+	const faner = $derived(appTabs.map((tab) => fane(tab.segment, tab.label)));
 
 	/**
 	 * The pages about the record rather than in it.
@@ -218,11 +221,9 @@
 		</div>
 
 		<!--
-			The panel follows the record on every tab. Writing the note is what a
-			consultation actually consists of, and having to leave the page you are
-			reading in order to write it is the wrong way round. The form posts to
-			the notes action, which is the same one the Journalnotater tab uses -
-			there is no second way into the record.
+			The panel follows the record on every tab. What is in it comes from an
+			app: an external one if the practice or the user chose one, otherwise
+			what the built-in apps offer.
 		-->
 		<aside class="hurtigpanel" aria-label="Hurtighandlinger">
 			{#if data.sidePanel}
@@ -245,25 +246,8 @@
 						<ExternalFrame class="appramme appramme-side" src={data.sidePanel.url} title={data.sidePanel.name} />
 					{/if}
 				</section>
-			{:else if data.canSkrive}
-				<section class="kort">
-					<h2>Nytt notat</h2>
-					<form method="POST" action="/pasienter/{data.patientId}/notater?/newValue">
-						<div class="felt">
-							<label for="hurtig-subjektivt">Subjektivt</label>
-							<textarea id="hurtig-subjektivt" name="subjektivt" rows="3"></textarea>
-						</div>
-						<div class="felt">
-							<label for="hurtig-objektivt">Objektivt</label>
-							<textarea id="hurtig-objektivt" name="objektivt" rows="3"></textarea>
-						</div>
-						<div class="felt">
-							<label for="hurtig-vurdering">Vurdering og plan</label>
-							<textarea id="hurtig-vurdering" name="vurdering" rows="3"></textarea>
-						</div>
-						<button type="submit" class="primar">Lagre notat</button>
-					</form>
-				</section>
+			{:else if data.canSkrive && SidePanel}
+				<SidePanel patientId={data.patientId} />
 			{/if}
 
 			<section class="kort">
@@ -272,10 +256,9 @@
 					<a class="svak" href="/innstillinger">Panel</a>
 				</div>
 				<ul class="snarveier">
-					<li><a href="/pasienter/{data.patientId}/notater">Alle journalnotater</a></li>
-					<li><a href="/pasienter/{data.patientId}/legemidler">Legemidler og resepter</a></li>
-					<li><a href="/pasienter/{data.patientId}/meldinger">Send melding eller henvisning</a></li>
-					<li><a href="/pasienter/{data.patientId}/oppgjor">Regningskort</a></li>
+					{#each patientLinks as link (link.segment)}
+						<li><a href="/pasienter/{data.patientId}/{link.segment}">{link.label}</a></li>
+					{/each}
 					<li><a href="/pasienter/{data.patientId}/apper">Apper</a></li>
 				</ul>
 			</section>

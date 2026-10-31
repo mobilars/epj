@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from '$routetypes/sfm/oppfrisk/$types';
-import { config } from '$srv/config';
+import { sfmConfig } from '$apps/sfm/server/config';
 import { refreshSfm } from '$apps/sfm/server/session-gateway';
 
 /**
@@ -8,7 +8,7 @@ import { refreshSfm } from '$apps/sfm/server/session-gateway';
  * timer. SFM is only called when the token actually changed.
  */
 export const POST: RequestHandler = async (event) => {
-	if (!config.integrations.sfm.full) error(404, 'Ikke tilgjengelig');
+	if (!sfmConfig.full) error(404, 'Ikke tilgjengelig');
 	const ctx = event.locals.auth;
 	if (!ctx?.sessionId || ctx.mate !== 'session') error(401, 'Ikke innlogget');
 	if (event.request.headers.get('origin') !== event.url.origin) error(403, 'Kryssopphavs-kall avvist');

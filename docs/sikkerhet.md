@@ -3,7 +3,7 @@
 ## Tilgangsmodellen
 
 Fire lag må alle gi grønt lys før en forespørsel slipper gjennom. De ligger i
-`src/lib/server/authz/tilgang.ts`, og de er uavhengige: et hull i ett lag lukkes
+`src/platform/server/authz/access.ts`, og de er uavhengige: et hull i ett lag lukkes
 av de andre.
 
 | Lag | Spørsmål | Kilde |
@@ -264,7 +264,7 @@ ble hentet med `fetch()` uten kontroll. Journalen kunne dermed brukes til å
 hente adresser bare den selv når - HAPI, databasen, API-tjeneren, eller
 metadatatjenesten til skyleverandøren på 169.254.169.254.
 
-`src/lib/server/util/utgaende.ts` krever nå https, avviser navn og adresser som
+`src/platform/server/util/outbound.ts` krever nå https, avviser navn og adresser som
 peker inn i private eller lenkelokale nett, følger ikke omdirigeringer, og
 leser ikke mer enn 512 kB.
 

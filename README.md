@@ -34,14 +34,15 @@ legekontorer med hver sine data, brukere, logg og nøkler.
 
 ## Hvor langt vi har kommet
 
-Dette er målbildet, ikke dagens kode. I dag ligger mye funksjonalitet fortsatt inne i
-plattformen. Se [veien dit](docs/arkitektur.md#plattform-og-apper).
+Koden er delt i `src/platform/` og `src/apps/<navn>/`, og en test holder grensen. De
+fleste funksjonene er fortsatt apper i samme kodebase, ikke selvstendige apper. Se
+[plattform og apper](docs/arkitektur.md#plattform-og-apper).
 
 | | I dag |
 | --- | --- |
 | **Plattformen** | Bygget: pålogging, roller, FHIR med vokteren, appkatalog, sikkerhetslogg |
 | **SMART-apper** | Virker, også fra andre leverandører. Fire demonstrasjonsapper følger med (`deploy/apus/demo-app/`) |
-| **Innebygde funksjoner** | Notater, legemidler, meldinger og oppgjør ligger i selve plattformen. De skal skilles ut |
+| **Apper i kodebasen** | Notater, legemidler, meldinger, oppgjør og SFM ligger i hver sin mappe, med manifest. En virksomhet kan legge en ekstern app i fanen i stedet |
 | **SFM, NHN, Helfo** | Ikke koblet til. Alt kjører mot lokale simulatorer. SFM er bygget, men avslått: se [docs/sfm.md](docs/sfm.md) |
 | **Klinisk bruk** | Ikke klart. Se [åpne punkter](docs/apne-punkter.md) |
 
