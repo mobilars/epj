@@ -88,7 +88,7 @@ export const actions: Actions = {
 		// Two records for one person is the mistake hardest to undo. A changed
 		// number must not land on one somebody else already has.
 		if (!sameNumber) {
-			const others = (await patientsWithNationalId(ctx, details.nationalId)).filter((p) => p.id !== id);
+			const others = (await patientsWithNationalId(details.nationalId)).filter((p) => p.id !== id);
 			if (others.length) {
 				const name = ((others[0].name as { family?: string; given?: string[] }[]) ?? [])[0];
 				return back('En annen pasient er allerede registrert med dette nummeret.', {

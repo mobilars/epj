@@ -82,6 +82,17 @@
 					<button type="submit" name="utfall" value="godkjent" class="liten">Gjør tilgjengelig igjen</button>
 				{/if}
 			</form>
+			<form
+				method="POST"
+				action="?/slettPlattformapp"
+				style="margin-top: 0.5rem"
+				onsubmit={(event) => {
+					if (!confirm(`Slette ${app.name}? Den fjernes fra ${app.installs} virksomheter med en gang. Dette kan ikke angres.`)) event.preventDefault();
+				}}
+			>
+				<input type="hidden" name="id" value={app.id} />
+				<button type="submit" class="liten fare">Slett appen</button>
+			</form>
 		</details>
 	{:else}
 		<p class="svak">Ingen plattformapper ennå.</p>

@@ -78,10 +78,11 @@ export const actions: Actions = {
 			return fail(400, { values, confirmIdentity: problem.message } as Form);
 		}
 
-		// Look before writing, under every system the number could be filed
-		// under. The search runs as the user, so a hit they may not see is
-		// reported without saying who it is - see below.
-		const existing = await patientsWithNationalId(ctx, nationalId);
+		// Look before writing, under every system the number could be filed under,
+		// and among all the practice's patients, not only those this user has. The
+		// number was typed in, so saying who has it tells them nothing new. The link
+		// leads to the page where a clinician can take the patient on.
+		const existing = await patientsWithNationalId(nationalId);
 		if (existing.length) {
 			const patient = existing[0];
 			const name = ((patient.name as { family?: string; given?: string[] }[]) ?? [])[0];

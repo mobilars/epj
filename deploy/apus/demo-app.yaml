@@ -14,6 +14,9 @@
 #   notat.apps.apus.no        the note editor
 #   kritisk.apps.apus.no      critical information
 #   legemidler.apps.apus.no   the medication list
+#   diabetes.apps.apus.no     the diabetes overview
+#   vekst.apps.apus.no        the growth chart
+#   hjerterisiko.apps.apus.no the heart risk score
 # ---------------------------------------------------------------------------
 apiVersion: v1
 kind: ConfigMap
@@ -29,6 +32,9 @@ data:
       notat.apps.apus.no      /notat.html;
       kritisk.apps.apus.no    /kritisk.html;
       legemidler.apps.apus.no /legemidler.html;
+      diabetes.apps.apus.no   /diabetes.html;
+      vekst.apps.apus.no      /vekst.html;
+      hjerterisiko.apps.apus.no /hjerterisiko.html;
     }
 
     server {
@@ -46,6 +52,8 @@ data:
       # Shared files keep their own names.
       location = /smart.js { try_files /smart.js =404; }
       location = /app.css  { try_files /app.css =404; }
+      location = /chart.js { try_files /chart.js =404; }
+      location = /framingham.js { try_files /framingham.js =404; }
 
       # /launch and /callback are states of the same page, not separate files.
       # Which page depends on the hostname.
@@ -153,6 +161,9 @@ spec:
         - notat.apps.apus.no
         - kritisk.apps.apus.no
         - legemidler.apps.apus.no
+        - diabetes.apps.apus.no
+        - vekst.apps.apus.no
+        - hjerterisiko.apps.apus.no
       secretName: demoapp-tls
   rules:
     - host: smartdemo.apps.apus.no
@@ -168,6 +179,18 @@ spec:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: demoapp, port: { number: 80 } } } }
     - host: legemidler.apps.apus.no
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: demoapp, port: { number: 80 } } } }
+    - host: diabetes.apps.apus.no
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: demoapp, port: { number: 80 } } } }
+    - host: vekst.apps.apus.no
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: demoapp, port: { number: 80 } } } }
+    - host: hjerterisiko.apps.apus.no
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: demoapp, port: { number: 80 } } } }

@@ -175,6 +175,33 @@ export async function firstAppSecret(id: string, developerId: string): Promise<s
 	return app?.client_type === 'secret' && !app.secret_hash ? newAppSecret(id, developerId) : null;
 }
 
+/**
+ * Deletes an app, from the catalogue and from every practice that has it.
+ *
+ * Reaches across organisations like a withdrawal does, and further: the clients go too,
+ * so it leaves nothing behind that could be switched back on. The security log keeps
+ * what the app did. The caller logs the deletion in each practice this returns.
+ */
+export async function deleteApp(id: string, developerId: string): Promise<{ name: string; installs: { tenant_id: string; client_id: string }[] } | null> {
+	return transaction(async () => {
+		const app = await one<{ name: string }>('SELECT name FROM catalogue_app WHERE id = $1 AND developer_id = $2', [id, developerId]);
+		if (!app) return null;
+		const installs = await query<{ tenant_id: string; client_id: string }>(
+			'SELECT tenant_id, client_id FROM catalogue_install WHERE catalogue_id = $1',
+			[id]
+		);
+		for (const { tenant_id, client_id } of installs) {
+			for (const table of ['oauth_token', 'oauth_authorization_code', 'smart_launch', 'oauth_consent', 'oauth_client']) {
+				await exec(`DELETE FROM ${table} WHERE client_id = $1 AND tenant_id = $2`, [client_id, tenant_id]);
+			}
+		}
+		await exec('DELETE FROM catalogue_app WHERE id = $1', [id]);
+		return { name: app.name, installs };
+	});
+}
+
+export const deletePlatformApp = (id: string) => deleteApp(id, PLATFORM_DEVELOPER);
+
 /** What was approved is what runs. Where and how a practice shows the app stays its own. */
 async function copyToInstalled(id: string): Promise<void> {
 	await exec(

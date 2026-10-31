@@ -67,6 +67,17 @@ test.describe('tilgangsstyring', () => {
 		}
 	});
 
+	test('registering a patient who already exists is refused, even one this user cannot see', async ({ page }) => {
+		await logIn(page, 'sykepleier');
+		await page.goto('/pasienter/ny?sok=24035810281');
+		await waitOnHydration(page);
+		await page.getByLabel('Fornavn').fill('Ola');
+		await page.getByLabel('Etternavn').fill('Vik');
+		await page.getByRole('button', { name: /Registrer/ }).click();
+		await expect(page.getByRole('alert')).toContainText('Pasienten er allerede registrert');
+		await expect(page.getByRole('alert').getByRole('link')).toContainText('Ola Vik');
+	});
+
 	test('reception finds no patients to take on, and cannot post its way to one', async ({ page }) => {
 		await logIn(page, 'sekretaer');
 		await page.goto('/pasienter?sok=Vik');

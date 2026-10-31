@@ -43,6 +43,11 @@ configMapGenerator:
       - notat.html=demo-app/notat.html
       - kritisk.html=demo-app/kritisk.html
       - legemidler.html=demo-app/legemidler.html
+      - diabetes.html=demo-app/diabetes.html
+      - vekst.html=demo-app/vekst.html
+      - hjerterisiko.html=demo-app/hjerterisiko.html
+      - chart.js=demo-app/chart.js
+      - framingham.js=demo-app/framingham.js
       - smart.js=demo-app/smart.js
       - app.css=demo-app/app.css
 

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="no">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Hjerterisiko</title>
+		<link rel="stylesheet" href="/app.css" />
+	</head>
+	<body>
+		<main id="app"><p class="svak">Kobler til journalen …</p></main>
+
+		<script type="module">
+			/**
+			 * Hjerterisiko.
+			 *
+			 * Fills in what the record knows and asks for the rest, so a clinician can
+			 * also try "what if the blood pressure came down". Nothing is saved: changing
+			 * a number here is a question, not a measurement.
+			 */
+			import { connect, escapeHtml as esc, SmartError } from '/smart.js';
+			import { dateText, latest, series } from '/chart.js';
+			import { AGE_RANGE, framinghamRisk } from '/framingham.js';
+
+			const SCOPE =
+				'openid fhirUser launch launch/patient online_access ' +
+				'patient/Patient.rs patient/Observation.rs patient/Condition.rs';
+
+			const app = document.getElementById('app');
+			const el = (html) => (app.innerHTML = html);
+
+			let smart;
+			try {
+				smart = await connect({ scope: SCOPE });
+			} catch (err) {
+				el(`<div class="varsel varsel-feil"><strong>${esc(err.message)}</strong>
+					<pre>${esc(err instanceof SmartError ? err.detail : String(err))}</pre></div>`);
+				throw err;
+			}
+
+			if (smart === null) {
+				el(`<h1>Hjerterisiko</h1><p class="svak">Startes fra journalen.</p>`);
+			} else {
+				await render();
+			}
+
+			function field(name, label, point, step) {
+				const source = point ? `Fra journalen, ${esc(dateText(point.date))}` : 'Ikke i journalen';
+				return `<div class="felt">
+					<label for="${name}">${label}</label>
+					<input id="${name}" name="${name}" type="number" step="${step}" value="${point ? esc(point.value) : ''}" />
+					<div class="svak liten">${source}</div>
+				</div>`;
+			}
+
+			async function render() {
+				const id = smart.patientId;
+				const [patient, observations, conditions] = await Promise.all([
+					smart.read(`Patient/${id}`),
+					smart.read(`Observation?patient=${id}&_count=200`),
+					smart.read(`Condition?patient=${id}&_count=50`)
+				]);
+				const measured = smart.entries(observations);
+				const birthDate = patient.body?.birthDate;
+				const age = birthDate ? Math.floor((Date.now() - new Date(birthDate).getTime()) / (365.25 * 86400000)) : null;
+				const sex = patient.body?.gender;
+				const hasDiabetes = smart
+					.entries(conditions)
+					.some((c) => (c.code?.coding ?? []).some((k) => /^(T89|T90|E10|E11)/.test(k.code ?? '')));
+
+				el(`
+					<div class="mellom">
+						<h1>Hjerterisiko</h1>
+						<span class="merke">Demonstrasjon</span>
+					</div>
+					<p class="svak">${age ?? 'Ukjent'} år · ${sex === 'female' ? 'Kvinne' : sex === 'male' ? 'Mann' : 'Ukjent kjønn'}</p>
+					<div id="resultat" class="kort"></div>
+					<form id="skjema">
+						${field('sbp', 'Systolisk blodtrykk (mmHg)', latest(series(measured, ['8480-6'])), 1)}
+						${field('total', 'Totalkolesterol (mmol/L)', latest(series(measured, ['14647-2'])), 0.1)}
+						${field('hdl', 'HDL-kolesterol (mmol/L)', latest(series(measured, ['14646-4'])), 0.1)}
+						<label class="avkryssing"><input type="checkbox" name="behandlet" /> Behandles for høyt blodtrykk</label>
+						<label class="avkryssing"><input type="checkbox" name="royker" /> Røyker</label>
+						<label class="avkryssing"><input type="checkbox" name="diabetes" ${hasDiabetes ? 'checked' : ''} /> Diabetes ${hasDiabetes ? '<span class="svak liten">(fra journalen)</span>' : ''}</label>
+					</form>
+					<p class="svak liten" style="margin-top:0.8rem">
+						Demonstrasjonsapp, ikke til klinisk bruk. Bruker Framingham-modellen (D'Agostino 2008), ikke NORRISK 2,
+						som er det norske retningslinjer bruker. Tallene som endres her, lagres ikke.
+					</p>
+				`);
+
+				const form = document.getElementById('skjema');
+				const result = document.getElementById('resultat');
+				const update = () => {
+					const data = new FormData(form);
+					const risk = framinghamRisk({
+						sex,
+						age,
+						sbp: Number(data.get('sbp')),
+						totalMmol: Number(data.get('total')),
+						hdlMmol: Number(data.get('hdl')),
+						treated: data.has('behandlet'),
+						smoker: data.has('royker'),
+						diabetes: data.has('diabetes')
+					});
+					if (risk !== null) {
+						result.innerHTML = `<strong style="font-size:1.4rem">${risk.toFixed(1).replace('.', ',')} %</strong>
+							<div class="svak liten">Risiko for hjerte- og karsykdom de neste ti årene</div>`;
+					} else if (age !== null && (age < AGE_RANGE.min || age > AGE_RANGE.max)) {
+						result.innerHTML = `<span class="svak">Modellen gjelder for ${AGE_RANGE.min} til ${AGE_RANGE.max} år, og sier ingenting om denne pasienten.</span>`;
+					} else {
+						result.innerHTML = '<span class="svak">Fyll inn blodtrykk og kolesterol for å regne ut risikoen.</span>';
+					}
+				};
+				form.addEventListener('input', update);
+				update();
+			}
+		</script>
+	</body>
+</html>

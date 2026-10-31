@@ -93,6 +93,21 @@
 				<button type="submit" class="primar liten">Send til vurdering</button>
 			</form>
 		{/if}
+
+		<form
+			method="POST"
+			action="?/slett"
+			onsubmit={(event) => {
+				const where = app.installs ? ` Den fjernes også fra ${app.installs} ${app.installs === 1 ? 'virksomhet' : 'virksomheter'} og slutter å virke der med en gang.` : '';
+				if (!confirm(`Slette ${app.name}?${where} Dette kan ikke angres.`)) event.preventDefault();
+			}}
+		>
+			<input type="hidden" name="id" value={app.id} />
+			<button type="submit" class="liten fare">Slett appen</button>
+			{#if app.installs}
+				<small class="svak">Installert hos {app.installs} {app.installs === 1 ? 'virksomhet' : 'virksomheter'}.</small>
+			{/if}
+		</form>
 	</section>
 {:else}
 	<p class="svak">Du har ingen apper ennå.</p>

@@ -1,7 +1,9 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { developerFromSession, updateDeveloper } from '$srv/developer/developer';
-import { appsForDeveloper, createApp, firstAppSecret, newAppSecret, submitApp, updateApp } from '$srv/developer/catalogue';
+import { appsForDeveloper, createApp, deleteApp, firstAppSecret, installCounts, newAppSecret, submitApp, updateApp } from '$srv/developer/catalogue';
+import { log } from '$srv/audit';
+import { PLATFORM_TENANT } from '$srv/tenant/context';
 import { readAppForm } from '$srv/developer/app-form';
 import { describeScope } from '$srv/authz/scopes';
 
@@ -25,7 +27,7 @@ export const load: PageServerLoad = async (event) => {
 	const developer = await developerFromSession(event.cookies);
 	if (!developer) redirect(303, '/utvikler/logg-inn');
 
-	const apps = await appsForDeveloper(developer.id);
+	const [apps, installs] = await Promise.all([appsForDeveloper(developer.id), installCounts()]);
 	return {
 		profile: { name: developer.name, organisation: developer.organisation, email: developer.email },
 		apps: apps.map((a) => ({
@@ -43,6 +45,7 @@ export const load: PageServerLoad = async (event) => {
 			databehandleravtale: a.databehandleravtale,
 			clientType: a.client_type,
 			hasSecret: Boolean(a.secret_hash),
+			installs: installs.get(a.id) ?? 0,
 			jwksUri: a.jwks_uri ?? '',
 			jwksText: a.jwks ? JSON.stringify(a.jwks, null, 1) : '',
 			status: a.status,
@@ -94,6 +97,33 @@ export const actions: Actions = {
 		const secret = await newAppSecret(String(form.get('id') ?? ''), developer.id);
 		if (!secret) return fail(400, { error: 'Appen bruker ikke klienthemmelighet.' });
 		return { secret, secretFor: String(form.get('navn') ?? '') };
+	},
+
+	slett: async (event) => {
+		const developer = await developerFromSession(event.cookies);
+		if (!developer) redirect(303, '/utvikler/logg-inn');
+		const form = await event.request.formData();
+		const deleted = await deleteApp(String(form.get('id') ?? ''), developer.id);
+		if (!deleted) return fail(404, { error: 'Ukjent app.' });
+
+		const actor = {
+			userId: null,
+			actorRef: `Developer/${developer.id}`,
+			name: developer.name || developer.email,
+			role: null,
+			clientId: null,
+			ip: event.locals.clientIp,
+			requestId: event.locals.requestId
+		};
+		// In each practice's own log, which is where someone will look for why it went.
+		for (const tenantId of [PLATFORM_TENANT, ...deleted.installs.map((install) => install.tenant_id)]) {
+			await log(
+				{ type: 'admin', subtype: 'app:slettet-av-utvikler', action: 'D', outcome: '0', details: { name: deleted.name } },
+				actor,
+				tenantId
+			);
+		}
+		redirect(303, '/utvikler');
 	},
 
 	send: async (event) => {

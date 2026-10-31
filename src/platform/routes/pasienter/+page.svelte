@@ -91,7 +91,10 @@
 				<tbody>
 					{#each data.others as p (p.id)}
 						<tr>
-							<td>{p.name}</td>
+							<td>
+								{p.name}
+								{#if p.possibleDuplicate}<span class="merke merke-advarsel">Registrert flere ganger</span>{/if}
+							</td>
 							<td class="mono">{p.nationalIdMasked ?? ''}</td>
 							<td class="tall">{p.age ?? ''}</td>
 							<td class="hoyre">

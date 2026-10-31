@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="no">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Diabetesoversikt</title>
+		<link rel="stylesheet" href="/app.css" />
+	</head>
+	<body>
+		<main id="app"><p class="svak">Kobler til journalen …</p></main>
+
+		<script type="module">
+			/**
+			 * Diabetesoversikt.
+			 *
+			 * What a clinician looks over before a diabetes check, on one screen: how
+			 * HbA1c, blood pressure and weight have moved, and what the patient takes.
+			 * Read only, and it draws no conclusions: it sets no treatment goals, since
+			 * those are for the guideline and the clinician.
+			 */
+			import { connect, escapeHtml as esc, SmartError } from '/smart.js';
+			import { lineChart, series } from '/chart.js';
+
+			const SCOPE =
+				'openid fhirUser launch launch/patient online_access ' +
+				'patient/Patient.rs patient/Observation.rs patient/Condition.rs patient/MedicationRequest.rs';
+
+			const app = document.getElementById('app');
+			const el = (html) => (app.innerHTML = html);
+
+			let smart;
+			try {
+				smart = await connect({ scope: SCOPE });
+			} catch (err) {
+				el(`<div class="varsel varsel-feil"><strong>${esc(err.message)}</strong>
+					<pre>${esc(err instanceof SmartError ? err.detail : String(err))}</pre></div>`);
+				throw err;
+			}
+
+			if (smart === null) {
+				el(`<h1>Diabetesoversikt</h1><p class="svak">Startes fra journalen.</p>`);
+			} else {
+				await render();
+			}
+
+			async function render() {
+				const id = smart.patientId;
+				const [observations, conditions, medications] = await Promise.all([
+					smart.read(`Observation?patient=${id}&_count=200`),
+					smart.read(`Condition?patient=${id}&_count=50`),
+					smart.read(`MedicationRequest?patient=${id}&_count=50`)
+				]);
+				const measured = smart.entries(observations);
+
+				// T89 and T90 in ICPC-2, E10 and E11 in ICD-10.
+				const diabetes = smart
+					.entries(conditions)
+					.filter((c) => (c.code?.coding ?? []).some((k) => /^(T89|T90|E10|E11)/.test(k.code ?? '')));
+				const active = smart.entries(medications).filter((m) => (m.status ?? 'active') === 'active');
+
+				el(`
+					<div class="mellom">
+						<h1>Diabetesoversikt</h1>
+						<span class="merke">Demonstrasjon</span>
+					</div>
+					${
+						diabetes.length
+							? `<p>${diabetes.map((c) => esc(c.code?.text ?? c.code?.coding?.[0]?.display ?? '')).join(', ')}</p>`
+							: '<p class="svak">Ingen diabetesdiagnose er registrert på pasienten.</p>'
+					}
+					<h2>HbA1c</h2>
+					${lineChart(series(measured, ['4548-4', '59261-8']), { label: 'HbA1c' })}
+					<h2>Systolisk blodtrykk</h2>
+					${lineChart(series(measured, ['8480-6']), { label: 'Systolisk blodtrykk' })}
+					<h2>Diastolisk blodtrykk</h2>
+					${lineChart(series(measured, ['8462-4']), { label: 'Diastolisk blodtrykk' })}
+					<h2>Vekt</h2>
+					${lineChart(series(measured, ['29463-7']), { label: 'Vekt' })}
+					<h2>Legemidler i bruk</h2>
+					${
+						active.length
+							? `<ul>${active
+									.map((m) => `<li>${esc(m.medication?.concept?.text ?? m.medicationCodeableConcept?.text ?? m.medication?.concept?.coding?.[0]?.display ?? 'Ukjent')}</li>`)
+									.join('')}</ul>`
+							: '<p class="svak liten">Ingen aktive resepter.</p>'
+					}
+					<p class="svak liten" style="margin-top:0.8rem">Demonstrasjonsapp, ikke til klinisk bruk. Viser bare det som står i journalen.</p>
+				`);
+			}
+		</script>
+	</body>
+</html>

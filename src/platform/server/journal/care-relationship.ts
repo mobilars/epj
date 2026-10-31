@@ -28,6 +28,8 @@ export interface PatientToJoin {
 	name: string;
 	nationalIdMasked: string | null;
 	age: number | null;
+	/** Another hit has the same fødselsnummer: one person, registered twice. */
+	possibleDuplicate: boolean;
 }
 
 /**
@@ -38,10 +40,17 @@ export interface PatientToJoin {
  */
 export async function patientsToJoin(ctx: AuthContext, search: URLSearchParams, alreadyVisible: Set<string>): Promise<PatientToJoin[]> {
 	const [bundle, blocked] = await Promise.all([fhirClient.search('Patient', search), blockedPatients(ctx)]);
-	return resources(bundle)
-		.map(toPatientDisplay)
+	const patients = resources(bundle).map(toPatientDisplay);
+	const numbers = patients.map((patient) => patient.nationalId).filter(Boolean);
+	return patients
 		.filter((patient) => !alreadyVisible.has(patient.id) && !blocked.has(patient.id))
-		.map(({ id, name, nationalIdMasked, age }) => ({ id, name, nationalIdMasked, age }));
+		.map(({ id, name, nationalId, nationalIdMasked, age }) => ({
+			id,
+			name,
+			nationalIdMasked,
+			age,
+			possibleDuplicate: Boolean(nationalId) && numbers.filter((number) => number === nationalId).length > 1
+		}));
 }
 
 export async function mayJoinPatient(ctx: AuthContext, patientId: string): Promise<boolean> {

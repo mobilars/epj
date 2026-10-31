@@ -321,6 +321,12 @@ Sikkerhetsloggen beholder det appen har gjort, og sletting loggføres med appens
 *Realisert:* `deleteClient()`, handlingen `slett` i `/admin/apper`.
 *Testet:* `tests/catalogue.test.ts`.
 
+**K-4.7d En utvikler skal kunne slette sin egen app.**
+Appen forsvinner fra katalogen og fra alle virksomheter som har den, med en gang.
+Sikkerhetsloggen beholder det appen har gjort, og slettingen loggføres hos hver av dem.
+*Realisert:* `deleteApp()`, handlingen `slett` i utviklerportalen.
+*Testet:* `tests/catalogue.test.ts`.
+
 **K-4.8 API-et skal ikke lekke informasjon i feilmeldinger.**
 Feil returneres som `OperationOutcome`. Interne detaljer logges på serveren;
 klienten får en korrelasjons-id.

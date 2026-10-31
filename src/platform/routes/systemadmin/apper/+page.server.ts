@@ -1,6 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { appsWithStatus, getCatalogueApp, installCounts, platformApps, reviewApp, savePlatformApp } from '$srv/developer/catalogue';
+import { appsWithStatus, deletePlatformApp, getCatalogueApp, installCounts, platformApps, reviewApp, savePlatformApp } from '$srv/developer/catalogue';
 import { readAppForm } from '$srv/developer/app-form';
 import { listDevelopers } from '$srv/developer/developer';
 import { describeScope } from '$srv/authz/scopes';
@@ -95,6 +95,22 @@ export const actions: Actions = {
 			actorFromContext(ctx)
 		);
 		if (saved.secret) return { secret: saved.secret, secretFor: parsed.value.name };
+		redirect(303, '/systemadmin/apper');
+	},
+
+	slettPlattformapp: async (event) => {
+		const ctx = event.locals.auth;
+		if (!ctx?.permissions.has('plattform:administrer')) return fail(403, { error: 'Ingen tilgang.' });
+		const form = await event.request.formData();
+		const deleted = await deletePlatformApp(String(form.get('id') ?? ''));
+		if (!deleted) return fail(404, { error: 'Ukjent plattformapp.' });
+		for (const tenantId of [undefined, ...deleted.installs.map((install) => install.tenant_id)]) {
+			await log(
+				{ type: 'admin', subtype: 'app:slettet-av-plattform', action: 'D', outcome: '0', details: { name: deleted.name } },
+				actorFromContext(ctx),
+				tenantId
+			);
+		}
 		redirect(303, '/systemadmin/apper');
 	},
 

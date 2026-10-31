@@ -4,7 +4,7 @@ import { hasTestDatabase, createTestDatabase, emptyTables, type TestDatabase } f
 import { withTenant } from '../src/platform/server/tenant/context';
 import { getTenant } from '../src/platform/server/tenant/tenant';
 import { authenticateClient, deleteClient, getClient, registerClient } from '../src/platform/server/auth/clients';
-import { createApp, submitApp, reviewApp, installApp, uninstallApp, getCatalogueApp, publishersForTenant, unapprovedClients, mayBeActivated, mayBeDeleted, installableApps, updateApp, savePlatformApp, platformApps, newAppSecret, firstAppSecret } from '../src/platform/server/developer/catalogue';
+import { createApp, submitApp, reviewApp, installApp, uninstallApp, getCatalogueApp, publishersForTenant, unapprovedClients, mayBeActivated, mayBeDeleted, installableApps, updateApp, savePlatformApp, platformApps, newAppSecret, firstAppSecret, deleteApp, deletePlatformApp } from '../src/platform/server/developer/catalogue';
 import type { Tenant } from '../src/platform/server/tenant/context';
 
 const describeIf = hasTestDatabase() ? describe : describe.skip;
@@ -177,6 +177,38 @@ describeIf('catalogue', () => {
 			await reviewApp(appId, true, 'ok', null);
 			expect((await withTenant(a, () => getClient(clientId)))!.type).toBe('confidential');
 			expect((await withTenant(a, () => tokenRequest(clientId, secret))).ok).toBe(true);
+		});
+	});
+
+	describe('deleting an app altogether', () => {
+		it('removes it from the catalogue and every practice that has it', async () => {
+			const app = (await getCatalogueApp(appId))!;
+			const inA = await withTenant(a, () => installApp(app, null));
+			const inB = await withTenant(b, () => installApp(app, null));
+			const token = await tokenFor(a, inA.clientId);
+
+			const deleted = await deleteApp(appId, 'dev1');
+			expect(deleted?.name).toBe('Testapp');
+			expect(deleted?.installs).toHaveLength(2);
+
+			expect(await getCatalogueApp(appId)).toBeNull();
+			expect(await withTenant(a, () => getClient(inA.clientId))).toBeNull();
+			expect(await withTenant(b, () => getClient(inB.clientId))).toBeNull();
+			expect((await withTenant(a, () => installableApps())).map((x) => x.id)).not.toContain(appId);
+			expect(await query('SELECT id FROM oauth_token WHERE id = $1', [token])).toHaveLength(0);
+		});
+
+		it("only the app's own developer can", async () => {
+			await exec("INSERT INTO developer (id, email, name) VALUES ('dev2', 'dev2@example.com', 'Dev2')");
+			expect(await deleteApp(appId, 'dev2')).toBeNull();
+			expect(await getCatalogueApp(appId)).toBeTruthy();
+		});
+
+		it('a developer cannot delete a platform app, and the platform can', async () => {
+			const { id } = await savePlatformApp(null, input('Plattformapp'), null);
+			expect(await deleteApp(id, 'dev1')).toBeNull();
+			expect((await deletePlatformApp(id))?.name).toBe('Plattformapp');
+			expect(await getCatalogueApp(id)).toBeNull();
 		});
 	});
 

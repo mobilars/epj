@@ -1,3 +1,4 @@
+import { fhirClient } from '../fhir/client';
 import type { AuthContext } from '../authz/context';
 import { SYSTEM, genderFromNationalId, validDateDel, validNorwegianNationalId } from '../fhir/codesystems';
 import { resources, searchResources } from '../fhir/internal';
@@ -130,9 +131,15 @@ export function identitySearch(nationalId: string): string {
 	return IDENTITY_SYSTEMS.map((system) => `${system}|${nationalId}`).join(',');
 }
 
-/** The patients who already have this number, as the user may see them. */
-export async function patientsWithNationalId(ctx: AuthContext, nationalId: string): Promise<FhirResource[]> {
-	return resources(await searchResources(ctx, 'Patient', { identifier: identitySearch(nationalId), _count: 5 }));
+/**
+ * The patients who already have this number, whoever may see them.
+ *
+ * Goes around the guard on purpose. As the user, this found only patients they were
+ * already linked to, so a clinician registering someone a colleague had registered was
+ * told nothing and created a second record of the same person.
+ */
+export async function patientsWithNationalId(nationalId: string): Promise<FhirResource[]> {
+	return resources(await fhirClient.search('Patient', new URLSearchParams({ identifier: identitySearch(nationalId), _count: '5' })));
 }
 
 /** The number on a patient, under whichever system it was filed. */
