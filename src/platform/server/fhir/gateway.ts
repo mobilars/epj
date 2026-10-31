@@ -190,7 +190,7 @@ async function readResource(f: Request, resourceType: string, id: string): Promi
 		resource,
 		headers: {
 			etag: `W/"${resource.meta?.versionId ?? '1'}"`,
-			'last-modified': resource.meta?.loadUpdated ?? new Date().toISOString()
+			'last-modified': resource.meta?.lastUpdated ?? new Date().toISOString()
 		}
 	};
 }
@@ -232,7 +232,7 @@ async function createResource(f: Request, resourceType: string): Promise<Gateway
 		throw new FhirError(decision.status, [issue('error', 'forbidden', decision.reason ?? 'Ingen tilgang')]);
 	}
 
-	const response = await fhirClient.create(withProvenance(resource, f.ctx), {
+	const response = await fhirClient.create(withProvenance(withLocalReferences(resource), f.ctx), {
 		requestId: f.ctx.requestId,
 		ifNoneExist: f.ifNoneExist
 	});
@@ -280,7 +280,7 @@ async function updateResource(f: Request, resourceType: string, id: string): Pro
 		}
 	}
 
-	const response = await fhirClient.update(resourceType, id, withProvenance(newValue, f.ctx), {
+	const response = await fhirClient.update(resourceType, id, withProvenance(withLocalReferences(newValue), f.ctx), {
 		requestId: f.ctx.requestId,
 		ifMatch: f.ifMatch
 	});
@@ -537,7 +537,7 @@ async function transaction(f: Request): Promise<GatewayResponse> {
 
 	const merket: Bundle = {
 		...bundle,
-		entry: (bundle.entry ?? []).map((e) => (e.resource ? { ...e, resource: withProvenance(e.resource, f.ctx) } : e))
+		entry: (bundle.entry ?? []).map((e) => (e.resource ? { ...e, resource: withProvenance(withLocalReferences(e.resource), f.ctx) } : e))
 	};
 	const response = await fhirClient.transaction(merket, { requestId: f.ctx.requestId });
 	await log(
@@ -598,6 +598,28 @@ function bodySomResource(body: unknown, expectedType: string): FhirResource {
 		throw FhirError.invalid(`Forventet ${expectedType}, fikk ${r.resourceType ?? 'ukjent'}`);
 	}
 	return r;
+}
+
+/**
+ * A resource with references to this record made relative.
+ *
+ * An app is handed `fhirUser` as an absolute address, as SMART says, and may well write
+ * it back as it is. The FHIR server does not know that address as its own: it takes it
+ * for another server's, so a search by author would never find the note.
+ */
+function withLocalReferences(resource: FhirResource): FhirResource {
+	const base = `${fhirBaseFor(requireTenant())}/`;
+	const localise = (node: unknown): unknown => {
+		if (Array.isArray(node)) return node.map(localise);
+		if (!node || typeof node !== 'object') return node;
+		return Object.fromEntries(
+			Object.entries(node).map(([key, value]) => [
+				key,
+				key === 'reference' && typeof value === 'string' && value.startsWith(base) ? value.slice(base.length) : localise(value)
+			])
+		);
+	};
+	return localise(resource) as FhirResource;
 }
 
 /**

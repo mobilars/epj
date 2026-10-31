@@ -9,6 +9,7 @@ import { getSession, tenantIdForSession } from '$srv/auth/session';
 import { SETTING, getSetting, themeAttribute } from '$srv/auth/settings';
 import { methodIsEnough } from '$srv/auth/login-level';
 import { getUser, rolesFor } from '$srv/auth/users';
+import { ensurePractitioner } from '$srv/auth/practitioner';
 import { validateAccessToken } from '$srv/auth/tokens';
 import { parseScopes } from '$srv/authz/scopes';
 import { permissionsForRoles, scopesForRoles } from '$srv/authz/roles';
@@ -52,10 +53,11 @@ async function contextFromSession(event: Parameters<Handle>[0]['event'], request
 	const user = await getUser(session.user_id);
 	if (!user || user.status !== 'aktiv') return null;
 	const roles = await rolesFor(user.id);
+	const practitionerId = await ensurePractitioner(user, roles);
 	return {
 		mate: 'session',
 		userId: user.id,
-		actorRef: user.practitioner_id ? `Practitioner/${user.practitioner_id}` : `Person/${user.id}`,
+		actorRef: practitionerId ? `Practitioner/${practitionerId}` : `Person/${user.id}`,
 		name: user.name,
 		roles,
 		permissions: permissionsForRoles(roles),

@@ -177,6 +177,11 @@
 				if (!subjektivt && !objektivt && !vurdering) {
 					return render('<div class="varsel varsel-advarsel">Notatet må ha innhold.</div>');
 				}
+				// Refused here, before the contact is written: a note nobody signed is not a
+				// record entry, and the contact would be left behind without one.
+				if (!smart.fhirUser) {
+					return showError('Notatet kan ikke lagres', 'Brukeren din er ikke registrert som behandler, så notatet ville ikke hatt noen forfatter.');
+				}
 
 				button.disabled = true;
 				button.textContent = 'Lagrer …';
@@ -223,9 +228,7 @@
 					subject,
 					encounter: { reference: `Encounter/${encounter.body.id}` },
 					date: now,
-					// The record requires an author, and rightly: a note nobody signed
-					// is not a record entry. `fhirUser` in the token is who that is.
-					...(smart.fhirUser ? { author: [{ reference: smart.fhirUser }] } : {}),
+					author: [{ reference: smart.fhirUser }],
 					title: 'Konsultasjon',
 					section: [
 						...(subjektivt ? [{ title: 'Subjektivt', text: div(subjektivt) }] : []),

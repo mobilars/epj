@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import pg from 'pg';
 import { logIn, waitOnHydration } from './hjelpere';
 
 /**
@@ -84,6 +85,24 @@ test.describe('demo apps', () => {
 		await expect(page.getByLabel('ICPC-2: kode eller søkeord')).toHaveValue('K86');
 		await expect(page.getByLabel('Diagnosetekst')).toHaveValue(/Hypertensjon/);
 		await expect(page.getByRole('button', { name: /K86/ })).toHaveCount(0);
+	});
+
+	test('Journalnotat saves a note for a behandler whose account had no Practitioner', async ({ page }) => {
+		const db = new pg.Client({ connectionString: process.env.E2E_DATABASE_URL });
+		await db.connect();
+		const before = await db.query<{ practitioner_id: string }>(`SELECT practitioner_id FROM user_account WHERE username = 'lege'`);
+		await db.query(`UPDATE user_account SET practitioner_id = NULL WHERE username = 'lege'`);
+		try {
+			await launch(page, 'notat.html', /Bakken/);
+			await page.getByLabel('Subjektivt').fill('Er frisk');
+			await page.getByRole('button', { name: 'Lagre notat' }).click();
+			await expect(page.getByText('Notatet er lagret i journalen.')).toBeVisible();
+			const after = await db.query<{ practitioner_id: string | null }>(`SELECT practitioner_id FROM user_account WHERE username = 'lege'`);
+			expect(after.rows[0].practitioner_id).toBeTruthy();
+		} finally {
+			await db.query(`UPDATE user_account SET practitioner_id = $1 WHERE username = 'lege'`, [before.rows[0].practitioner_id]);
+			await db.end();
+		}
 	});
 
 	test('Hjerterisiko fills in what the record knows, and calculates when the rest is given', async ({ page }) => {

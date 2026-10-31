@@ -6,6 +6,7 @@ import { formatsDate, klinisksStatus, codeText, codeValue } from '$srv/fhir/disp
 import type { FhirResource } from '$srv/fhir/types';
 import { acceptedActions, callHook, sendFeedback, type Card, type Suggestion } from '$srv/cds/hooks';
 import { resolveLayout } from '$srv/workspace/layout';
+import { latestMeasurements } from '$apps/overview/server/latest-measurements';
 
 /** Clinical overview: diagnoses, medicines, allergies, latest measurements and notes. */
 /** Invented by a demo app, and has to say so wherever it is shown. */
@@ -26,7 +27,7 @@ export const load = (async (event) => {
 	const of = (type: string) => all.filter((r) => r.resourceType === type);
 
 	const sorterOnDate = (a: FhirResource, b: FhirResource) =>
-		String(b.meta?.loadUpdated ?? '').localeCompare(String(a.meta?.loadUpdated ?? ''));
+		String(b.meta?.lastUpdated ?? '').localeCompare(String(a.meta?.lastUpdated ?? ''));
 
 	/**
 	 * Advice from CDS Hooks services, at the moment the record is opened.
@@ -77,19 +78,14 @@ export const load = (async (event) => {
 					forskrevet: formatsDate(m.authoredOn as string)
 				})),
 
-			// A measurement marked as a mistake is still in the record's history, but it
-			// is not one of the patient's latest measurements.
-			malinger: of('Observation')
-				.filter((o) => o.status !== 'entered-in-error')
-				.sort(sorterOnDate)
-				.slice(0, 12)
+			malinger: latestMeasurements(of('Observation'))
 				.map((o) => ({
 					id: o.id as string,
 					name: codeText(o.code),
 					value: o.valueQuantity
 						? `${(o.valueQuantity as { value: number }).value} ${(o.valueQuantity as { unit?: string }).unit ?? ''}`.trim()
 						: codeText(o.valueCodeableConcept) || String(o.valueString ?? ''),
-					timestamp: formatsDate((o.effectiveDateTime as string) ?? (o.issued as string), true),
+					date: formatsDate((o.effectiveDateTime as string) ?? (o.issued as string)),
 					example: isExample(o)
 				})),
 

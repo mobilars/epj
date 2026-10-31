@@ -18,7 +18,7 @@ const p = (kind: ParamKind, paths: string | string[], extra: Partial<SearchParam
 /** Search parameters that apply to every resource type. */
 export const SHARED_PARAMS: Record<string, SearchParamDef> = {
 	_id: p('token', 'id'),
-	_loadUpdated: p('date', 'meta.lastUpdated'),
+	_lastUpdated: p('date', 'meta.lastUpdated'),
 	_profile: p('uri', 'meta.profile'),
 	_tag: p('token', 'meta.tag'),
 	_security: p('token', 'meta.security'),

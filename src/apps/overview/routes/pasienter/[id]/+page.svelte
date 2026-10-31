@@ -139,14 +139,15 @@
 					{#if g.malinger.length === 0}
 						<p class="svak">Ingen registrerte målinger.</p>
 					{:else}
-						<table>
-							<thead><tr><th>Måling</th><th class="hoyre">Verdi</th><th>Tidspunkt</th></tr></thead>
-							<tbody>
-								{#each g.malinger as m (m.id)}
-									<tr><td>{m.name}{#if m.example} <span class="merke merke-advarsel">Eksempeldata</span>{/if}</td><td class="hoyre tall">{m.value}</td><td class="svak">{m.timestamp}</td></tr>
-								{/each}
-							</tbody>
-						</table>
+						<ul class="maalinger">
+							{#each g.malinger as m (m.id)}
+								<li>
+									<span class="maaling">{m.name}</span>
+									<strong class="tall">{m.value}</strong>
+									<small class="svak">{m.date}{#if m.example} <span class="merke merke-advarsel">Eksempeldata</span>{/if}</small>
+								</li>
+							{/each}
+						</ul>
 					{/if}
 				</section>
 			{:else if card === 'notater'}
@@ -187,3 +188,18 @@
 		{/each}
 	</div>
 {/if}
+
+<style>
+	.maalinger { list-style: none; margin: 0; padding: 0; }
+	.maalinger li {
+		display: grid;
+		grid-template-columns: 1fr auto;
+		column-gap: 0.75rem;
+		padding: 0.3rem 0;
+		border-bottom: 1px solid var(--kant);
+	}
+	.maalinger li:last-child { border-bottom: none; }
+	.maalinger .tall { white-space: nowrap; text-align: right; font-weight: 600; }
+	.maalinger small { grid-column: 1 / -1; font-size: 0.75rem; }
+	.maalinger small .merke { font-size: 0.7rem; padding: 0 0.35rem; }
+</style>

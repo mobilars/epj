@@ -147,7 +147,7 @@ const SEKSJONER: Section[] = [
 		code: { system: LOINC, code: '34117-2', display: 'History and physical note' },
 		types: ['Composition', 'DocumentReference'],
 		line: (c) => ({
-			date: formatsDate((c.date as string) ?? (c.meta?.loadUpdated as string), true),
+			date: formatsDate((c.date as string) ?? (c.meta?.lastUpdated as string), true),
 			hovedtekst: (c.title as string) || codeText(c.type) || 'Notat',
 			details: [
 				((c.author as { display?: string }[]) ?? [])[0]?.display ?? '',
@@ -234,7 +234,7 @@ function dateringOf(r: FhirResource): string {
 	const candidates = [
 		r.recordedDate, r.authoredOn, r.date, r.issued, r.effectiveDateTime,
 		r.occurrenceDateTime, r.created, r.start, (r.actualPeriod as { start?: string })?.start,
-		r.meta?.loadUpdated
+		r.meta?.lastUpdated
 	];
 	return String(candidates.find((v) => typeof v === 'string' && v) ?? '');
 }

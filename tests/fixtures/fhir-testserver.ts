@@ -146,7 +146,7 @@ export async function startTestFhirServer(): Promise<TestFhirServer> {
 			...resource,
 			resourceType: type,
 			id,
-			meta: { ...(resource.meta as object), versionId: String(version), loadUpdated: new Date().toISOString() }
+			meta: { ...(resource.meta as object), versionId: String(version), lastUpdated: new Date().toISOString() }
 		};
 		get(partition, type).set(id, stored);
 		const key = `${partition}:${type}/${id}`;
@@ -340,7 +340,7 @@ export async function startTestFhirServer(): Promise<TestFhirServer> {
 					case 'GET': {
 						const r = get(partition, type).get(id);
 						return r
-							? response(200, r, { etag: `W/"${(r.meta as { versionId: string }).versionId}"`, 'last-modified': String((r.meta as { loadUpdated: string }).loadUpdated) })
+							? response(200, r, { etag: `W/"${(r.meta as { versionId: string }).versionId}"`, 'last-modified': String((r.meta as { lastUpdated: string }).lastUpdated) })
 							: error(404, `${type}/${id} finnes ikke`);
 					}
 					case 'PUT': {

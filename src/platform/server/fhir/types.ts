@@ -4,7 +4,7 @@ export interface FhirResource {
 	id?: string;
 	meta?: {
 		versionId?: string;
-		loadUpdated?: string;
+		lastUpdated?: string;
 		profile?: string[];
 		security?: Coding[];
 		tag?: Coding[];

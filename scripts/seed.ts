@@ -295,7 +295,8 @@ async function seed(tenant: Tenant): Promise<void> {
 			redirectUris: ['http://localhost:4000/callback', 'http://127.0.0.1:4000/callback'],
 			scopes: [
 				'openid', 'fhirUser', 'launch', 'launch/patient', 'online_access',
-				'patient/Patient.rs', 'patient/Observation.rs', 'patient/Observation.cu', 'patient/Condition.rs', 'patient/Condition.cu', 'patient/MedicationRequest.rs', 'patient/MedicationRequest.cu'
+				'patient/Patient.rs', 'patient/Observation.rs', 'patient/Observation.cu', 'patient/Condition.rs', 'patient/Condition.cu', 'patient/MedicationRequest.rs', 'patient/MedicationRequest.cu',
+				'patient/Encounter.c', 'patient/Composition.rs', 'patient/Composition.c'
 			],
 			placement: 'ingen',
 			contactEmail: '',
