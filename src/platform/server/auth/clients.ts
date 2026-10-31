@@ -27,6 +27,8 @@ export interface OAuthClient {
 	databehandleravtale: string | null;
 	/** URL the record sends the user to on EHR launch. */
 	launch_url: string | null;
+	/** Who made the app, when it was registered directly rather than from the catalogue. */
+	publisher: string | null;
 	/** Sits directly in the main menu rather than under the apps dropdown. */
 	in_main_menu: boolean;
 	/** Has a tab of its own in the patient record rather than sitting under Apper. */
@@ -45,7 +47,7 @@ export interface OAuthClient {
 
 const FIELD = `client_id, tenant_id, name, type, client_category, secret_hash, jwks, jwks_uri, redirect_uris,
 	allowed_scopes, grant_types, require_pkce, require_consent, logo_url, databehandleravtale, launch_url,
-	in_main_menu, in_patient_tabs, open_in_new_tab, top_level_signin, placement, replaces_tab, status, created_at`;
+	publisher, in_main_menu, in_patient_tabs, open_in_new_tab, top_level_signin, placement, replaces_tab, status, created_at`;
 
 export async function getClient(clientId: string): Promise<OAuthClient | null> {
 	return one<OAuthClient>(`SELECT ${FIELD} FROM oauth_client WHERE client_id = $1 AND tenant_id = $2`, [
@@ -83,6 +85,7 @@ export interface NewClient {
 	 */
 	requireConsent?: boolean;
 	createdOf?: string;
+	publisher?: string;
 }
 
 export async function registerClient(inValue: NewClient): Promise<{ client: OAuthClient; secret?: string }> {
@@ -91,15 +94,15 @@ export async function registerClient(inValue: NewClient): Promise<{ client: OAut
 	await exec(
 		`INSERT INTO oauth_client (client_id, tenant_id, name, type, client_category, secret_hash, jwks, jwks_uri,
 			redirect_uris, allowed_scopes, grant_types, require_pkce, require_consent, logo_url, databehandleravtale,
-			launch_url, in_main_menu, placement, created_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+			launch_url, in_main_menu, placement, created_by, publisher)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
 		[
 			clientId, requireTenant().id, inValue.name, inValue.type, inValue.category, secret ? hashPassword(secret) : null,
 			inValue.jwks ? JSON.stringify(inValue.jwks) : null, inValue.jwksUri ?? null,
 			JSON.stringify(inValue.redirectUris), JSON.stringify(inValue.scopes),
 			JSON.stringify(inValue.grantTypes ?? (inValue.category === 'backend' ? ['client_credentials'] : ['authorization_code', 'refresh_token'])),
 			inValue.type === 'public', inValue.requireConsent ?? true, inValue.logoUrl ?? null, inValue.databehandleravtale ?? null, inValue.launchUrl ?? null,
-			inValue.inMainMenu ?? false, inValue.placement ?? 'ingen', inValue.createdOf ?? null
+			inValue.inMainMenu ?? false, inValue.placement ?? 'ingen', inValue.createdOf ?? null, inValue.publisher ?? null
 		]
 	);
 	const client = await getClient(clientId);
