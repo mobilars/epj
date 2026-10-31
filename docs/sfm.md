@@ -21,6 +21,22 @@ NHN. Forespørsel om tilgang er sendt til NHN.
 Med SFM Full forskrives det i SFMs skjermbilde. Journalens forskrivningsskjema
 og `medication-prescribe`-kroken er dermed ikke i bruk når SFM er slått på.
 
+## Ikke en SMART-app
+
+Koblingen er en del av plattformen, ikke en SMART-app. Tokenet SFM krever, kommer
+fra legens HelseID-pålogging i journalen, og det skal ikke forlate tjeneren. En
+SMART-app får journalens eget token, ikke HelseIDs, og måtte derfor logget inn i
+HelseID selv, med egen klient og egen godkjenning hos NHN. Den innloggingen lar
+seg ikke vise i en ramme, samme problem som med Spirare. Appen måtte også fått
+fødselsnummeret for å hente billetten.
+
+Skillet som finnes: SFMs skjermbilde kjører fra NHNs eget domene og får bare en
+billett, og koden ligger samlet under `integrations/sfm/`.
+
+**Merk:** En app registrert med `replacesTab: 'legemidler'` overtar fanen. Da
+vises appen og ikke SFM, også når `EPJ_SFM_FULL` er på. Demo-appen Legemidler er
+satt opp slik i `scripts/register-demo-app.ts`, så dette må fjernes før SFM slås på.
+
 ## Slik virker det
 
 1. Legen logger inn med HelseID. Tokenet har også SFM-scopet, og beholdes kryptert

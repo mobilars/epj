@@ -15,7 +15,7 @@
 			 *
 			 * Reads what the record holds and can add an entry. What it deliberately
 			 * does not do is prescribe: a prescription goes to Reseptformidleren
-			 * through SFM, and that is the record's job, not an app's. An app that
+			 * through SFM, which the record is not yet connected to. An app that
 			 * pretended otherwise would write something into the list that no
 			 * pharmacy will ever see - worse than not offering it.
 			 *
@@ -122,8 +122,8 @@
 							<div class="fast" style="align-self:flex-end"><button type="submit" id="lagre">Legg til</button></div>
 						</div>
 						<p class="svak liten" style="margin-top:0.5rem">
-							Legges i journalens liste. Dette er ikke en resept – forskrivning går gjennom SFM
-							i journalen.
+							Legges i journalens liste. Dette er ikke en resept, og ingenting sendes til
+							e-resept.
 						</p>
 					</form>
 

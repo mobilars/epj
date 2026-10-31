@@ -65,7 +65,7 @@ export async function mockSfm<T>(operation: SfmOperation, body: unknown, patient
 			const list: MedicationList = {
 				patientId,
 				updated_at: state.updated_at,
-				source: 'sfm',
+				source: 'simulator',
 				medications: state.medications,
 				deviation: state.medications.filter((l) => l.status === 'utkast').map((l) => `${l.name} er ikke bekreftet mot PLL`)
 			};

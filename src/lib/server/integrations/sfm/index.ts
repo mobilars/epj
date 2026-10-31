@@ -39,7 +39,7 @@ export interface MedicationList {
 	patientId: string;
 	updated_at: string;
 	/** Source: `sfm` (the patient's medication list) or `lokal` (record only). */
-	source: 'sfm' | 'lokal';
+	source: 'simulator' | 'sfm' | 'lokal';
 	medications: MedicationEntry[];
 	/** Discrepancy between PLL and the local medication list, for a doctor to reconcile. */
 	deviation: string[];
@@ -141,7 +141,7 @@ export async function getMedicationList(patientId: string, actor: AuditActor): P
 /**
  * Prescribes a medicine. On success the prescription is mirrored as a FHIR
  * MedicationRequest in the record, so it is searchable via /fhir and visible to
- * SMART apps. SFM is the source - the record keeps a copy.
+ * SMART apps. Today the source is the simulator, and the resource is tagged as such.
  */
 export async function prescribe(inValue: PrescribingIn, actor: AuditActor): Promise<SfmResponse<{ prescriptionId: string }>> {
 	const response = await call<{ prescriptionId: string }>('forskriv', inValue, inValue.patientId, actor);
@@ -188,7 +188,7 @@ export async function prescribe(inValue: PrescribingIn, actor: AuditActor): Prom
 				}
 			: {}),
 		note: inValue.kommentarToApotek ? [{ text: inValue.kommentarToApotek }] : undefined,
-		meta: { source: 'urn:epj:sfm', tag: [{ system: 'urn:epj:kilde', code: 'sfm' }] }
+		meta: { source: 'urn:epj:sfm-simulator', tag: [{ system: 'urn:epj:kilde', code: 'sfm-simulator' }] }
 	};
 
 	await fhirClient.create(medicationRequest).catch((err) => {

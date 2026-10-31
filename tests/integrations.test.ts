@@ -81,7 +81,7 @@ describeIf('integrasjoner', () => {
 			expect(list.ok).toBe(true);
 			expect(list.data?.medications).toHaveLength(1);
 			expect(list.data?.medications[0].name).toContain('Metformin');
-			expect(list.data?.source).toBe('sfm');
+			expect(list.data?.source).toBe('simulator');
 		});
 
 		it('varsler om interaksjon', async () => {

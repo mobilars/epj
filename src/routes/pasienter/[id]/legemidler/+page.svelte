@@ -11,9 +11,16 @@
 <div class="rad-mellom">
 	<h2>Legemidler</h2>
 	<div class="rad">
-		<span class="merke merke-info">Kilde: Sentral forskrivningsmodul ({data.mode})</span>
-
+		<span class="merke merke-advarsel">Simulator – ikke koblet til e-resept</span>
 	</div>
+</div>
+
+<!-- Said in full, not only on the badge: a prescription that looks real and goes
+     nowhere is a patient without their medicine. -->
+<div class="varsel varsel-advarsel" role="note">
+	Dette er journalens egen demonstrasjon av legemiddelflyten. Den er ikke koblet til Sentral
+	forskrivningsmodul (SFM) eller e-resept. Ingen resepter sendes, og listen er ikke Pasientens
+	legemiddelliste.
 </div>
 
 {#if data.error}
@@ -24,7 +31,7 @@
 {/if}
 {#if form?.ok}
 	<div class="varsel varsel-ok" role="status">
-		Resept {form.prescriptionId} er sendt til e-resept.
+		Resept {form.prescriptionId} er lagret i simulatoren. Den er ikke sendt til e-resept.
 		{#if form.alerts?.length}
 			<ul>{#each form.alerts as v}<li>{v}</li>{/each}</ul>
 		{/if}
@@ -141,12 +148,12 @@
 				</tbody>
 			</table>
 		</div>
-		<p class="svak">Sist oppdatert fra SFM: {data.list.updated_at}</p>
+		<p class="svak">Sist oppdatert fra simulatoren: {data.list.updated_at}</p>
 	{/if}
 </div>
 
 <details class="kort">
-	<summary>Kommunikasjon med SFM</summary>
+	<summary>Logg fra simulatoren</summary>
 	<table>
 		<thead><tr><th>Tidspunkt</th><th>Operasjon</th><th>Status</th><th>Resept</th><th>Feil</th></tr></thead>
 		<tbody>

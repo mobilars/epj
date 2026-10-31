@@ -60,7 +60,7 @@ const APPS: App[] = [
 		scopes: `${READ} patient/MedicationRequest.rs patient/MedicationRequest.cu patient/AllergyIntolerance.rs`.split(' '),
 		placement: 'ingen',
 		replacesTab: 'legemidler',
-		note: 'Legemiddellisten. Forskrivning går fortsatt gjennom SFM i journalen.'
+		note: 'Legemiddellisten. Ikke koblet til SFM eller e-resept.'
 	},
 	{
 		name: 'FHIR-testapp',

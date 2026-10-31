@@ -87,7 +87,7 @@ test.describe('journal', () => {
 		await page.getByLabel('Dosering').fill('1 tablett morgen og kveld');
 		await page.getByRole('button', { name: 'Forskriv' }).click();
 
-		await expect(page.locator('main').getByRole('status')).toContainText('sendt til e-resept');
+		await expect(page.locator('main').getByRole('status')).toContainText('ikke sendt til e-resept');
 		await expect(page.getByText('Metformin 500 mg')).toBeVisible();
 	});
 
