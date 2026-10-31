@@ -286,6 +286,7 @@ async function seed(tenant: Tenant): Promise<void> {
 	// --- SMART-app --------------------------------------------------------
 	const { client, secret } = await registerClient({
 		name: 'Diabetesoversikt (demo)',
+		publisher: 'APUS Roland AS',
 		type: 'public',
 		category: 'smart-ehr',
 		redirectUris: ['http://localhost:4000/callback', 'http://127.0.0.1:4000/callback'],

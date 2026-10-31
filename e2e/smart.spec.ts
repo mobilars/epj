@@ -98,12 +98,21 @@ test.describe('SMART on FHIR', () => {
 
 		const details = page.locator('.appinfo');
 		await expect(details).toBeHidden();
-		await stripe.getByRole('button', { name: 'Diabetesoversikt (demo)' }).click();
+		const name = stripe.getByRole('button', { name: 'Diabetesoversikt (demo)' });
+		await name.click();
 		await expect(details).toBeVisible();
-		// Registered directly by the practice, so no developer is on record.
-		await expect(details).toContainText('Ikke oppgitt');
+		// Just below the name, and inside the window.
+		const nameBox = (await name.boundingBox())!;
+		const box = (await details.boundingBox())!;
+		expect(Math.abs(box.y - (nameBox.y + nameBox.height))).toBeLessThan(10);
+		expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+		await expect(details).toContainText('APUS Roland AS');
 		await expect(details).toContainText('localhost:4000');
 		await expect(details).toContainText(clientId);
+		await details.getByRole('button', { name: 'Lukk' }).click();
+		await expect(details).toBeHidden();
+		await name.click();
+		await expect(details).toBeVisible();
 		await page.keyboard.press('Escape');
 		await expect(details).toBeHidden();
 	});

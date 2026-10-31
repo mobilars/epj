@@ -43,20 +43,35 @@
 		clientId ? ((page.data.apps ?? []) as AppDetails[]).find((app) => app.clientId === clientId) : undefined
 	);
 	const popoverId = $props.id();
+
+	let nameButton = $state<HTMLButtonElement | null>(null);
+
+	/** Opens just below the name, kept inside the window: a side panel sits at its right edge. */
+	function placeBelowName(event: ToggleEvent) {
+		if (event.newState !== 'open' || !nameButton) return;
+		const popup = event.currentTarget as HTMLElement;
+		const name = nameButton.getBoundingClientRect();
+		popup.style.margin = '0';
+		popup.style.top = `${name.bottom + 4}px`;
+		popup.style.left = `max(0.5rem, min(${name.left}px, calc(100vw - 22rem - 0.5rem)))`;
+	}
 </script>
 
 <div class="ekstern" class:merket={marked}>
 	{#if marked}
 		<div class="ekstern-stripe">
 			{#if details}
-				{externalAppLabel('')}<button type="button" class="appnavn" popovertarget={popoverId}>{title}</button>
+				{externalAppLabel('')}<button type="button" class="appnavn" popovertarget={popoverId} bind:this={nameButton}>{title}</button>
 			{:else}
 				{label ?? externalAppLabel(title)}
 			{/if}
 		</div>
 		{#if details}
-			<div id={popoverId} popover="auto" class="appinfo">
-				<h3>{title}</h3>
+			<div id={popoverId} popover="auto" class="appinfo" onbeforetoggle={placeBelowName}>
+				<div class="appinfo-topp">
+					<h3>{title}</h3>
+					<button type="button" class="liten" popovertarget={popoverId} popovertargetaction="hide">Lukk</button>
+				</div>
 				<dl>
 					<dt>Laget av</dt>
 					<dd>
@@ -108,7 +123,15 @@
 		border-radius: var(--radius);
 		box-shadow: var(--skygge);
 		padding: 1rem 1.15rem;
-		max-width: 26rem;
+		width: min(22rem, calc(100vw - 1rem));
+		box-sizing: border-box;
+	}
+
+	.appinfo-topp {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		gap: 0.75rem;
 	}
 
 	.appinfo h3 {

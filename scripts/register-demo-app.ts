@@ -24,6 +24,9 @@ import {
 	type Placement
 } from '../src/platform/server/auth/clients';
 
+/** These apps are built in this repository. */
+const PUBLISHER = 'APUS Roland AS';
+
 const READ = 'openid fhirUser launch launch/patient online_access patient/Patient.rs';
 
 interface App {
@@ -79,7 +82,7 @@ async function ensure(app: App): Promise<string> {
 	if (clientId) {
 		await exec(
 			`UPDATE oauth_client
-			 SET redirect_uris = $2, allowed_scopes = $3, launch_url = $4, in_main_menu = $5, status = 'aktiv'
+			 SET redirect_uris = $2, allowed_scopes = $3, launch_url = $4, in_main_menu = $5, publisher = $7, status = 'aktiv'
 			 WHERE client_id = $1 AND tenant_id = $6`,
 			[
 				clientId,
@@ -87,7 +90,8 @@ async function ensure(app: App): Promise<string> {
 				JSON.stringify(app.scopes),
 				`${app.host}/launch?client_id=${clientId}`,
 				app.inMainMenu ?? false,
-				tenantId
+				tenantId,
+				PUBLISHER
 			]
 		);
 		await setPlacement(clientId, app.placement);
@@ -106,7 +110,8 @@ async function ensure(app: App): Promise<string> {
 		scopes: app.scopes,
 		launchUrl: `${app.host}/launch`,
 		databehandleravtale: app.note,
-		inMainMenu: app.inMainMenu ?? false
+		inMainMenu: app.inMainMenu ?? false,
+		publisher: PUBLISHER
 	});
 	// Now that the id exists, put it on the launch URL.
 	await exec('UPDATE oauth_client SET launch_url = $2 WHERE client_id = $1 AND tenant_id = $3', [
