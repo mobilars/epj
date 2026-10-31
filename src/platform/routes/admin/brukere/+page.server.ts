@@ -1,6 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { listUsers, createUser, setPassword, setRoles, setStatus } from '$srv/auth/users';
+import { listUsers, createUser, setPassword, setRoles, setStatus, duplicateUserMessage } from '$srv/auth/users';
 import { endAllSessions } from '$srv/auth/session';
 import { revokeForUser } from '$srv/auth/tokens';
 import { isPlatformRole, isRole, ROLE_DEFINISJONER, TENANT_ROLES } from '$srv/authz/roles';
@@ -56,17 +56,24 @@ export const actions: Actions = {
 		}
 
 		const temporary = newToken(9);
-		const user = await createUser({
-			username,
-			name: String(form.get('navn') ?? '').trim() || username,
-			email: String(form.get('epost') ?? '').trim() || undefined,
-			hprNumber: String(form.get('hpr') ?? '').trim() || undefined,
-			nationalId: nationalId || undefined,
-			practitionerId: String(form.get('practitionerId') ?? '').trim() || undefined,
-			password: temporary,
-			roles,
-			createdOf: ctx.userId ?? undefined
-		});
+		let user;
+		try {
+			user = await createUser({
+				username,
+				name: String(form.get('navn') ?? '').trim() || username,
+				email: String(form.get('epost') ?? '').trim() || undefined,
+				hprNumber: String(form.get('hpr') ?? '').trim() || undefined,
+				nationalId: nationalId || undefined,
+				practitionerId: String(form.get('practitionerId') ?? '').trim() || undefined,
+				password: temporary,
+				roles,
+				createdOf: ctx.userId ?? undefined
+			});
+		} catch (err) {
+			const message = duplicateUserMessage(err);
+			if (message) return fail(400, { error: message, values });
+			throw err;
+		}
 		await log(
 			{ type: 'admin', subtype: 'bruker:opprettet', action: 'C', outcome: '0', entityRef: `Person/${user.id}`, details: { username, roles: roles.join(',') } },
 			actorFromContext(ctx)

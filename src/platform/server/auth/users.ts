@@ -89,6 +89,20 @@ export interface NewUser {
 	tenantId?: string | null;
 }
 
+const DUPLICATE_MESSAGES: Record<string, string> = {
+	user_account_tenant_national_id_key:
+		'Fødselsnummeret er allerede registrert på en annen bruker i virksomheten. Gi den brukeren rollen i stedet.',
+	idx_user_username_tenant: 'Brukernavnet er allerede i bruk i virksomheten.',
+	user_account_tenant_email_idx: 'E-postadressen er allerede registrert på en annen bruker i virksomheten.'
+};
+
+/** What to tell an administrator when a new user collides with one that exists, or null. */
+export function duplicateUserMessage(err: unknown): string | null {
+	const database = err as { code?: unknown; constraint?: unknown };
+	if (database?.code !== '23505' || typeof database.constraint !== 'string') return null;
+	return DUPLICATE_MESSAGES[database.constraint] ?? null;
+}
+
 export async function createUser(inValue: NewUser): Promise<User> {
 	return transaction(async () => {
 		const id = newId();

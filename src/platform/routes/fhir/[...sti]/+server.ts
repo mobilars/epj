@@ -1,3 +1,4 @@
+import { errorForLog } from '$srv/util/error-log';
 import type { RequestEvent, RequestHandler } from './$types';
 import { config } from '$srv/config';
 import { requireTenant, issuerFor } from '$srv/tenant/context';
@@ -72,7 +73,7 @@ async function handle(event: RequestEvent): Promise<Response> {
 				}
 			});
 		}
-		console.error(`[fhir] ${event.locals.requestId}`, err);
+		console.error(`[fhir] ${event.locals.requestId}`, errorForLog(err));
 		return new Response(
 			JSON.stringify(operationOutcome([issue('fatal', 'exception', `Intern feil. Referanse: ${event.locals.requestId}`)])),
 			{ status: 500, headers: { 'content-type': FHIR_JSON, ...cors } }

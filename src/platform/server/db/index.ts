@@ -1,3 +1,4 @@
+import { errorForLog } from '../util/error-log';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import pg from 'pg';
 import { config } from '../config';
@@ -32,7 +33,7 @@ export function getPool(): pg.Pool {
 			...(config.dbSsl ? { ssl: { rejectUnauthorized: true } } : {})
 		});
 		pool.on('error', (err) => {
-			console.error('[db] uventet feil på inaktiv tilkobling', err);
+			console.error('[db] uventet feil på inaktiv tilkobling', errorForLog(err));
 		});
 	}
 	return pool;

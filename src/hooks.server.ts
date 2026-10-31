@@ -1,3 +1,4 @@
+import { errorForLog } from '$srv/util/error-log';
 import { redirect } from '@sveltejs/kit';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
@@ -25,7 +26,7 @@ function ensureSchema(): Promise<unknown> {
 		migrertOk = migrate()
 			.then(() => ensureDefaultOrganisation())
 			.catch((err) => {
-				console.error('[oppstart] migrering feilet', err);
+				console.error('[oppstart] migrering feilet', errorForLog(err));
 				migrertOk = null;
 				throw err;
 			});
@@ -301,7 +302,7 @@ export const handleError: HandleServerError = ({ error, event }) => {
 	const requestId = event.locals?.requestId ?? 'ukjent';
 	// Details are logged on the server; the client gets only a correlation id, so
 	// that internal error messages do not leak information about the system.
-	console.error(`[feil] ${requestId} ${event.url.pathname}`, error);
+	console.error(`[feil] ${requestId} ${event.url.pathname}`, errorForLog(error));
 	return {
 		message: 'Det oppsto en uventet feil. Kontakt systemansvarlig og oppgi referansen.',
 		code: 'intern_feil',

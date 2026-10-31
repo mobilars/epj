@@ -1,3 +1,4 @@
+import { errorForLog } from '$srv/util/error-log';
 import { one, exec, query } from '$srv/db';
 import { requireTenant } from '$srv/tenant/context';
 import { config } from '$srv/config';
@@ -192,7 +193,7 @@ export async function prescribe(inValue: PrescribingIn, actor: AuditActor): Prom
 	};
 
 	await fhirClient.create(medicationRequest).catch((err) => {
-		console.error('[sfm] klarte ikke å speile resept i journalen', err);
+		console.error('[sfm] klarte ikke å speile resept i journalen', errorForLog(err));
 	});
 	return response;
 }

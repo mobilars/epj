@@ -1,3 +1,4 @@
+import { errorForLog } from '$srv/util/error-log';
 import { one, exec, query, transaction } from '$srv/db';
 import { requireTenant } from '$srv/tenant/context';
 import { newId } from '$srv/util/ids';
@@ -176,7 +177,7 @@ async function mirrorSomClaim(
 		const response = await fhirClient.create(claim);
 		return `Claim/${response.resource.id}`;
 	} catch (err) {
-		console.error('[helfo] klarte ikke å speile regningskort som Claim', err);
+		console.error('[helfo] klarte ikke å speile regningskort som Claim', errorForLog(err));
 		return null;
 	}
 }

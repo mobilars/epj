@@ -1,3 +1,4 @@
+import { errorForLog } from '$srv/util/error-log';
 import { one, exec, withLock, query, transaction } from '$srv/db';
 import { requireTenant, withTenant } from '$srv/tenant/context';
 import { getTenant } from '$srv/tenant/tenant';
@@ -377,7 +378,7 @@ async function mirrorToFhir(
 		const response = await fhirClient.create(resource);
 		return `${resource.resourceType}/${response.resource.id}`;
 	} catch (err) {
-		console.error('[nhn] klarte ikke å speile melding til FHIR', err);
+		console.error('[nhn] klarte ikke å speile melding til FHIR', errorForLog(err));
 		return null;
 	}
 }
