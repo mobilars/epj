@@ -1,5 +1,6 @@
 import { exec, one, query, transaction } from '../db';
-import { newId } from '../util/ids';
+import { newId, newToken } from '../util/ids';
+import { hashPassword } from '../util/crypto';
 import { registerClient, setKlientstatus, setPlacement, setReplacesTab, setRequireConsent, type Placement } from '../auth/clients';
 import { requireTenant } from '../tenant/context';
 
@@ -13,6 +14,10 @@ import { requireTenant } from '../tenant/context';
  * same app share nothing, and revoking it at one leaves the other alone. That
  * is also what keeps the blast radius of a bad app to the practices that chose
  * it.
+ *
+ * Platform apps are entries too, owned by the platform rather than a developer, and
+ * managed in platform administration. They are approved as they stand, and a change
+ * reaches the practices at once.
  *
  * The status of an entry moves:
  *
@@ -31,6 +36,12 @@ import { requireTenant } from '../tenant/context';
 
 export type CatalogueStatus = 'utkast' | 'til-vurdering' | 'godkjent' | 'avvist';
 
+/** How an app proves who it is at the token endpoint. */
+export type ClientType = 'public' | 'secret' | 'keys';
+
+/** Owns the platform apps. Created by a migration, and cannot sign in. */
+const PLATFORM_DEVELOPER = 'plattform-apus';
+
 export interface CatalogueApp {
 	id: string;
 	developer_id: string;
@@ -44,6 +55,12 @@ export interface CatalogueApp {
 	contact_email: string;
 	privacy_url: string;
 	databehandleravtale: string;
+	client_type: ClientType;
+	secret_hash: string | null;
+	jwks: { keys: unknown[] } | null;
+	jwks_uri: string | null;
+	is_platform_app: boolean;
+	replaces_tab: string | null;
 	status: CatalogueStatus;
 	review_note: string | null;
 	reviewed_at: string | null;
@@ -62,10 +79,16 @@ export interface AppInput {
 	contactEmail: string;
 	privacyUrl: string;
 	databehandleravtale: string;
+	clientType?: ClientType;
+	jwks?: { keys: unknown[] } | null;
+	jwksUri?: string | null;
+	/** Platform apps only. */
+	replacesTab?: string | null;
 }
 
 const FIELD = `id, developer_id, name, summary, description, launch_url, redirect_uris, scopes, placement,
-	contact_email, privacy_url, databehandleravtale, status, review_note, reviewed_at, created_at, updated_at`;
+	contact_email, privacy_url, databehandleravtale, client_type, secret_hash, jwks, jwks_uri, is_platform_app, replaces_tab,
+	status, review_note, reviewed_at, created_at, updated_at`;
 
 export async function appsForDeveloper(developerId: string): Promise<CatalogueApp[]> {
 	return query<CatalogueApp>(`SELECT ${FIELD} FROM catalogue_app WHERE developer_id = $1 ORDER BY updated_at DESC`, [
@@ -85,12 +108,13 @@ export async function createApp(developerId: string, inValue: AppInput): Promise
 	const id = newId();
 	await exec(
 		`INSERT INTO catalogue_app (id, developer_id, name, summary, description, launch_url, redirect_uris, scopes,
-			placement, contact_email, privacy_url, databehandleravtale)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+			placement, contact_email, privacy_url, databehandleravtale, client_type, jwks, jwks_uri)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
 		[
 			id, developerId, inValue.name, inValue.summary, inValue.description, inValue.launchUrl,
 			JSON.stringify(inValue.redirectUris), JSON.stringify(inValue.scopes), inValue.placement,
-			inValue.contactEmail, inValue.privacyUrl, inValue.databehandleravtale
+			inValue.contactEmail, inValue.privacyUrl, inValue.databehandleravtale,
+			inValue.clientType ?? 'public', inValue.jwks ? JSON.stringify(inValue.jwks) : null, inValue.jwksUri ?? null
 		]
 	);
 	return id;
@@ -108,15 +132,93 @@ export async function updateApp(id: string, developerId: string, inValue: AppInp
 		`UPDATE catalogue_app
 		 SET name = $3, summary = $4, description = $5, launch_url = $6, redirect_uris = $7, scopes = $8,
 			 placement = $9, contact_email = $10, privacy_url = $11, databehandleravtale = $12,
+			 client_type = $13, jwks = $14, jwks_uri = $15,
 			 status = CASE status WHEN 'godkjent' THEN 'til-vurdering' WHEN 'avvist' THEN 'utkast' ELSE status END,
 			 updated_at = now()
 		 WHERE id = $1 AND developer_id = $2`,
 		[
 			id, developerId, inValue.name, inValue.summary, inValue.description, inValue.launchUrl,
 			JSON.stringify(inValue.redirectUris), JSON.stringify(inValue.scopes), inValue.placement,
-			inValue.contactEmail, inValue.privacyUrl, inValue.databehandleravtale
+			inValue.contactEmail, inValue.privacyUrl, inValue.databehandleravtale,
+			inValue.clientType ?? 'public', inValue.jwks ? JSON.stringify(inValue.jwks) : null, inValue.jwksUri ?? null
 		]
 	);
+}
+
+/**
+ * A new secret for an app, returned this once, and in force at once wherever the app
+ * is already installed with a secret. Replacing a leaked one cannot wait for a review,
+ * and it changes nothing about what the app may do.
+ */
+export async function newAppSecret(id: string, developerId: string): Promise<string | null> {
+	const secret = newToken(32);
+	const hash = hashPassword(secret);
+	const changed = await exec(
+		`UPDATE catalogue_app SET secret_hash = $3, updated_at = now()
+		 WHERE id = $1 AND developer_id = $2 AND client_type = 'secret'`,
+		[id, developerId, hash]
+	);
+	if (!changed) return null;
+	await exec(
+		`UPDATE oauth_client c SET secret_hash = $2
+		 FROM catalogue_install i
+		 WHERE i.catalogue_id = $1 AND c.tenant_id = i.tenant_id AND c.client_id = i.client_id
+		   AND c.type = 'confidential' AND c.jwks IS NULL AND c.jwks_uri IS NULL`,
+		[id, hash]
+	);
+	return secret;
+}
+
+/** A secret for an app set to use one that has none yet. Null when there is nothing to do. */
+export async function firstAppSecret(id: string, developerId: string): Promise<string | null> {
+	const app = await getCatalogueApp(id);
+	return app?.client_type === 'secret' && !app.secret_hash ? newAppSecret(id, developerId) : null;
+}
+
+/** What was approved is what runs. Where and how a practice shows the app stays its own. */
+async function copyToInstalled(id: string): Promise<void> {
+	await exec(
+		`UPDATE oauth_client c
+		 SET name = a.name, redirect_uris = a.redirect_uris, allowed_scopes = a.scopes,
+			 launch_url = REPLACE(a.launch_url, '{client_id}', c.client_id),
+			 type = CASE a.client_type WHEN 'public' THEN 'public' ELSE 'confidential' END,
+			 require_pkce = a.client_type = 'public',
+			 secret_hash = CASE a.client_type WHEN 'secret' THEN a.secret_hash END,
+			 jwks = CASE a.client_type WHEN 'keys' THEN a.jwks END,
+			 jwks_uri = CASE a.client_type WHEN 'keys' THEN a.jwks_uri END
+		 FROM catalogue_install i
+		 JOIN catalogue_app a ON a.id = i.catalogue_id
+		 WHERE i.catalogue_id = $1 AND c.tenant_id = i.tenant_id AND c.client_id = i.client_id`,
+		[id]
+	);
+	await exec('UPDATE catalogue_install SET approved_copy = true WHERE catalogue_id = $1', [id]);
+}
+
+export async function platformApps(): Promise<CatalogueApp[]> {
+	return query<CatalogueApp>(`SELECT ${FIELD} FROM catalogue_app WHERE is_platform_app ORDER BY name`);
+}
+
+/** Adds or changes a platform app. The platform is its own reviewer, so it applies at once. */
+export async function savePlatformApp(id: string | null, inValue: AppInput, savedBy: string | null): Promise<{ id: string; secret: string | null }> {
+	return transaction(async () => {
+		await exec(
+			`INSERT INTO developer (id, email, name, organisation, status)
+			 VALUES ($1, 'plattform@epj.invalid', 'APUS Roland AS', 'APUS Roland AS', 'sperret')
+			 ON CONFLICT (id) DO NOTHING`,
+			[PLATFORM_DEVELOPER]
+		);
+		const appId = id ?? (await createApp(PLATFORM_DEVELOPER, inValue));
+		if (id) await updateApp(id, PLATFORM_DEVELOPER, inValue);
+		await exec(
+			`UPDATE catalogue_app
+			 SET is_platform_app = true, replaces_tab = $2, status = 'godkjent', reviewed_at = now(), reviewed_by = $3
+			 WHERE id = $1 AND developer_id = $4`,
+			[appId, inValue.replacesTab ?? null, savedBy, PLATFORM_DEVELOPER]
+		);
+		const secret = await firstAppSecret(appId, PLATFORM_DEVELOPER);
+		await copyToInstalled(appId);
+		return { id: appId, secret };
+	});
 }
 
 export async function submitApp(id: string, developerId: string): Promise<void> {
@@ -145,18 +247,9 @@ export async function reviewApp(id: string, approved: boolean, note: string, rev
 			[id, approved ? 'godkjent' : 'avvist', note, reviewer]
 		);
 		if (approved) {
-			// What runs is what was approved. A practice may have installed this
-			// before the review, and the developer may have edited it since.
-			await exec(
-				`UPDATE oauth_client c
-				 SET name = a.name, redirect_uris = a.redirect_uris, allowed_scopes = a.scopes,
-					 launch_url = REPLACE(a.launch_url, '{client_id}', c.client_id)
-				 FROM catalogue_install i
-				 JOIN catalogue_app a ON a.id = i.catalogue_id
-				 WHERE i.catalogue_id = $1 AND c.tenant_id = i.tenant_id AND c.client_id = i.client_id`,
-				[id]
-			);
-			await exec('UPDATE catalogue_install SET approved_copy = true WHERE catalogue_id = $1', [id]);
+			// A practice may have installed this before the review, and the developer
+			// may have edited it since.
+			await copyToInstalled(id);
 		} else {
 			// Deliberately across organisations: the platform is the one caller
 			// that may reach into every practice's client register for this.
@@ -231,7 +324,7 @@ export async function unapprovedClients(): Promise<Set<string>> {
 		`SELECT c.client_id
 		 FROM oauth_client c
 		 LEFT JOIN catalogue_install i ON i.tenant_id = c.tenant_id AND i.client_id = c.client_id
-		 WHERE c.tenant_id = $1 AND NOT c.first_party AND i.approved_copy IS NOT TRUE`,
+		 WHERE c.tenant_id = $1 AND i.approved_copy IS NOT TRUE`,
 		[requireTenant().id]
 	);
 	return new Set(rows.map((row) => row.client_id));
@@ -246,14 +339,26 @@ export async function unapprovedClients(): Promise<Set<string>> {
  */
 export async function mayBeActivated(clientId: string): Promise<boolean> {
 	const row = await one<{ ok: boolean }>(
-		`SELECT c.first_party OR a.status IN ('godkjent', 'til-vurdering') AS ok
-		 FROM oauth_client c
-		 LEFT JOIN catalogue_install i ON i.tenant_id = c.tenant_id AND i.client_id = c.client_id
-		 LEFT JOIN catalogue_app a ON a.id = i.catalogue_id
-		 WHERE c.client_id = $1 AND c.tenant_id = $2`,
+		`SELECT a.status IN ('godkjent', 'til-vurdering') AS ok
+		 FROM catalogue_install i
+		 JOIN catalogue_app a ON a.id = i.catalogue_id
+		 WHERE i.client_id = $1 AND i.tenant_id = $2`,
 		[clientId, requireTenant().id]
 	);
 	return row?.ok === true;
+}
+
+/**
+ * Whether a practice may delete this app from its register: one it added itself, or
+ * one it has removed. An installed app is removed through the gallery first, so the
+ * installation and the platform's view of it stay in step.
+ */
+export async function mayBeDeleted(clientId: string): Promise<boolean> {
+	const installed = await one<{ id: string }>('SELECT id FROM catalogue_install WHERE client_id = $1 AND tenant_id = $2', [
+		clientId,
+		requireTenant().id
+	]);
+	return !installed;
 }
 
 export interface Install {
@@ -280,19 +385,29 @@ export async function installsForTenant(): Promise<Install[]> {
 export async function installApp(
 	app: CatalogueApp,
 	installedBy: string | null
-): Promise<{ clientId: string; secret?: string }> {
+): Promise<{ clientId: string }> {
 	const tenantId = requireTenant().id;
 	return transaction(async () => {
-		const { client, secret } = await registerClient({
+		const { client } = await registerClient({
 			name: app.name,
-			type: 'public',
+			type: app.client_type === 'public' ? 'public' : 'confidential',
 			category: 'smart-ehr',
 			redirectUris: app.redirect_uris,
 			scopes: app.scopes,
 			launchUrl: app.launch_url,
 			databehandleravtale: app.databehandleravtale,
+			jwks: app.client_type === 'keys' ? (app.jwks as never) ?? undefined : undefined,
+			jwksUri: app.client_type === 'keys' ? app.jwks_uri ?? undefined : undefined,
 			createdOf: installedBy ?? undefined
 		});
+		// The secret is the app's, held by its developer, not a new one for this practice.
+		if (app.client_type === 'secret') {
+			await exec('UPDATE oauth_client SET secret_hash = $2 WHERE client_id = $1 AND tenant_id = $3', [
+				client.client_id,
+				app.secret_hash,
+				tenantId
+			]);
+		}
 		// The launch URL carries the client id when the app expects it, the way
 		// the first-party apps do: one static app, several record systems.
 		if (app.launch_url.includes('{client_id}')) {
@@ -306,14 +421,16 @@ export async function installApp(
 		// A newly installed app asks each user, until the practice decides
 		// otherwise. Installing is the practice's decision that the app may be
 		// offered - not that everyone has agreed to it.
-		await setRequireConsent(client.client_id, true);
-		await setReplacesTab(client.client_id, null);
+		// A platform app in a fixed place opens on every patient, where a dialog on
+		// every patient is not a decision anyone makes.
+		await setRequireConsent(client.client_id, !app.is_platform_app || (app.placement === 'ingen' && !app.replaces_tab));
+		await setReplacesTab(client.client_id, app.is_platform_app ? app.replaces_tab : null);
 
 		await exec(
 			'INSERT INTO catalogue_install (id, catalogue_id, tenant_id, client_id, installed_by, approved_copy) VALUES ($1,$2,$3,$4,$5,$6)',
 			[newId(), app.id, tenantId, client.client_id, installedBy, app.status === 'godkjent']
 		);
-		return { clientId: client.client_id, secret };
+		return { clientId: client.client_id };
 	});
 }
 

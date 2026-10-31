@@ -92,6 +92,15 @@ plattformeier godkjenner den, og en virksomhet installerer den fra appgalleriet.
 virksomhet kan også installere en app som venter på vurdering, men da er appen merket
 med varseltrekant overalt. Virksomheten kan ikke registrere apper selv.
 
+**Plattformapper** er plattformens egne apper, som Journalnotat og demonstrasjonsappene.
+De ligger i samme katalog, men eies av plattformen og forvaltes under
+Plattformadministrasjon → Apper. De regnes som godkjent, og endringer gjelder med en gang
+i virksomheter som har dem. Virksomheter installerer dem fra appgalleriet som alle andre.
+
+En app med egen tjener kan bruke klienthemmelighet eller offentlige nøkler. Hemmeligheten
+hører til appen og ikke til virksomheten, og lages i utviklerportalen. Klient-id-en er ulik
+i hver virksomhet.
+
 **Slik legger du til en app i kodebasen:** Lag `src/apps/<navn>/` med `manifest.ts` og `routes/`,
 legg manifestet i `registry.ts`, og legg de korte filene i `src/platform/routes/`.
 Testen sier fra om det mangler noe.

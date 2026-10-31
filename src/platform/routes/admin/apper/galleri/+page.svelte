@@ -20,9 +20,6 @@
 {#if form?.ok}
 	<div class="varsel varsel-ok" role="status">
 		<strong>{form.name}</strong> er installert som <span class="mono">{form.clientId}</span>.
-		{#if form.secret}
-			Klienthemmelighet: <span class="mono">{form.secret}</span> — vises bare nå.
-		{/if}
 		Hver bruker blir spurt om samtykke til appen er godkjent på vegne av virksomheten under
 		<a href="/admin/apper">Registrerte apper</a>.
 		{#if form.unapproved}<br /><strong>⚠ Appen er ikke godkjent av plattformeier.</strong> Brukerne ser en
@@ -35,6 +32,7 @@
 		<div class="rad-mellom">
 			<h2>{app.name}</h2>
 			<span class="merker">
+				{#if app.platformApp}<span class="merke merke-info">Plattformapp</span>{/if}
 				{#if app.withdrawn}<span class="merke merke-fare">Trukket tilbake</span>
 				{:else if app.installed}<span class="merke merke-ok">Installert</span>{/if}
 				{#if app.unapproved}<span class="merke merke-advarsel">⚠ {NOT_APPROVED}</span>{/if}

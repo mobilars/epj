@@ -15,17 +15,8 @@
 import { exec } from '../src/platform/server/db';
 import { getTenant } from '../src/platform/server/tenant/tenant';
 import { requireTenant, withTenant } from '../src/platform/server/tenant/context';
-import {
-	listClients,
-	registerClient,
-	setPlacement,
-	setReplacesTab,
-	setRequireConsent,
-	type Placement
-} from '../src/platform/server/auth/clients';
-
-/** These apps are built in this repository. */
-const PUBLISHER = 'APUS Roland AS';
+import { setInMainMenu, type Placement } from '../src/platform/server/auth/clients';
+import { getCatalogueApp, installApp, installsForTenant, platformApps, savePlatformApp } from '../src/platform/server/developer/catalogue';
 
 const READ = 'openid fhirUser launch launch/patient online_access patient/Patient.rs';
 
@@ -74,56 +65,31 @@ const APPS: App[] = [
 	}
 ];
 
+/** Puts the app in the catalogue as a platform app, and installs it here if it is not already. */
 async function ensure(app: App): Promise<string> {
-	const tenantId = requireTenant().id;
-	const existing = (await listClients()).find((c) => c.name === app.name);
-	const clientId = existing?.client_id;
-
-	if (clientId) {
-		await exec(
-			`UPDATE oauth_client
-			 SET redirect_uris = $2, allowed_scopes = $3, launch_url = $4, in_main_menu = $5, publisher = $7, first_party = true, status = 'aktiv'
-			 WHERE client_id = $1 AND tenant_id = $6`,
-			[
-				clientId,
-				JSON.stringify([`${app.host}/callback`]),
-				JSON.stringify(app.scopes),
-				`${app.host}/launch?client_id=${clientId}`,
-				app.inMainMenu ?? false,
-				tenantId,
-				PUBLISHER
-			]
-		);
-		await setPlacement(clientId, app.placement);
-		// An app the practice has placed opens on every patient. A consent dialog
-		// on every patient is not a decision anyone makes.
-		await setRequireConsent(clientId, app.placement === 'ingen' && !app.replacesTab);
-		await setReplacesTab(clientId, app.replacesTab ?? null);
-		return `oppdatert  ${clientId}`;
-	}
-
-	const { client } = await registerClient({
-		name: app.name,
-		type: 'public',
-		category: 'smart-ehr',
-		redirectUris: [`${app.host}/callback`],
-		scopes: app.scopes,
-		launchUrl: `${app.host}/launch`,
-		databehandleravtale: app.note,
-		inMainMenu: app.inMainMenu ?? false,
-		publisher: PUBLISHER,
-		firstParty: true
-	});
-	// Now that the id exists, put it on the launch URL.
-	await exec('UPDATE oauth_client SET launch_url = $2 WHERE client_id = $1 AND tenant_id = $3', [
-		client.client_id,
-		`${app.host}/launch?client_id=${client.client_id}`,
-		tenantId
-	]);
-	await setPlacement(client.client_id, app.placement);
-	await setRequireConsent(client.client_id, app.placement === 'ingen' && !app.replacesTab);
-	await setReplacesTab(client.client_id, app.replacesTab ?? null);
-	return `registrert ${client.client_id}`;
+	const existing = (await platformApps()).find((a) => a.name === app.name);
+	const { id } = await savePlatformApp(
+		existing?.id ?? null,
+		{
+			name: app.name,
+			summary: app.note,
+			description: '',
+			launchUrl: `${app.host}/launch?client_id={client_id}`,
+			redirectUris: [`${app.host}/callback`],
+			scopes: app.scopes,
+			placement: app.placement,
+			contactEmail: '',
+			privacyUrl: '',
+			databehandleravtale: app.note,
+			replacesTab: app.replacesTab ?? null
+		},
+		null
+	);
+	const installs = await installsForTenant();
+	if (installs.some((install) => install.catalogue_id === id)) return 'oppdatert';
+	const { clientId } = await installApp((await getCatalogueApp(id))!, null);
+	if (app.inMainMenu) await setInMainMenu(clientId, true);
+	return `installert ${clientId}`;
 }
 
 async function main(): Promise<void> {

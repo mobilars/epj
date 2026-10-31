@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { appsWithStatus, getCatalogueApp, installCounts, reviewApp } from '$srv/developer/catalogue';
+import { appsWithStatus, getCatalogueApp, installCounts, platformApps, reviewApp, savePlatformApp } from '$srv/developer/catalogue';
+import { readAppForm } from '$srv/developer/app-form';
 import { listDevelopers } from '$srv/developer/developer';
 import { describeScope } from '$srv/authz/scopes';
 import { actorFromContext, log } from '$srv/audit';
@@ -19,12 +20,13 @@ export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx?.permissions.has('plattform:administrer')) error(403, 'Ingen tilgang.');
 
-	const [waiting, approved, refused, developers, installs] = await Promise.all([
+	const [waiting, approved, refused, developers, installs, platform] = await Promise.all([
 		appsWithStatus('til-vurdering'),
 		appsWithStatus('godkjent'),
 		appsWithStatus('avvist'),
 		listDevelopers(),
-		installCounts()
+		installCounts(),
+		platformApps()
 	]);
 	const byId = new Map(developers.map((d) => [d.id, d]));
 	const shape = (list: Awaited<ReturnType<typeof appsWithStatus>>) =>
@@ -36,6 +38,13 @@ export const load: PageServerLoad = async (event) => {
 			launchUrl: a.launch_url,
 			redirectUris: a.redirect_uris,
 			scopes: a.scopes.map((s) => ({ scope: s, description: describeScope(s) })),
+			scopeText: a.scopes.join(' '),
+			clientType: a.client_type,
+			hasSecret: Boolean(a.secret_hash),
+			jwksUri: a.jwks_uri ?? '',
+			jwksText: a.jwks ? JSON.stringify(a.jwks, null, 1) : '',
+			replacesTab: a.replaces_tab ?? '',
+			status: a.status,
 			placement: a.placement,
 			contactEmail: a.contact_email,
 			privacyUrl: a.privacy_url,
@@ -49,9 +58,11 @@ export const load: PageServerLoad = async (event) => {
 
 	return {
 		waiting: shape(waiting),
-		approved: shape(approved),
-		refused: shape(refused),
-		developers: developers.map((d) => ({
+		// Platform apps have their own section, and are nobody else's to review.
+		approved: shape(approved.filter((a) => !a.is_platform_app)),
+		refused: shape(refused.filter((a) => !a.is_platform_app)),
+		platform: shape(platform),
+		developers: developers.filter((d) => d.id !== 'plattform-apus').map((d) => ({
 			email: d.email,
 			name: d.name,
 			organisation: d.organisation,
@@ -62,6 +73,31 @@ export const load: PageServerLoad = async (event) => {
 };
 
 export const actions: Actions = {
+	/** Adds or changes one of the platform's own apps. Reaches the practices at once. */
+	plattformapp: async (event) => {
+		const ctx = event.locals.auth;
+		if (!ctx?.permissions.has('plattform:administrer')) return fail(403, { error: 'Ingen tilgang.' });
+		const form = await event.request.formData();
+		const parsed = readAppForm(form);
+		if (!parsed.value) return fail(400, { error: parsed.error });
+		const id = String(form.get('id') ?? '') || null;
+		if (id && !(await getCatalogueApp(id))?.is_platform_app) return fail(404, { error: 'Ukjent plattformapp.' });
+		const saved = await savePlatformApp(id, parsed.value, ctx.userId);
+		await log(
+			{
+				type: 'admin',
+				subtype: id ? 'katalog:plattformapp-endret' : 'katalog:plattformapp-ny',
+				action: id ? 'U' : 'C',
+				outcome: '0',
+				entityRef: `Device/${saved.id}`,
+				details: { app: parsed.value.name, scopes: parsed.value.scopes.join(' ') }
+			},
+			actorFromContext(ctx)
+		);
+		if (saved.secret) return { secret: saved.secret, secretFor: parsed.value.name };
+		redirect(303, '/systemadmin/apper');
+	},
+
 	vurder: async (event) => {
 		const ctx = event.locals.auth;
 		if (!ctx?.permissions.has('plattform:administrer')) return fail(403, { error: 'Ingen tilgang.' });
@@ -102,7 +138,7 @@ export const actions: Actions = {
 		// Best effort: the decision stands whether or not the mail goes out.
 		const developers = await listDevelopers();
 		const developer = developers.find((d) => d.id === app.developer_id);
-		if (developer) {
+		if (developer && !app.is_platform_app) {
 			await sendEmail({
 				to: developer.email,
 				subject: approved

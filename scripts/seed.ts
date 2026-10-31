@@ -11,7 +11,7 @@ import { migrate } from '../src/platform/server/db/migrate';
 import { withTenant, PLATFORM_TENANT, type Tenant } from '../src/platform/server/tenant/context';
 import { getTenant, ensureDefaultOrganisation } from '../src/platform/server/tenant/tenant';
 import { createUser, setRoles } from '../src/platform/server/auth/users';
-import { registerClient } from '../src/platform/server/auth/clients';
+import { getCatalogueApp, installApp, savePlatformApp } from '../src/platform/server/developer/catalogue';
 import { fhirClient } from '../src/platform/server/fhir/client';
 import { SYSTEM, validNorwegianNationalId, genderFromNationalId, validDateDel } from '../src/platform/server/fhir/codesystems';
 import { encrypt } from '../src/platform/server/util/crypto';
@@ -284,21 +284,28 @@ async function seed(tenant: Tenant): Promise<void> {
 	}
 
 	// --- SMART-app --------------------------------------------------------
-	const { client, secret } = await registerClient({
-		name: 'Diabetesoversikt (demo)',
-		publisher: 'APUS Roland AS',
-		firstParty: true,
-		type: 'public',
-		category: 'smart-ehr',
-		redirectUris: ['http://localhost:4000/callback', 'http://127.0.0.1:4000/callback'],
-		scopes: [
-			'openid', 'fhirUser', 'launch', 'launch/patient', 'online_access',
-			'patient/Patient.rs', 'patient/Observation.rs', 'patient/Condition.rs', 'patient/MedicationRequest.rs'
-		],
-		launchUrl: 'http://localhost:4000/launch',
-		databehandleravtale: 'DBA-2026-001'
-	});
-	console.log(`SMART-app registrert: ${client.client_id}${secret ? ` (hemmelighet: ${secret})` : ''}`);
+	// A platform app, in the catalogue like any other, and installed in this practice.
+	const saved = await savePlatformApp(
+		null,
+		{
+			name: 'Diabetesoversikt (demo)',
+			summary: 'Demonstrasjon av en SMART-app.',
+			description: '',
+			launchUrl: 'http://localhost:4000/launch',
+			redirectUris: ['http://localhost:4000/callback', 'http://127.0.0.1:4000/callback'],
+			scopes: [
+				'openid', 'fhirUser', 'launch', 'launch/patient', 'online_access',
+				'patient/Patient.rs', 'patient/Observation.rs', 'patient/Condition.rs', 'patient/MedicationRequest.rs'
+			],
+			placement: 'ingen',
+			contactEmail: '',
+			privacyUrl: '',
+			databehandleravtale: 'DBA-2026-001'
+		},
+		null
+	);
+	const { clientId } = await installApp((await getCatalogueApp(saved.id))!, null);
+	console.log(`SMART-app installert: ${clientId}`);
 
 	console.log(`\nFerdig i virksomheten «${tenant.name}» (${tenant.id}).`);
 	console.log('Logg inn på /logg-inn med brukernavn «lege» og passord «' + PASSWORD + '».');

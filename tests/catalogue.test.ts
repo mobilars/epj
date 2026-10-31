@@ -3,8 +3,8 @@ import { exec, one, query } from '../src/platform/server/db/index';
 import { hasTestDatabase, createTestDatabase, emptyTables, type TestDatabase } from './fixtures/db';
 import { withTenant } from '../src/platform/server/tenant/context';
 import { getTenant } from '../src/platform/server/tenant/tenant';
-import { getClient, registerClient } from '../src/platform/server/auth/clients';
-import { createApp, submitApp, reviewApp, installApp, uninstallApp, getCatalogueApp, publishersForTenant, unapprovedClients, mayBeActivated, installableApps, updateApp } from '../src/platform/server/developer/catalogue';
+import { authenticateClient, deleteClient, getClient, registerClient } from '../src/platform/server/auth/clients';
+import { createApp, submitApp, reviewApp, installApp, uninstallApp, getCatalogueApp, publishersForTenant, unapprovedClients, mayBeActivated, mayBeDeleted, installableApps, updateApp, savePlatformApp, platformApps, newAppSecret, firstAppSecret } from '../src/platform/server/developer/catalogue';
 import type { Tenant } from '../src/platform/server/tenant/context';
 
 const describeIf = hasTestDatabase() ? describe : describe.skip;
@@ -87,6 +87,128 @@ describeIf('catalogue', () => {
 		expect((await withTenant(a, () => publishersForTenant())).get(clientId)?.publisher).toBe('Appmakerne AS');
 	});
 
+	const input = (name: string, extra: object = {}) => ({
+		name, summary: 's', description: 'd', launchUrl: 'https://p.example/launch?c={client_id}',
+		redirectUris: ['https://p.example/cb'], scopes: ['launch', 'patient/Patient.rs'], placement: 'ingen' as const,
+		contactEmail: '', privacyUrl: '', databehandleravtale: '', ...extra
+	});
+
+	describe('platform apps', () => {
+		it('are approved as they stand, offered in the gallery, and say who made them', async () => {
+			const { id } = await savePlatformApp(null, input('Plattformapp'), null);
+			const app = (await getCatalogueApp(id))!;
+			expect(app.status).toBe('godkjent');
+			expect(app.is_platform_app).toBe(true);
+			expect((await withTenant(a, () => installableApps())).map((x) => x.id)).toContain(id);
+
+			const { clientId } = await withTenant(a, () => installApp(app, null));
+			const publisher = (await withTenant(a, () => publishersForTenant())).get(clientId);
+			expect(publisher?.publisher).toBe('APUS Roland AS');
+		});
+
+		it('reach every practice at once when changed', async () => {
+			const { id } = await savePlatformApp(null, input('Gammelt navn'), null);
+			const { clientId } = await withTenant(a, async () => installApp((await getCatalogueApp(id))!, null));
+			await savePlatformApp(id, input('Nytt navn', { launchUrl: 'https://p.example/ny?c={client_id}' }), null);
+			const client = (await withTenant(a, () => getClient(clientId)))!;
+			expect(client.name).toBe('Nytt navn');
+			expect(client.launch_url).toBe(`https://p.example/ny?c=${clientId}`);
+			expect((await platformApps()).map((x) => x.name)).toEqual(['Nytt navn']);
+		});
+
+		it('take over a tab and skip the dialog, where a developer app does not', async () => {
+			const { id } = await savePlatformApp(null, input('Notater', { placement: 'side', replacesTab: 'notater' }), null);
+			const { clientId } = await withTenant(a, async () => installApp((await getCatalogueApp(id))!, null));
+			const client = (await withTenant(a, () => getClient(clientId)))!;
+			expect(client.replaces_tab).toBe('notater');
+			expect(client.require_consent).toBe(false);
+		});
+	});
+
+	describe('how an app proves who it is', () => {
+		const tokenRequest = (clientId: string, secret?: string) =>
+			authenticateClient(new URLSearchParams({ client_id: clientId, ...(secret ? { client_secret: secret } : {}) }), null);
+
+		async function withSecret(): Promise<{ id: string; secret: string }> {
+			const id = await createApp('dev1', input('Med hemmelighet', { clientType: 'secret' }));
+			const secret = (await firstAppSecret(id, 'dev1'))!;
+			await submitApp(id, 'dev1');
+			await reviewApp(id, true, 'ok', null);
+			return { id, secret };
+		}
+
+		it("an installed app signs in with its developer's secret, in any practice", async () => {
+			const { id, secret } = await withSecret();
+			const app = (await getCatalogueApp(id))!;
+			const inA = await withTenant(a, () => installApp(app, null));
+			const inB = await withTenant(b, () => installApp(app, null));
+			expect(inA.clientId).not.toBe(inB.clientId);
+
+			for (const [tenant, clientId] of [[a, inA.clientId], [b, inB.clientId]] as const) {
+				expect((await withTenant(tenant, () => tokenRequest(clientId, secret))).ok).toBe(true);
+				expect((await withTenant(tenant, () => tokenRequest(clientId, 'feil'))).ok).toBe(false);
+				expect((await withTenant(tenant, () => tokenRequest(clientId))).ok).toBe(false);
+			}
+		});
+
+		it('gives no secret twice, and a new one replaces the old at once', async () => {
+			const { id, secret } = await withSecret();
+			expect(await firstAppSecret(id, 'dev1')).toBeNull();
+			const { clientId } = await withTenant(a, async () => installApp((await getCatalogueApp(id))!, null));
+
+			const replaced = (await newAppSecret(id, 'dev1'))!;
+			expect((await withTenant(a, () => tokenRequest(clientId, secret))).ok).toBe(false);
+			expect((await withTenant(a, () => tokenRequest(clientId, replaced))).ok).toBe(true);
+		});
+
+		it("only the app's own developer can replace its secret", async () => {
+			const { id } = await withSecret();
+			await exec("INSERT INTO developer (id, email, name) VALUES ('dev2', 'dev2@example.com', 'Dev2')");
+			expect(await newAppSecret(id, 'dev2')).toBeNull();
+		});
+
+		it('a move to a secret reaches an installed app when approved, not before', async () => {
+			const { clientId } = await withTenant(a, async () => installApp((await getCatalogueApp(appId))!, null));
+			const edited = input('Testapp', { clientType: 'secret' });
+			await updateApp(appId, 'dev1', edited);
+			const secret = (await firstAppSecret(appId, 'dev1'))!;
+			expect((await withTenant(a, () => getClient(clientId)))!.type).toBe('public');
+
+			await reviewApp(appId, true, 'ok', null);
+			expect((await withTenant(a, () => getClient(clientId)))!.type).toBe('confidential');
+			expect((await withTenant(a, () => tokenRequest(clientId, secret))).ok).toBe(true);
+		});
+	});
+
+	describe('deleting from a practice', () => {
+		it('removes an app the practice added, and its tokens, and leaves others alone', async () => {
+			const { client } = await withTenant(a, () =>
+				registerClient({ name: 'Egen', type: 'public', category: 'smart-ehr', redirectUris: ['https://x.example/cb'], scopes: ['launch'] })
+			);
+			const token = await tokenFor(a, client.client_id);
+			expect(await withTenant(a, () => mayBeDeleted(client.client_id))).toBe(true);
+			await withTenant(a, () => deleteClient(client.client_id));
+			expect(await withTenant(a, () => getClient(client.client_id))).toBeNull();
+			expect(await query('SELECT id FROM oauth_token WHERE id = $1', [token])).toHaveLength(0);
+		});
+
+		it('not an installed app, until it has been removed through the gallery', async () => {
+			const app = (await getCatalogueApp(appId))!;
+			const { clientId } = await withTenant(a, () => installApp(app, null));
+			expect(await withTenant(a, () => mayBeDeleted(clientId))).toBe(false);
+			await withTenant(a, () => uninstallApp(appId));
+			expect(await withTenant(a, () => mayBeDeleted(clientId))).toBe(true);
+		});
+
+		it('cannot reach another practice', async () => {
+			const { client } = await withTenant(a, () =>
+				registerClient({ name: 'Egen', type: 'public', category: 'smart-ehr', redirectUris: ['https://x.example/cb'], scopes: ['launch'] })
+			);
+			await withTenant(b, () => deleteClient(client.client_id));
+			expect(await withTenant(a, () => getClient(client.client_id))).toBeTruthy();
+		});
+	});
+
 	describe('approval by the platform owner', () => {
 		async function submitted(): Promise<string> {
 			const id = await createApp('dev1', {
@@ -156,14 +278,15 @@ describeIf('catalogue', () => {
 			expect(after.launch_url).toBe('https://app.example/launch/smart');
 		});
 
-		it('marks a directly registered app, but not one the platform registered itself', async () => {
-			const [direct, own] = await withTenant(a, async () => [
-				(await registerClient({ name: 'Direkte', type: 'public', category: 'smart-ehr', redirectUris: ['https://x.example/cb'], scopes: ['launch'] })).client,
-				(await registerClient({ name: 'Egen', type: 'public', category: 'smart-ehr', redirectUris: ['https://y.example/cb'], scopes: ['launch'], firstParty: true })).client
-			]);
+		it('marks a directly registered app, but not a platform app', async () => {
+			const direct = await withTenant(a, async () =>
+				(await registerClient({ name: 'Direkte', type: 'public', category: 'smart-ehr', redirectUris: ['https://x.example/cb'], scopes: ['launch'] })).client
+			);
+			const own = await savePlatformApp(null, input('Egen'), null);
+			const { clientId } = await withTenant(a, async () => installApp((await getCatalogueApp(own.id))!, null));
 			const unapproved = await withTenant(a, () => unapprovedClients());
 			expect(unapproved).toContain(direct.client_id);
-			expect(unapproved).not.toContain(own.client_id);
+			expect(unapproved).not.toContain(clientId);
 		});
 
 		it('a withdrawn or removed app cannot be switched back on by the practice', async () => {

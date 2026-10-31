@@ -1,7 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { listClients, setDatabehandleravtale, setKlientstatus, setInMainMenu, setInPatientTabs, setLaunchMode, setPlacement, setRequireConsent, type Placement } from '$srv/auth/clients';
-import { mayBeActivated, unapprovedClients } from '$srv/developer/catalogue';
+import { deleteClient, listClients, setDatabehandleravtale, setKlientstatus, setInMainMenu, setInPatientTabs, setLaunchMode, setPlacement, setRequireConsent, type Placement } from '$srv/auth/clients';
+import { installsForTenant, mayBeActivated, mayBeDeleted, unapprovedClients } from '$srv/developer/catalogue';
 import { isLaunchMode, launchModeOf } from '$srv/auth/launchmode';
 import { createLaunch } from '$srv/auth/oauth';
 import { describeScope } from '$srv/authz/scopes';
@@ -32,6 +32,7 @@ export const load: PageServerLoad = async (event) => {
 	);
 	const tokenKart = new Map(aktiveTokens.map((t) => [t.client_id, t.n]));
 	const unapproved = await unapprovedClients();
+	const installed = new Set((await installsForTenant()).map((install) => install.client_id));
 
 	return {
 		fhirBaseUrl: fhirBaseFor(requireTenant()),
@@ -41,6 +42,8 @@ export const load: PageServerLoad = async (event) => {
 			clientId: k.client_id,
 			name: k.name,
 			approved: !unapproved.has(k.client_id),
+			// Added by the practice itself, or removed from it: its own to clean up.
+			deletable: !installed.has(k.client_id),
 			type: k.type,
 			category: k.client_category,
 			redirectUris: k.redirect_uris,
@@ -141,6 +144,25 @@ export const actions: Actions = {
 			{ type: 'admin', subtype: 'app:status', action: 'U', outcome: '0', entityRef: `Device/${clientId}`, details: { status } },
 			actorFromContext(ctx)
 		);
+		redirect(303, '/admin/apper');
+	},
+
+	slett: async (event) => {
+		const ctx = event.locals.auth;
+		if (!ctx?.permissions.has('admin:apper')) return fail(403, { error: 'Ingen tilgang.' });
+		const form = await event.request.formData();
+		const clientId = String(form.get('clientId') ?? '');
+		const client = (await listClients()).find((c) => c.client_id === clientId);
+		if (!client) return fail(404, { error: 'Ukjent app.' });
+		if (!(await mayBeDeleted(clientId))) {
+			return fail(400, { error: 'Appen er installert fra appgalleriet. Fjern den der først.' });
+		}
+		// Logged first, with the name: this is what makes the log readable afterwards.
+		await log(
+			{ type: 'admin', subtype: 'app:slettet', action: 'D', outcome: '0', entityRef: `Device/${clientId}`, details: { name: client.name } },
+			actorFromContext(ctx)
+		);
+		await deleteClient(clientId);
 		redirect(303, '/admin/apper');
 	},
 

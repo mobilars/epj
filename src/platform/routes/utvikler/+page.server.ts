@@ -1,9 +1,9 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { developerFromSession, updateDeveloper } from '$srv/developer/developer';
-import { appsForDeveloper, createApp, submitApp, updateApp, type AppInput } from '$srv/developer/catalogue';
+import { appsForDeveloper, createApp, firstAppSecret, newAppSecret, submitApp, updateApp } from '$srv/developer/catalogue';
+import { readAppForm } from '$srv/developer/app-form';
 import { describeScope } from '$srv/authz/scopes';
-import type { Placement } from '$srv/auth/clients';
 
 /**
  * A developer's own apps.
@@ -20,56 +20,6 @@ const STATUS_TEXT: Record<string, string> = {
 	godkjent: 'Godkjent',
 	avvist: 'Avvist'
 };
-
-function readApp(form: FormData): { value?: AppInput; error?: string } {
-	const text = (name: string) => String(form.get(name) ?? '').trim();
-	const lines = (name: string) =>
-		text(name)
-			.split(/[\s,]+/)
-			.filter(Boolean);
-
-	const name = text('navn');
-	const launchUrl = text('launchUrl');
-	if (!name) return { error: 'Appen må ha et navn.' };
-	if (!launchUrl) return { error: 'Appen må ha en launch-URL.' };
-
-	// https only, and no fragments: these become redirect URIs and launch
-	// addresses in a record system, where an address that can be read over the
-	// wire is not one anybody should be sending a patient context to.
-	for (const [label, value] of [
-		['Launch-URL', launchUrl],
-		...lines('redirectUris').map((u) => ['Redirect-URI', u] as [string, string])
-	] as [string, string][]) {
-		let url: URL;
-		try {
-			url = new URL(value);
-		} catch {
-			return { error: `${label} er ikke en gyldig adresse: ${value}` };
-		}
-		if (url.protocol !== 'https:' && url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') {
-			return { error: `${label} må bruke https (unntatt localhost): ${value}` };
-		}
-		if (url.hash) return { error: `${label} kan ikke ha fragment: ${value}` };
-	}
-
-	const placement = text('plassering') as Placement;
-	if (!['ingen', 'hoved', 'side'].includes(placement)) return { error: 'Ukjent plassering.' };
-
-	return {
-		value: {
-			name,
-			summary: text('kortbeskrivelse'),
-			description: text('beskrivelse'),
-			launchUrl,
-			redirectUris: lines('redirectUris'),
-			scopes: lines('scopes'),
-			placement,
-			contactEmail: text('kontaktEpost'),
-			privacyUrl: text('personvernUrl'),
-			databehandleravtale: text('databehandleravtale')
-		}
-	};
-}
 
 export const load: PageServerLoad = async (event) => {
 	const developer = await developerFromSession(event.cookies);
@@ -91,6 +41,10 @@ export const load: PageServerLoad = async (event) => {
 			contactEmail: a.contact_email,
 			privacyUrl: a.privacy_url,
 			databehandleravtale: a.databehandleravtale,
+			clientType: a.client_type,
+			hasSecret: Boolean(a.secret_hash),
+			jwksUri: a.jwks_uri ?? '',
+			jwksText: a.jwks ? JSON.stringify(a.jwks, null, 1) : '',
 			status: a.status,
 			statusText: STATUS_TEXT[a.status] ?? a.status,
 			reviewNote: a.review_note,
@@ -112,9 +66,11 @@ export const actions: Actions = {
 		const developer = await developerFromSession(event.cookies);
 		if (!developer) redirect(303, '/utvikler/logg-inn');
 		const form = await event.request.formData();
-		const parsed = readApp(form);
+		const parsed = readAppForm(form);
 		if (!parsed.value) return fail(400, { error: parsed.error });
-		await createApp(developer.id, parsed.value);
+		const id = await createApp(developer.id, parsed.value);
+		const secret = await firstAppSecret(id, developer.id);
+		if (secret) return { secret, secretFor: parsed.value.name };
 		redirect(303, '/utvikler');
 	},
 
@@ -122,10 +78,22 @@ export const actions: Actions = {
 		const developer = await developerFromSession(event.cookies);
 		if (!developer) redirect(303, '/utvikler/logg-inn');
 		const form = await event.request.formData();
-		const parsed = readApp(form);
+		const parsed = readAppForm(form);
 		if (!parsed.value) return fail(400, { error: parsed.error });
-		await updateApp(String(form.get('id') ?? ''), developer.id, parsed.value);
+		const id = String(form.get('id') ?? '');
+		await updateApp(id, developer.id, parsed.value);
+		const secret = await firstAppSecret(id, developer.id);
+		if (secret) return { secret, secretFor: parsed.value.name };
 		redirect(303, '/utvikler');
+	},
+
+	nyHemmelighet: async (event) => {
+		const developer = await developerFromSession(event.cookies);
+		if (!developer) redirect(303, '/utvikler/logg-inn');
+		const form = await event.request.formData();
+		const secret = await newAppSecret(String(form.get('id') ?? ''), developer.id);
+		if (!secret) return fail(400, { error: 'Appen bruker ikke klienthemmelighet.' });
+		return { secret, secretFor: String(form.get('navn') ?? '') };
 	},
 
 	send: async (event) => {

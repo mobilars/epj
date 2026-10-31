@@ -121,9 +121,12 @@ test.describe('SMART on FHIR', () => {
 	test('an app the platform owner has not approved is marked, even with marking turned off', async ({ page }) => {
 		const db = new pg.Client({ connectionString: process.env.E2E_DATABASE_URL });
 		await db.connect();
-		const setFirstParty = (value: boolean) =>
-			db.query("UPDATE epj.oauth_client SET first_party = $1 WHERE name = 'Diabetesoversikt (demo)'", [value]);
-		await setFirstParty(false);
+		const setApproved = (value: boolean) =>
+			db.query(
+				"UPDATE epj.catalogue_install SET approved_copy = $1 WHERE client_id IN (SELECT client_id FROM epj.oauth_client WHERE name = 'Diabetesoversikt (demo)')",
+				[value]
+			);
+		await setApproved(false);
 		try {
 			await logIn(page, 'lege');
 			const clientId = await getClientId(page);
@@ -145,7 +148,7 @@ test.describe('SMART on FHIR', () => {
 			await page.goto(`/pasienter/${patientId}/apper`);
 			await expect(page.getByText('⚠ ikke godkjent av plattformeier')).toBeVisible();
 		} finally {
-			await setFirstParty(true);
+			await setApproved(true);
 			await db.end();
 			await page.goto(`/innstillinger`);
 			await page.getByLabel('Merk eksterne apper').check();

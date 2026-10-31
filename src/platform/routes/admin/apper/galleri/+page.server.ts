@@ -27,6 +27,8 @@ export const load: PageServerLoad = async (event) => {
 		apps: [...apps].sort((a, b) => Number(a.status !== 'godkjent') - Number(b.status !== 'godkjent')).map((a) => ({
 			id: a.id,
 			name: a.name,
+			platformApp: a.is_platform_app,
+			clientType: a.client_type,
 			summary: a.summary,
 			description: a.description,
 			placement: a.placement,
@@ -62,7 +64,7 @@ export const actions: Actions = {
 			return fail(400, { error: `Du må bekrefte at du vil installere ${app.name} uten at plattformeier har godkjent den.` });
 		}
 
-		const { clientId, secret } = await installApp(app, ctx.userId);
+		const { clientId } = await installApp(app, ctx.userId);
 		await log(
 			{
 				type: 'admin',
@@ -74,7 +76,7 @@ export const actions: Actions = {
 			},
 			actorFromContext(ctx)
 		);
-		return { ok: true, name: app.name, clientId, secret, unapproved };
+		return { ok: true, name: app.name, clientId, unapproved };
 	},
 
 	avinstaller: async (event) => {

@@ -1,9 +1,16 @@
 <script lang="ts">
+	import AppForm from '$lib/components/AppForm.svelte';
 	let { data, form } = $props();
+
+	const CLIENT_TYPE: Record<string, string> = {
+		public: 'Ingen hemmelighet, bare PKCE',
+		secret: 'Klienthemmelighet',
+		keys: 'Offentlige nøkler (private_key_jwt)'
+	};
 </script>
 
 <div class="rad-mellom">
-	<h2>Apper til vurdering</h2>
+	<h2>Apper</h2>
 	<a href="/systemadmin">← Alle virksomheter</a>
 </div>
 
@@ -24,6 +31,7 @@
 			<tr><th>Launch</th><td class="mono">{app.launchUrl}</td></tr>
 			<tr><th>Redirect</th><td class="mono">{app.redirectUris.join(' ')}</td></tr>
 			<tr><th>Plassering</th><td>{app.placement}</td></tr>
+			<tr><th>Klientautentisering</th><td>{CLIENT_TYPE[app.clientType] ?? app.clientType}</td></tr>
 			<tr><th>Kontakt</th><td>{app.contactEmail || '—'}</td></tr>
 			<tr><th>Personvern</th><td>{app.privacyUrl || '—'}</td></tr>
 			<tr><th>Databehandleravtale</th><td>{app.databehandleravtale || '—'}</td></tr>
@@ -37,8 +45,58 @@
 	</ul>
 {/snippet}
 
+{#if form?.secret}
+	<div class="varsel varsel-ok" role="status">
+		Klienthemmelighet for <strong>{form.secretFor}</strong>: <strong class="mono">{form.secret}</strong><br />
+		Den vises bare nå. Ta vare på den før du går videre.
+	</div>
+{/if}
+
 <section class="kort">
-	<h3>Venter ({data.waiting.length})</h3>
+	<h3>Plattformapper ({data.platform.length})</h3>
+	<p class="svak">
+		Plattformens egne apper. Virksomheter installerer dem fra appgalleriet, og de regnes som godkjent.
+		Endringer her gjelder med en gang i alle virksomheter som har appen.
+	</p>
+	{#each data.platform as app (app.id)}
+		<details>
+			<summary>
+				{app.name}
+				{#if app.status !== 'godkjent'}<span class="merke merke-fare">Trukket tilbake</span>{/if}
+				<span class="svak liten">· installert hos {app.installs} {app.installs === 1 ? 'virksomhet' : 'virksomheter'}</span>
+			</summary>
+			<form method="POST" action="?/plattformapp">
+				<input type="hidden" name="id" value={app.id} />
+				<AppForm {app} idPrefix={app.id} showReplacesTab />
+				<button type="submit" class="primar liten">Lagre</button>
+			</form>
+			<form method="POST" action="?/vurder" style="margin-top: 1rem">
+				<input type="hidden" name="id" value={app.id} />
+				{#if app.status === 'godkjent'}
+					<div class="felt">
+						<label for="trekk-p-{app.id}">Begrunnelse for å trekke tilbake</label>
+						<textarea id="trekk-p-{app.id}" name="begrunnelse" rows="2"></textarea>
+					</div>
+					<button type="submit" name="utfall" value="avvist" class="liten fare">Trekk tilbake</button>
+				{:else}
+					<button type="submit" name="utfall" value="godkjent" class="liten">Gjør tilgjengelig igjen</button>
+				{/if}
+			</form>
+		</details>
+	{:else}
+		<p class="svak">Ingen plattformapper ennå.</p>
+	{/each}
+	<details>
+		<summary>Legg til plattformapp</summary>
+		<form method="POST" action="?/plattformapp">
+			<AppForm idPrefix="ny-plattformapp" showReplacesTab />
+			<button type="submit" class="primar liten">Legg til</button>
+		</form>
+	</details>
+</section>
+
+<section class="kort">
+	<h3>Venter på vurdering ({data.waiting.length})</h3>
 	{#each data.waiting as app (app.id)}
 		<div class="kort">
 			<h3>{app.name}</h3>

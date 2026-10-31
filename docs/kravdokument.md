@@ -310,6 +310,17 @@ Apper som ble registrert direkte før denne regelen, virker videre og er merket.
 *Realisert:* `unapprovedClients()`, `ExternalFrame.svelte`, `/oauth/authorize`.
 *Testet:* `tests/catalogue.test.ts`, `e2e/smart.spec.ts`.
 
+**K-4.7b Plattformen skal kunne forvalte egne apper.**
+Plattformeier legger til og endrer plattformapper i plattformadministrasjonen. De
+installeres fra appgalleriet som andre apper, og endringer når virksomhetene med en gang.
+*Realisert:* `savePlatformApp()`, `src/platform/routes/systemadmin/apper/`.
+*Testet:* `tests/catalogue.test.ts`.
+
+**K-4.7c En virksomhet skal kunne slette apper den ikke har installert fra galleriet.**
+Sikkerhetsloggen beholder det appen har gjort, og sletting loggføres med appens navn.
+*Realisert:* `deleteClient()`, handlingen `slett` i `/admin/apper`.
+*Testet:* `tests/catalogue.test.ts`.
+
 **K-4.8 API-et skal ikke lekke informasjon i feilmeldinger.**
 Feil returneres som `OperationOutcome`. Interne detaljer logges på serveren;
 klienten får en korrelasjons-id.

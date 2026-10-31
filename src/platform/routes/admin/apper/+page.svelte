@@ -222,6 +222,20 @@
 							{a.status === 'aktiv' ? 'Sperr appen og trekk tilbake tokens' : 'Aktiver appen'}
 						</button>
 					</form>
+					{#if a.deletable}
+						<form
+							method="POST"
+							action="?/slett"
+							onsubmit={(event) => {
+								if (!confirm(`Slette ${a.name}? Appen kan ikke brukes mer. Sikkerhetsloggen beholder det den har gjort.`)) event.preventDefault();
+							}}
+						>
+							<input type="hidden" name="clientId" value={a.clientId} />
+							<button type="submit" class="liten fare">Slett appen</button>
+						</form>
+					{:else}
+						<a class="liten" href="/admin/apper/galleri">Fjernes fra appgalleriet</a>
+					{/if}
 				</div>
 			</div>
 		</details>
