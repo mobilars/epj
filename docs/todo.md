@@ -411,10 +411,10 @@ ingen test snakker med den ekte serveren slik den er konfigurert i drift.
 Det som mangler er en test som starter HAPI med *manifestenes egen*
 konfigurasjon og kontrollerer at partisjonsstien svarer.
 
-### 6.7 Tolv ende-til-ende-tester har gått ut på dato **[V]**
+### 6.7 Elleve ende-til-ende-tester har gått ut på dato **[V]**
 
-Testene kjøres for hånd etter at de ble tatt ut av CI. Tolv av 50 feiler, og de
-samme tolv feiler uten endringene for SFM. De fleste har ikke fulgt med på endringer
+Testene kjøres for hånd etter at de ble tatt ut av CI. Elleve av 56 feiler, og de
+samme feilet uten endringene for SFM. De fleste har ikke fulgt med på endringer
 i grensesnittet: fanene Utlevering og Sperring ligger nå under «Mer», hurtignotatet
 gir to felt med samme etikett, utlogging lander på `/logg-ut`, og
 POST-kall i testene mangler `Origin`. Demo-brukeren `sykepleier` er nå

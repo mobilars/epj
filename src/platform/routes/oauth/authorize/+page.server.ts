@@ -237,6 +237,7 @@ export const actions: Actions = {
 			{ type: 'login', subtype: 'authorize', action: 'E', outcome: '4', outcomeDescription: 'Brukeren avslo tilgang', details: { client_id: clientId } },
 			{ userId: event.locals.auth?.userId ?? null, actorRef: event.locals.auth?.actorRef ?? 'Device/oauth', name: event.locals.auth?.name ?? 'ukjent', role: null, clientId, ip: event.locals.clientIp, requestId: event.locals.requestId }
 		);
-		redirect(303, errorRedirect(redirectUri, 'access_denied', 'Brukeren avslo tilgang', state));
+		// Also a form submission, so it leaves the same way as an approval.
+		redirect(303, `/oauth/videresend?til=${encodeURIComponent(errorRedirect(redirectUri, 'access_denied', 'Brukeren avslo tilgang', state))}`);
 	}
 };

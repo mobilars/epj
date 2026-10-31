@@ -68,6 +68,28 @@ test.describe('SMART on FHIR', () => {
 		expect(response.headers()['www-authenticate']).toContain('invalid_token');
 	});
 
+	test('the hop back to the app is a bare page, and carries the code across', async ({ page }) => {
+		await page.route('http://localhost:4000/**', (route) =>
+			route.fulfill({ contentType: 'text/html', body: '<title>The app</title>' })
+		);
+		const assets: string[] = [];
+		page.on('request', (r) => {
+			if (r.url().includes('/_app/')) assets.push(r.url());
+		});
+
+		const target = `${REDIRECT}?code=abc&state=x%22y`;
+		await page.goto(`/oauth/videresend?til=${encodeURIComponent(target)}`);
+
+		await expect(page).toHaveTitle('The app');
+		expect(page.url()).toBe(target);
+		expect(assets).toEqual([]);
+	});
+
+	test('the hop back refuses an address no app has registered', async ({ request }) => {
+		const response = await request.get(`/oauth/videresend?til=${encodeURIComponent('https://evil.example/callback')}`);
+		expect(response.status()).toBe(400);
+	});
+
 	test('hele autorisasjonsflyten, og appen får bare det den har scope for', async ({ page }) => {
 		await logIn(page, 'lege');
 
@@ -129,7 +151,10 @@ test.describe('SMART on FHIR', () => {
 			maxRedirects: 0
 		});
 		expect(response.status()).toBe(303);
-		const back = new URL(response.headers()['location']);
+		// It leaves by way of /oauth/videresend, carrying the app's address.
+		const hop = new URL(response.headers()['location'], 'http://localhost');
+		expect(hop.pathname).toBe('/oauth/videresend');
+		const back = new URL(hop.searchParams.get('til') as string);
 		expect(back.searchParams.get('state')).toBe(state);
 		const code = back.searchParams.get('code') as string;
 		expect(code).toBeTruthy();
@@ -196,7 +221,10 @@ test.describe('SMART on FHIR', () => {
 			maxRedirects: 0
 		});
 		expect(response.status()).toBe(303);
-		const back = new URL(response.headers()['location']);
+		// It leaves by way of /oauth/videresend, carrying the app's address.
+		const hop = new URL(response.headers()['location'], 'http://localhost');
+		expect(hop.pathname).toBe('/oauth/videresend');
+		const back = new URL(hop.searchParams.get('til') as string);
 		expect(back.searchParams.get('error')).toBe('access_denied');
 		expect(back.searchParams.get('state')).toBe(state);
 	});
