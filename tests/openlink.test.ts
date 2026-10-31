@@ -9,7 +9,7 @@ import {
 	openUrlForId,
 	phoneVariants,
 	sourceLabel
-} from '../src/lib/server/journal/openlink';
+} from '../src/platform/server/journal/openlink';
 
 /**
  * The address another program opens to land on a patient.

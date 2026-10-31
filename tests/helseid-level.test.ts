@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkSecurityLevel } from '../src/lib/server/auth/helseid';
+import { checkSecurityLevel } from '../src/platform/server/auth/helseid';
 
 /**
  * Security level 4, or no sign-in.

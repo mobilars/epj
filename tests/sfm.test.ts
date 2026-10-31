@@ -1,15 +1,15 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { createHandshake, type SfmState } from '../src/lib/sfm/handshake';
-import { ORGANISATION_SYSTEM, sfmAuthorizationDetails } from '../src/lib/server/integrations/sfm/authorization';
+import { createHandshake, type SfmState } from '../src/apps/sfm/handshake';
+import { ORGANISATION_SYSTEM, sfmAuthorizationDetails } from '../src/apps/sfm/server/authorization';
 import {
 	GATEWAY_PATH,
 	createNonce,
 	openSfm,
 	parseTicket,
 	patientPortal
-} from '../src/lib/server/integrations/sfm/session-gateway';
-import { validDateDel, validNorwegianNationalId } from '../src/lib/server/fhir/codesystems';
+} from '../src/apps/sfm/server/session-gateway';
+import { validDateDel, validNorwegianNationalId } from '../src/platform/server/fhir/codesystems';
 
 /**
  * SFM Full, as far as it can be proved without NHN: the protocol's own rules,

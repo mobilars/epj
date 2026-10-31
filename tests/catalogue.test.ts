@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { exec, one, query } from '../src/lib/server/db/index';
+import { exec, one, query } from '../src/platform/server/db/index';
 import { hasTestDatabase, createTestDatabase, emptyTables, type TestDatabase } from './fixtures/db';
-import { withTenant } from '../src/lib/server/tenant/context';
-import { getTenant } from '../src/lib/server/tenant/tenant';
-import { getClient } from '../src/lib/server/auth/clients';
-import { createApp, submitApp, reviewApp, installApp, uninstallApp, getCatalogueApp } from '../src/lib/server/developer/catalogue';
-import type { Tenant } from '../src/lib/server/tenant/context';
+import { withTenant } from '../src/platform/server/tenant/context';
+import { getTenant } from '../src/platform/server/tenant/tenant';
+import { getClient } from '../src/platform/server/auth/clients';
+import { createApp, submitApp, reviewApp, installApp, uninstallApp, getCatalogueApp } from '../src/platform/server/developer/catalogue';
+import type { Tenant } from '../src/platform/server/tenant/context';
 
 const describeIf = hasTestDatabase() ? describe : describe.skip;
 

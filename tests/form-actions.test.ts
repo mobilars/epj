@@ -28,7 +28,19 @@ function pagesWithForms(dir: string, found: string[] = []): string[] {
 }
 
 describe('skjemahandlinger', () => {
-	const pages = pagesWithForms(path.join('src', 'routes'));
+	const routesDir = path.join('src', 'platform', 'routes');
+	const appRoutes = fs.readdirSync(path.join('src', 'apps'), { withFileTypes: true })
+		.filter((e) => e.isDirectory())
+		.map((e) => path.join('src', 'apps', e.name, 'routes'))
+		.filter((dir) => fs.existsSync(dir));
+	const pages = [routesDir, ...appRoutes].flatMap((dir) => pagesWithForms(dir));
+
+	/** A route in the platform's tree may only mount an app: read the app's own file. */
+	function serverSource(file: string): string {
+		const text = fs.readFileSync(file, 'utf8');
+		const mounted = text.startsWith('// Mounts') ? /from '\$apps\/([^']+)'/.exec(text) : null;
+		return mounted ? fs.readFileSync(path.join('src', 'apps', `${mounted[1]}.ts`), 'utf8') : text;
+	}
 
 	it('finner sider å kontrollere', () => {
 		expect(pages.length).toBeGreaterThan(10);
@@ -47,7 +59,7 @@ describe('skjemahandlinger', () => {
 			for (const m of markup.matchAll(/action="([^"]*)\?\/([^"]+)"/g)) {
 				const target = m[1];
 				const route = target
-					? path.join('src', 'routes', ...target.replace(/\{[^}]*\}/g, '[id]').split('/').filter(Boolean))
+					? path.join(routesDir, ...target.replace(/\{[^}]*\}/g, '[id]').split('/').filter(Boolean))
 					: path.dirname(page);
 				used.push({ route, name: m[2] });
 			}
@@ -59,7 +71,7 @@ describe('skjemahandlinger', () => {
 					broken.push(`${page}: bruker ?/${name} mot ${route}, som ikke har +page.server.ts`);
 					continue;
 				}
-				const source = fs.readFileSync(server, 'utf8');
+				const source = serverSource(server);
 				const defined = new Set([...source.matchAll(/^\t([A-Za-z_$][\w$]*)\s*:\s*async/gm)].map((m) => m[1]));
 				// A single unnamed action is posted to without a name at all.
 				if (/^\tdefault\s*:/m.test(source)) defined.add('default');

@@ -6,7 +6,7 @@ import {
 	oreToKroner,
 	tariffAfterGroup,
 	TARIFFS
-} from '../src/lib/server/integrations/helfo/tariffs';
+} from '../src/apps/billing/server/helfo/tariffs';
 
 describe('takstregisteret', () => {
 	it('har unike takstkoder', () => {

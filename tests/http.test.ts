@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { clientIp } from '../src/lib/server/http';
+import { clientIp } from '../src/platform/server/http';
 import type { RequestEvent } from '@sveltejs/kit';
 
 /**
@@ -40,7 +40,7 @@ describe('utledning av klient-IP', () => {
 		const previous = process.env.EPJ_TRUSTED_PROXY_HOPS;
 		process.env.EPJ_TRUSTED_PROXY_HOPS = '2';
 		try {
-			const { clientIp: withToHops } = await import('../src/lib/server/http');
+			const { clientIp: withToHops } = await import('../src/platform/server/http');
 			expect(withToHops(event('192.0.2.66'))).toBe('203.0.113.9');
 			expect(withToHops(event('192.0.2.66, 1.2.3.4, 198.51.100.7'))).toBe('1.2.3.4');
 		} finally {

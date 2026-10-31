@@ -1,0 +1,507 @@
+import type { Cookies } from '@sveltejs/kit';
+import * as oidc from 'openid-client';
+import { exportJWK, importJWK, importPKCS8, type JWK } from 'jose';
+import { config, HELSEID_ALGORITHMS } from '../config';
+import { decrypt, encrypt } from '../util/crypto';
+import { one, exec, transaction } from '../db';
+import { requireTenant, issuerFor } from '../tenant/context';
+import { createUser, getUser, rolesFor, type User } from './users';
+import type { Role } from '../authz/roles';
+import { sfmAuthorizationDetails } from '$apps/sfm/server/authorization';
+
+/**
+ * HelseID as identity provider.
+ *
+ * HelseID is the national sign-in service for health personnel, operated by
+ * Norsk helsenett. The record acts as an OIDC client using the authorisation
+ * code flow, PKCE and `private_key_jwt` - no shared secret sits in the
+ * configuration.
+ *
+ * The protocol itself is handled by `openid-client`: discovery, PKCE, the
+ * client assertion, and validation of the id_token (issuer, audience, nonce,
+ * signature and expiry). Writing that by hand is where OIDC clients go wrong,
+ * and it is not the part of the flow this record adds anything to.
+ *
+ * From the id_token/userinfo we take:
+ *   - `helseid://claims/identity/pid`            national identity number
+ *   - `helseid://claims/hpr/hpr_number`          HPR number
+ *   - `helseid://claims/identity/security_level` security level (4 required)
+ *   - `name`                                     name
+ *
+ * Users are provisioned on first sign-in but get no roles automatically:
+ * assigning a role is an administrative act and must leave a trace.
+ *
+ * The link is per organisation. The same doctor may work at several practices,
+ * and then holds one account at each - with its own roles and relationships.
+ */
+
+export const CLAIM = {
+	PID: 'helseid://claims/identity/pid',
+	PID_PSEUDONYM: 'helseid://claims/identity/pid_pseudonym',
+	SECURITY_LEVEL: 'helseid://claims/identity/security_level',
+	HPR_NUMBER: 'helseid://claims/hpr/hpr_number',
+	ASSURANCE_LEVEL: 'helseid://claims/identity/assurance_level',
+	ORGNR_PARENT: 'helseid://claims/client/claims/orgnr_parent'
+} as const;
+
+/** HelseID refuses a client assertion valid for more than ten seconds. */
+/**
+ * HelseID accepts a client assertion whose `exp` is at most ten seconds ahead
+ * (sikkerhetskrav SK2). Exactly ten leaves nothing for clock drift between us
+ * and their servers, and a second of it would turn every sign-in into
+ * invalid_client. Five is inside the limit with room to spare, and the
+ * assertion is used once, immediately.
+ */
+const HELSEID_ASSERTION_LIFETIME = 5;
+
+/** Seconds a signed request object is valid. NHN's sample uses the same. */
+const REQUEST_OBJECT_LIFETIME = 10;
+
+/**
+ * A client holding API scopes must bind its tokens to a key with DPoP (RFC
+ * 9449). Without it HelseID answers `invalid_request: Client requires DPoP and
+ * a DPoP header value was not provided`.
+ *
+ * The key pair belongs to the sign-in attempt, not to the process: the
+ * authorization request announces the key as `dpop_jkt`, and the token request
+ * that follows - possibly served by another instance - must prove possession of
+ * the same key. It therefore travels with the rest of the flow state, in the
+ * encrypted cookie.
+ */
+const DPOP_ALG = 'ES256';
+
+let cachedConfiguration: { value: oidc.Configuration; expiresAt: number } | null = null;
+
+/**
+ * Discovers HelseID and builds the client configuration.
+ *
+ * The result is kept for an hour: discovery is a network call, and the JWKS
+ * cache openid-client keeps inside the configuration is what lets it verify
+ * id_tokens without fetching keys on every sign-in.
+ */
+export async function helseIdConfiguration(): Promise<oidc.Configuration> {
+	if (cachedConfiguration && Date.now() < cachedConfiguration.expiresAt) return cachedConfiguration.value;
+	const { issuer, clientId } = config.integrations.healthId;
+	if (!clientId) throw new Error('HelseID client id is missing (EPJ_HELSEID_CLIENT_ID)');
+
+	const value = await oidc.discovery(new URL(issuer), clientId, undefined, oidc.PrivateKeyJwt(await clientKey(), {
+		/**
+		 * HelseID's own requirements on the client assertion, beyond RFC 7523:
+		 *
+		 *   - `typ` must be `client-authentication+jwt`. With a plain `JWT` the
+		 *     assertion is refused as invalid_client.
+		 *   - `exp` must be at most ten seconds ahead. openid-client's default of
+		 *     one minute is accepted for now, but logged as deprecated.
+		 *
+		 * `aud` is the issuer identifier, which is what openid-client already
+		 * sends - not the token endpoint.
+		 *
+		 * https://utviklerportal.nhn.no/informasjonstjenester/helseid/bruksmoenstre-og-eksempelkode/bruk-av-helseid/docs/tekniske-mekanismer/bruk_av_client_assertion_no_nbmd
+		 */
+		[oidc.modifyAssertion]: (header, payload) => {
+			header.typ = 'client-authentication+jwt';
+			// HelseID lists nbf among the assertion's claims; openid-client does not
+			// set it. Same instant as iat: the assertion is used at once.
+			payload.nbf = payload.iat as number;
+			payload.exp = (payload.iat as number) + HELSEID_ASSERTION_LIFETIME;
+		}
+	}));
+	cachedConfiguration = { value, expiresAt: Date.now() + 3600_000 };
+	return value;
+}
+
+/**
+ * The key the client assertions are signed with.
+ *
+ * A JWK is preferred: it carries its own `kid` and `alg`, and HelseID picks the
+ * registered key to check the assertion against by `kid`. Deriving the `kid`
+ * ourselves - as an RFC 7638 thumbprint, say - only works if HelseID happened to
+ * register the key under that same id. The PEM form remains for environments
+ * configured before the JWK was available.
+ */
+/**
+ * Refuses, at startup, an algorithm HelseID would refuse at sign-in.
+ *
+ * «Krav til kryptografi» allows PS256/384/512 and ES256/384/512 and
+ * recommends PS256 or PS512; RS256 is not on the list. Finding that out from
+ * an invalid_client on the first real sign-in is the wrong time.
+ */
+function requireHelseIdAlgorithm(alg: string): string {
+	if (!HELSEID_ALGORITHMS.has(alg)) {
+		throw new Error(
+			`HelseID godtar ikke ${alg} for client assertion. Tillatt: PS256, PS384, PS512, ES256, ES384, ES512 (anbefalt PS256 eller PS512). ` +
+				'Se «Krav til kryptografi» på utviklerportal.nhn.no, og sett EPJ_HELSEID_ALG eller alg i nøkkelens JWK.'
+		);
+	}
+	return alg;
+}
+
+async function clientKey(): Promise<oidc.CryptoKey | oidc.PrivateKey> {
+	const { privateJwkBase64, privateKeyPem, keyId, signingAlgorithm } = config.integrations.healthId;
+	if (privateJwkBase64) {
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(Buffer.from(privateJwkBase64, 'base64').toString('utf8'));
+		} catch (err) {
+			throw new Error(`EPJ_HELSEID_PRIVATE_JWK is not base64-encoded JSON: ${(err as Error).message}`);
+		}
+		const jwk = (Array.isArray(parsed) ? parsed[0] : parsed) as JWK | undefined;
+		if (!jwk?.kty) throw new Error('EPJ_HELSEID_PRIVATE_JWK holds no JWK');
+		const alg = requireHelseIdAlgorithm(jwk.alg ?? signingAlgorithm);
+		const key = await importJWK(jwk, alg);
+		if (!('type' in key)) throw new Error('EPJ_HELSEID_PRIVATE_JWK is a symmetric key, not a signing key');
+		return { key: key as oidc.CryptoKey, kid: jwk.kid };
+	}
+	if (!privateKeyPem) {
+		throw new Error('HelseID client key is missing (EPJ_HELSEID_PRIVATE_JWK or EPJ_HELSEID_PRIVATE_KEY)');
+	}
+	return { key: await importPKCS8(privateKeyPem, requireHelseIdAlgorithm(signingAlgorithm)), kid: keyId || undefined };
+}
+
+/** Used by the tests, and after a configuration change. */
+export function clearConfigurationCache(): void {
+	cachedConfiguration = null;
+}
+
+const STATE_COOKIE = 'epj_helseid';
+
+interface FlowState {
+	state: string;
+	nonce: string;
+	codeVerifier: string;
+	returnTo: string;
+	created_at: number;
+	/** The DPoP key pair for this attempt, as JWKs so it survives the cookie. */
+	dpop?: { privateJwk: JWK; publicJwk: JWK };
+}
+
+async function newDPoPKeys(): Promise<{ privateJwk: JWK; publicJwk: JWK }> {
+	const { privateKey, publicKey } = await oidc.randomDPoPKeyPair(DPOP_ALG, { extractable: true });
+	return {
+		privateJwk: (await exportJWK(privateKey)) as JWK,
+		publicJwk: (await exportJWK(publicKey)) as JWK
+	};
+}
+
+async function dpopHandle(
+	configuration: oidc.Configuration,
+	keys: { privateJwk: JWK; publicJwk: JWK }
+): Promise<oidc.DPoPHandle> {
+	// The public key is embedded in every proof, so it has to stay extractable.
+	const privateKey = (await importJWK(keys.privateJwk, DPOP_ALG, { extractable: true })) as oidc.CryptoKey;
+	const publicKey = (await importJWK(keys.publicJwk, DPOP_ALG, { extractable: true })) as oidc.CryptoKey;
+	return oidc.getDPoPHandle(configuration, { privateKey, publicKey });
+}
+
+/** Builds the authorisation URL and puts the flow state in an encrypted cookie. */
+export async function startLogin(cookies: Cookies, returnTo: string): Promise<string> {
+	const configuration = await helseIdConfiguration();
+	const state = oidc.randomState();
+	const nonce = oidc.randomNonce();
+	const codeVerifier = oidc.randomPKCECodeVerifier();
+	const codeChallenge = await oidc.calculatePKCECodeChallenge(codeVerifier);
+
+	const dpop = await newDPoPKeys();
+	const flowState: FlowState = { state, nonce, codeVerifier, returnTo, created_at: Date.now(), dpop };
+	cookies.set(STATE_COOKIE, encrypt(JSON.stringify(flowState)), {
+		path: '/',
+		httpOnly: true,
+		sameSite: 'lax', // must survive the redirect back from HelseID
+		secure: config.security.httpsOnly,
+		maxAge: 600
+	});
+
+	const { sfm } = config.integrations;
+	const parameters: Record<string, string> = {
+		redirect_uri: redirectUri(),
+		// SFM acts as the signed-in clinician, so its scope belongs to this sign-in.
+		scope: [...config.integrations.healthId.scopes, ...(sfm.full ? [sfm.scope] : [])].join(' '),
+		state,
+		nonce,
+		code_challenge: codeChallenge,
+		code_challenge_method: 'S256'
+	};
+
+	// HelseID requires the request to be pushed to the authorization server
+	// first (RFC 9126), so the parameters never travel through the browser. The
+	// push is authenticated with the same client assertion as the token call.
+	//
+	// A multi-tenant client also says which practice and which SFM journal this
+	// is. That goes in a signed request object, short-lived like the assertion,
+	// so it cannot be altered on the way.
+	const details = sfm.full ? sfmAuthorizationDetails(requireTenant()) : null;
+	const outgoing = details
+		? (
+				await oidc.buildAuthorizationUrlWithJAR(
+					configuration,
+					{ ...parameters, authorization_details: JSON.stringify(details) },
+					await clientKey(),
+					{
+						[oidc.modifyAssertion]: (_header, payload) => {
+							payload.nbf = payload.iat as number;
+							payload.exp = (payload.iat as number) + REQUEST_OBJECT_LIFETIME;
+						}
+					}
+				)
+			).searchParams
+		: parameters;
+
+	const url = configuration.serverMetadata().pushed_authorization_request_endpoint
+		? await oidc.buildAuthorizationUrlWithPAR(configuration, outgoing, {
+				DPoP: await dpopHandle(configuration, dpop)
+			})
+		: oidc.buildAuthorizationUrl(configuration, outgoing);
+	return url.toString();
+}
+
+export function redirectUri(): string {
+	// The callback address must sit on the organisation's own hostname: that is
+	// where the session cookie is set, and the hostname is what says which
+	// organisation the request concerns. Every hostname the record answers on
+	// therefore needs its own callback registered in HelseID.
+	//
+	// EPJ_HELSEID_REDIRECT_URI overrides that, and only makes sense for an
+	// installation serving a single organisation. Set on a multi-tenant
+	// installation it sends every sign-in back to one organisation, whichever
+	// one the user started at.
+	return config.integrations.healthId.redirectUri || `${issuerFor(requireTenant())}/logg-inn/helseid/tilbake`;
+}
+
+function readState(cookies: Cookies): FlowState | null {
+	const raw = cookies.get(STATE_COOKIE);
+	if (!raw) return null;
+	try {
+		const t = JSON.parse(decrypt(raw)) as FlowState;
+		if (Date.now() - t.created_at > 600_000) return null;
+		return t;
+	} catch {
+		return null;
+	}
+}
+
+export function endFlow(cookies: Cookies): void {
+	cookies.delete(STATE_COOKIE, { path: '/' });
+}
+
+/** What SFM needs kept from a sign-in. Only returned while SFM is switched on. */
+export interface HelseIdTokens {
+	accessToken: string;
+	refreshToken: string | null;
+	expiresIn: number;
+	dpop: { privateJwk: JWK; publicJwk: JWK };
+}
+
+/** A DPoP handle for a key kept from a sign-in, for calls made later. */
+export function dpopHandleFor(
+	configuration: oidc.Configuration,
+	dpop: { privateJwk: JWK; publicJwk: JWK }
+): Promise<oidc.DPoPHandle> {
+	return dpopHandle(configuration, dpop);
+}
+
+export interface HelseIdClaims {
+	sub: string;
+	name: string;
+	pid: string | null;
+	hprNumber: string | null;
+	securityLevel: string | null;
+	raw: Record<string, unknown>;
+}
+
+/**
+ * Security level 4, and nothing less - including nothing at all.
+ *
+ * Health personnel sign in at level 4 (Normen; HelseID's own guidance), and
+ * the record asks for `helseid://scopes/identity/security_level` so the token
+ * says which level it was. A token that does not say used to be let through
+ * on the assumption that no claim meant no problem. It means the scope was
+ * not granted, and the person's level is unknown, which is a reason to refuse.
+ */
+export function checkSecurityLevel(
+	claims: Record<string, unknown>
+): { ok: true; level: string } | { ok: false; error: string } {
+	const level = claims[CLAIM.SECURITY_LEVEL];
+	if (level === '4' || level === 4) return { ok: true, level: '4' };
+	return {
+		ok: false,
+		error:
+			level !== undefined && level !== null
+				? `Innlogging krever sikkerhetsnivå 4 (fikk ${String(level)})`
+				: 'Innlogging krever sikkerhetsnivå 4, og HelseID oppga ikke nivået. Kontroller at scopet helseid://scopes/identity/security_level er bedt om og innvilget.'
+	};
+}
+
+export type LoginResult =
+	| { ok: true; claims: HelseIdClaims; returnTo: string; user: User; roles: Role[]; newUser: boolean; tokens?: HelseIdTokens }
+	| { ok: false; error: string };
+
+/**
+ * Completes the flow: exchanges the code for tokens, verifies the id_token and
+ * links or creates the local user.
+ *
+ * `currentUrl` is the callback address exactly as it was requested. It is what
+ * openid-client checks `iss`, `state` and any error response against.
+ */
+export async function completeLogin(cookies: Cookies, currentUrl: URL): Promise<LoginResult> {
+	const flowState = readState(cookies);
+	endFlow(cookies);
+	if (!flowState) return { ok: false, error: 'Påloggingen tok for lang tid. Prøv igjen.' };
+
+	let claims: Record<string, unknown>;
+	let kept: HelseIdTokens | undefined;
+	try {
+		const configuration = await helseIdConfiguration();
+		const DPoP = flowState.dpop ? await dpopHandle(configuration, flowState.dpop) : undefined;
+		const tokens = await oidc.authorizationCodeGrant(
+			configuration,
+			currentUrl,
+			{
+				pkceCodeVerifier: flowState.codeVerifier,
+				expectedState: flowState.state,
+				expectedNonce: flowState.nonce,
+				idTokenExpected: true
+			},
+			undefined,
+			{ DPoP }
+		);
+		const verified = tokens.claims();
+		if (!verified) return { ok: false, error: 'HelseID returnerte ikke id_token' };
+		if (config.integrations.sfm.full && flowState.dpop) {
+			kept = {
+				accessToken: tokens.access_token,
+				refreshToken: tokens.refresh_token ?? null,
+				expiresIn: tokens.expires_in ?? 60,
+				dpop: flowState.dpop
+			};
+		}
+		// HelseID does not necessarily put pid, HPR number and security level in
+		// the id_token - which ones appear there depends on how the client is
+		// registered. Userinfo is asked as well and fills the gaps; the id_token
+		// still wins where the two overlap, since that is the signed document.
+		let fromUserinfo: Record<string, unknown> = {};
+		try {
+			// The access token is bound to the DPoP key, so userinfo needs the proof too.
+			fromUserinfo = (await oidc.fetchUserInfo(configuration, tokens.access_token, verified.sub, {
+				DPoP
+			})) as unknown as Record<string, unknown>;
+		} catch {
+			/* userinfo is a bonus; the id_token is what authenticates */
+		}
+		claims = { ...fromUserinfo, ...(verified as unknown as Record<string, unknown>) };
+	} catch (err) {
+		return { ok: false, error: `HelseID avviste innloggingen: ${describeOAuthError(err)}` };
+	}
+
+	const level = checkSecurityLevel(claims);
+	if (!level.ok) return level;
+	const securityLevel = level.level;
+
+	const parsed: HelseIdClaims = {
+		sub: String(claims.sub),
+		name: (claims.name as string) ?? 'Ukjent',
+		pid: (claims[CLAIM.PID] as string) ?? null,
+		hprNumber: (claims[CLAIM.HPR_NUMBER] as string) ?? null,
+		securityLevel,
+		raw: claims
+	};
+
+	const { user, roles, newUser } = await linkToLocalUser(parsed);
+	return { ok: true, claims: parsed, returnTo: flowState.returnTo, user, roles, newUser, tokens: kept };
+}
+
+/**
+ * Unwraps what the authorization server actually said.
+ *
+ * openid-client's own message for a failed token exchange is "server responded
+ * with an error in the response body" - the `error` and `error_description`
+ * that say why sit on the error object. Without unwrapping them, a
+ * configuration fault is indistinguishable from HelseID being down, both in the
+ * message shown to the user and in the security log.
+ */
+export function describeOAuthError(err: unknown): string {
+	if (err instanceof oidc.ResponseBodyError || err instanceof oidc.AuthorizationResponseError) {
+		return err.error_description ? `${err.error} - ${err.error_description}` : err.error;
+	}
+	if (err instanceof oidc.ClientError && err.cause) {
+		return `${(err as Error).message} (${String((err.cause as { error?: string }).error ?? err.cause)})`;
+	}
+	return (err as Error).message;
+}
+
+/**
+ * Finds the local user for a HelseID identity, or creates it.
+ *
+ * Linking is on `sub` first (stable in HelseID), then on the national identity
+ * number, then on HPR number - so a user pre-registered by the system
+ * administrator is linked automatically on first sign-in and keeps the roles
+ * they were given.
+ *
+ * The national identity number comes before HPR because not everyone at a
+ * practice has an HPR number: it is held by registered health personnel, while
+ * a medical secretary or an office manager has none. The fødselsnummer is the
+ * identifier everyone has, and the one HelseID identifies a person by.
+ *
+ * Users not pre-registered are created without roles and without access.
+ */
+export async function linkToLocalUser(
+	claims: HelseIdClaims
+): Promise<{ user: User; roles: Role[]; newUser: boolean }> {
+	return transaction(async () => {
+		const tenantId = requireTenant().id;
+		let row = await one<{ id: string }>(
+			'SELECT id FROM user_account WHERE helseid_sub = $1 AND tenant_id = $2',
+			[claims.sub, tenantId]
+		);
+
+		if (!row && claims.pid) {
+			row = await one<{ id: string }>(
+				'SELECT id FROM user_account WHERE national_id = $1 AND tenant_id = $2 AND helseid_sub IS NULL',
+				[claims.pid, tenantId]
+			);
+		}
+		if (!row && claims.hprNumber) {
+			row = await one<{ id: string }>(
+				'SELECT id FROM user_account WHERE hpr_number = $1 AND tenant_id = $2 AND helseid_sub IS NULL',
+				[claims.hprNumber, tenantId]
+			);
+		}
+
+		if (row) {
+			// Fill in what the pre-registered account did not have. COALESCE, so a
+			// claim HelseID left out never blanks a value already recorded.
+			await exec(
+				`UPDATE user_account
+				 SET helseid_sub = $2, name = $3,
+				     national_id = COALESCE($4, national_id),
+				     hpr_number = COALESCE($5, hpr_number),
+				     last_login = now(), failed_attempts = 0, locked_until = NULL, updated_at = now()
+				 WHERE id = $1`,
+				[row.id, claims.sub, claims.name, claims.pid, claims.hprNumber]
+			);
+			const user = await getUser(row.id);
+			if (!user) throw new Error('Fant ikke brukeren etter kobling');
+			return { user, roles: await rolesFor(user.id), newUser: false };
+		}
+
+		// The username is a handle for signing in and for the admin lists, so the
+		// national identity number is deliberately not used for it.
+		const username = claims.hprNumber ? `hpr-${claims.hprNumber}` : `helseid-${claims.sub.slice(0, 12)}`;
+		const user = await createUser({
+			username,
+			name: claims.name,
+			hprNumber: claims.hprNumber ?? undefined,
+			roles: [] // roles are assigned by the system administrator
+		});
+		await exec(
+			'UPDATE user_account SET helseid_sub = $2, national_id = $3, must_change_password = false, last_login = now() WHERE id = $1',
+			[user.id, claims.sub, claims.pid]
+		);
+		const updated = await getUser(user.id);
+		return { user: updated ?? user, roles: [], newUser: true };
+	});
+}
+
+export function isConfigured(): boolean {
+	const h = config.integrations.healthId;
+	return h.enabled && Boolean(h.clientId) && Boolean(h.privateJwkBase64 || h.privateKeyPem);
+}

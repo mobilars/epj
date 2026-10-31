@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decrypt, hashPassword, encrypt, likeStrenger, sha256, tokenHash, verifyPassword } from '../src/lib/server/util/crypto';
+import { decrypt, hashPassword, encrypt, likeStrenger, sha256, tokenHash, verifyPassword } from '../src/platform/server/util/crypto';
 
 describe('kryptering av data at rest', () => {
 	it('krypterer og dekrypterer', () => {

@@ -1,14 +1,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { exec, query } from '../src/lib/server/db/index';
+import { exec, query } from '../src/platform/server/db/index';
 import { hasTestDatabase, createTestDatabase, emptyTables, type TestDatabase, setIn } from './fixtures/db';
 import { fhirForTest, type TestFhirServer } from './fixtures/fhir-testserver';
 import { appContext, context } from './fixtures/context';
-import { execute } from '../src/lib/server/fhir/gateway';
-import { FhirError } from '../src/lib/server/fhir/outcome';
-import { fhirClient } from '../src/lib/server/fhir/client';
-import { newId } from '../src/lib/server/util/ids';
-import { SYSTEM } from '../src/lib/server/fhir/codesystems';
-import type { Bundle } from '../src/lib/server/fhir/types';
+import { execute } from '../src/platform/server/fhir/gateway';
+import { FhirError } from '../src/platform/server/fhir/outcome';
+import { fhirClient } from '../src/platform/server/fhir/client';
+import { newId } from '../src/platform/server/util/ids';
+import { SYSTEM } from '../src/platform/server/fhir/codesystems';
+import type { Bundle } from '../src/platform/server/fhir/types';
 
 const describeIf = hasTestDatabase() ? describe : describe.skip;
 

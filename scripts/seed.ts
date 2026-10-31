@@ -6,20 +6,20 @@
  * numbers below are valid mod11 numbers from the Tax Administration's synthetic
  * test set (Tenor) and belong to no real person.
  */
-import { exec, closePool, query } from '../src/lib/server/db/index';
-import { migrate } from '../src/lib/server/db/migrate';
-import { withTenant, PLATFORM_TENANT, type Tenant } from '../src/lib/server/tenant/context';
-import { getTenant, ensureDefaultOrganisation } from '../src/lib/server/tenant/tenant';
-import { createUser, setRoles } from '../src/lib/server/auth/users';
-import { registerClient } from '../src/lib/server/auth/clients';
-import { fhirClient } from '../src/lib/server/fhir/client';
-import { SYSTEM, validNorwegianNationalId, genderFromNationalId, validDateDel } from '../src/lib/server/fhir/codesystems';
-import { encrypt } from '../src/lib/server/util/crypto';
-import { newTotpSecret } from '../src/lib/server/auth/totp';
-import { newId } from '../src/lib/server/util/ids';
-import type { FhirResource } from '../src/lib/server/fhir/types';
+import { exec, closePool, query } from '../src/platform/server/db/index';
+import { migrate } from '../src/platform/server/db/migrate';
+import { withTenant, PLATFORM_TENANT, type Tenant } from '../src/platform/server/tenant/context';
+import { getTenant, ensureDefaultOrganisation } from '../src/platform/server/tenant/tenant';
+import { createUser, setRoles } from '../src/platform/server/auth/users';
+import { registerClient } from '../src/platform/server/auth/clients';
+import { fhirClient } from '../src/platform/server/fhir/client';
+import { SYSTEM, validNorwegianNationalId, genderFromNationalId, validDateDel } from '../src/platform/server/fhir/codesystems';
+import { encrypt } from '../src/platform/server/util/crypto';
+import { newTotpSecret } from '../src/platform/server/auth/totp';
+import { newId } from '../src/platform/server/util/ids';
+import type { FhirResource } from '../src/platform/server/fhir/types';
 
-import { DEMO_PASSWORD as PASSWORD, DEMO_TOTP_SECRET as DEMO_TOTP } from '../src/lib/server/auth/demo';
+import { DEMO_PASSWORD as PASSWORD, DEMO_TOTP_SECRET as DEMO_TOTP } from '../src/platform/server/auth/demo';
 
 
 interface DemoPatient {

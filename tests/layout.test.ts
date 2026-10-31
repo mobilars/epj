@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CARDS, defaultLayout, layoutFromForm, parseLayout } from '../src/lib/server/workspace/layout';
+import { CARDS, defaultLayout, layoutFromForm, parseLayout } from '../src/platform/server/workspace/layout';
 
 /**
  * Which cards a surface shows, and in what order.

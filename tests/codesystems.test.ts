@@ -8,7 +8,7 @@ import {
 	validOrganisationNumber,
 	genderFromNationalId,
 	maskerNationalId
-} from '../src/lib/server/fhir/codesystems';
+} from '../src/platform/server/fhir/codesystems';
 
 describe('fødselsnummer', () => {
 	it('godtar gyldige syntetiske fødselsnummer', () => {

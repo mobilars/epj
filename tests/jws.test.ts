@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createSign, generateKeyPairSync } from 'node:crypto';
-import { decodeWithoutVerification, generateKeyPair, jwkThumbprint, sign, verify, type Jwk } from '../src/lib/server/auth/jws';
+import { decodeWithoutVerification, generateKeyPair, jwkThumbprint, sign, verify, type Jwk } from '../src/platform/server/auth/jws';
 
 const b64u = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
 

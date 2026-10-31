@@ -21,7 +21,16 @@ const config = {
 		 * ikke bruker informasjonskapsler i det hele tatt - ta imot fra andre.
 		 */
 		csrf: { trustedOrigins: ['*'] },
-		alias: { $srv: 'src/lib/server' },
+		// The platform is $lib, so $lib/server keeps SvelteKit's guard against
+		// server code reaching the browser. Routes are mounted by the platform;
+		// see docs/arkitektur.md.
+		files: { lib: 'src/platform', routes: 'src/platform/routes' },
+		alias: {
+			$srv: 'src/platform/server',
+			$apps: 'src/apps',
+			// The types SvelteKit generates per route, for app code outside the route tree.
+			$routetypes: '.svelte-kit/types/src/platform/routes'
+		},
 		/**
 		 * Innholdssikkerhetspolicy for HTML-svar.
 		 *

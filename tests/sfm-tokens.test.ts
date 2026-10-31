@@ -1,13 +1,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { exec, one } from '../src/lib/server/db/index';
+import { exec, one } from '../src/platform/server/db/index';
 import { hasTestDatabase, createTestDatabase, emptyTables, setIn, type TestDatabase } from './fixtures/db';
 import {
 	forgetHelseIdTokens,
 	hasHelseIdTokens,
 	storeHelseIdTokens
-} from '../src/lib/server/integrations/sfm/tokens';
-import { endSessionById } from '../src/lib/server/auth/activesessions';
-import { newId } from '../src/lib/server/util/ids';
+} from '../src/apps/sfm/server/tokens';
+import { endSessionById } from '../src/platform/server/auth/activesessions';
+import { newId } from '../src/platform/server/util/ids';
 
 const describeIf = hasTestDatabase() ? describe : describe.skip;
 

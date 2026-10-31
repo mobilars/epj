@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addPatient, lookupKey, phoneKeys } from '../src/lib/server/journal/phoneindex';
+import { addPatient, lookupKey, phoneKeys } from '../src/platform/server/journal/phoneindex';
 
 /**
  * Phone numbers compared by what they are, not by how they were typed.

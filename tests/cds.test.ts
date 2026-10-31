@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { hasTestDatabase, createTestDatabase, type TestDatabase } from './fixtures/db';
-import { acceptedActions, type Suggestion } from '../src/lib/server/cds/hooks';
-import { ageYears, bmi, bmiClass, egfrCkdEpi2021, gfrCategory } from '../src/lib/server/cds/calculators';
-import { HookCallerError, requireHookCaller, signHookRequest } from '../src/lib/server/cds/signing';
-import { sign } from '../src/lib/server/auth/jws';
-import { config } from '../src/lib/server/config';
+import { acceptedActions, type Suggestion } from '../src/platform/server/cds/hooks';
+import { ageYears, bmi, bmiClass, egfrCkdEpi2021, gfrCategory } from '../src/apps/cds-services/server/calculators';
+import { HookCallerError, requireHookCaller, signHookRequest } from '../src/platform/server/cds/signing';
+import { sign } from '../src/platform/server/auth/jws';
+import { config } from '../src/platform/server/config';
 import type { RequestEvent } from '@sveltejs/kit';
 
 const describeIf = hasTestDatabase() ? describe : describe.skip;

@@ -1,20 +1,20 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { one, exec, query } from '../src/lib/server/db/index';
+import { one, exec, query } from '../src/platform/server/db/index';
 import { hasTestDatabase, createTestDatabase, emptyTables, type TestDatabase, setIn } from './fixtures/db';
 import { fhirForTest, type TestFhirServer } from './fixtures/fhir-testserver';
-import { prescribe, getMedicationList, fornye, discontinue, synkHistory } from '../src/lib/server/integrations/sfm/index';
-import { getRecipient, canReceive, searchRecipients, toPart } from '../src/lib/server/integrations/nhn/address-registry';
-import { queueOut, listMessages, receiveMessage, registerApprec, sendQueue, pendingKvitteringer } from '../src/lib/server/integrations/nhn/message-queue';
-import { buildDialogueMessage, buildReferral } from '../src/lib/server/integrations/nhn/messages';
-import { readApprec } from '../src/lib/server/integrations/nhn/apprec';
-import { getCopaymentStatus, EGENANDELSTAK_ORE } from '../src/lib/server/integrations/helfo/copayment';
-import { getCard, listCard, createBillingCard } from '../src/lib/server/integrations/helfo/billing';
-import { forhandsvis, generateSettlement, getSettlement, registerSettlementRun, sendSettlement } from '../src/lib/server/integrations/helfo/settlement';
-import { fhirClient } from '../src/lib/server/fhir/client';
-import { SYSTEM } from '../src/lib/server/fhir/codesystems';
-import { parseXml, textValue } from '../src/lib/server/util/xml';
-import type { AuditActor } from '../src/lib/server/audit';
-import { newId } from '../src/lib/server/util/ids';
+import { prescribe, getMedicationList, fornye, discontinue, synkHistory } from '../src/apps/medications/server/index';
+import { getRecipient, canReceive, searchRecipients, toPart } from '../src/apps/messages/server/nhn/address-registry';
+import { queueOut, listMessages, receiveMessage, registerApprec, sendQueue, pendingKvitteringer } from '../src/apps/messages/server/nhn/message-queue';
+import { buildDialogueMessage, buildReferral } from '../src/apps/messages/server/nhn/messages';
+import { readApprec } from '../src/apps/messages/server/nhn/apprec';
+import { getCopaymentStatus, EGENANDELSTAK_ORE } from '../src/apps/billing/server/helfo/copayment';
+import { getCard, listCard, createBillingCard } from '../src/apps/billing/server/helfo/billing';
+import { forhandsvis, generateSettlement, getSettlement, registerSettlementRun, sendSettlement } from '../src/apps/billing/server/helfo/settlement';
+import { fhirClient } from '../src/platform/server/fhir/client';
+import { SYSTEM } from '../src/platform/server/fhir/codesystems';
+import { parseXml, textValue } from '../src/platform/server/util/xml';
+import type { AuditActor } from '../src/platform/server/audit';
+import { newId } from '../src/platform/server/util/ids';
 
 const describeIf = hasTestDatabase() ? describe : describe.skip;
 
@@ -265,7 +265,7 @@ describeIf('integrasjoner', () => {
 		});
 
 		it('speiler epikrise som DocumentReference', async () => {
-			const { buildDischargeSummary } = await import('../src/lib/server/integrations/nhn/messages');
+			const { buildDischargeSummary } = await import('../src/apps/messages/server/nhn/messages');
 			const msgId = newId();
 			const xml = buildDischargeSummary({
 				msgId,

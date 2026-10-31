@@ -1,17 +1,17 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { one, exec, query } from '../src/lib/server/db/index';
-import { time } from '../src/lib/server/tenant/context';
+import { one, exec, query } from '../src/platform/server/db/index';
+import { time } from '../src/platform/server/tenant/context';
 import { hasTestDatabase, createTestDatabase, emptyTables, type TestDatabase } from './fixtures/db';
 import {
 	activateMfa, confirmTotp, getUser, getUserAtUsername, listUsers,
 	logIn, createUser, rolesFor, setPassword, setRoles, setStatus
-} from '../src/lib/server/auth/users';
-import { endAllSessions, endSession, elevateSession, getSession, createSession } from '../src/lib/server/auth/session';
-import { newTotpSecret, totpCode } from '../src/lib/server/auth/totp';
-import { rateLimit } from '../src/lib/server/http';
-import { config } from '../src/lib/server/config';
-import { permissionsForRoles, ROLE_DEFINISJONER, ROLES, scopesForRoles, canEmergencyAccess, canSeeAllPatients } from '../src/lib/server/authz/roles';
-import { parseScope } from '../src/lib/server/authz/scopes';
+} from '../src/platform/server/auth/users';
+import { endAllSessions, endSession, elevateSession, getSession, createSession } from '../src/platform/server/auth/session';
+import { newTotpSecret, totpCode } from '../src/platform/server/auth/totp';
+import { rateLimit } from '../src/platform/server/http';
+import { config } from '../src/platform/server/config';
+import { permissionsForRoles, ROLE_DEFINISJONER, ROLES, scopesForRoles, canEmergencyAccess, canSeeAllPatients } from '../src/platform/server/authz/roles';
+import { parseScope } from '../src/platform/server/authz/scopes';
 import type { Cookies } from '@sveltejs/kit';
 
 const describeIf = hasTestDatabase() ? describe : describe.skip;

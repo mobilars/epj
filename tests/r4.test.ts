@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { normaliseFromR4 } from '../src/lib/server/fhir/r4';
-import type { FhirResource } from '../src/lib/server/fhir/types';
+import { normaliseFromR4 } from '../src/platform/server/fhir/r4';
+import type { FhirResource } from '../src/platform/server/fhir/types';
 
 /**
  * R4-shaped writes, stored as R5.

@@ -9,7 +9,7 @@ process.env.EPJ_INTEGRATION_MODE ??= 'mock';
 // context is missing. The tests therefore run in the default organisation, the
 // same way a request does. The isolation tests switch themselves with `medTenant`.
 import { beforeAll, beforeEach } from 'vitest';
-import { setTenant } from '../src/lib/server/tenant/context';
+import { setTenant } from '../src/platform/server/tenant/context';
 import { TEST_TENANT } from './fixtures/context';
 
 beforeAll(() => setTenant(TEST_TENANT));

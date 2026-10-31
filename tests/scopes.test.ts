@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeScope, parseScope, parseScopes, checkScope, narrowIn } from '../src/lib/server/authz/scopes';
+import { describeScope, parseScope, parseScopes, checkScope, narrowIn } from '../src/platform/server/authz/scopes';
 
 describe('parsing av SMART-scope', () => {
 	it('leser v2-scope', () => {

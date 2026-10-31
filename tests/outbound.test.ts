@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkOutboundUrl, OutboundError } from '../src/lib/server/util/outbound';
+import { checkOutboundUrl, OutboundError } from '../src/platform/server/util/outbound';
 
 /**
  * `jwks_uri` on a registered app is an address the record fetches on behalf of

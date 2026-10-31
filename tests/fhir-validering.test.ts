@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { validate, validateOrKast } from '../src/lib/server/fhir/validate';
-import { SYSTEM } from '../src/lib/server/fhir/codesystems';
-import { dateIntervall, getValues, normaliserText, parseReference, utvidDate } from '../src/lib/server/fhir/fhirpath';
-import { PATIENTCOMPARTMENT } from '../src/lib/server/fhir/searchparams';
-import { FhirError } from '../src/lib/server/fhir/outcome';
+import { validate, validateOrKast } from '../src/platform/server/fhir/validate';
+import { SYSTEM } from '../src/platform/server/fhir/codesystems';
+import { dateIntervall, getValues, normaliserText, parseReference, utvidDate } from '../src/platform/server/fhir/fhirpath';
+import { PATIENTCOMPARTMENT } from '../src/platform/server/fhir/searchparams';
+import { FhirError } from '../src/platform/server/fhir/outcome';
 
 const error = (r: unknown, type?: string) => validate(r, type).filter((i) => i.severity === 'error' || i.severity === 'fatal');
 

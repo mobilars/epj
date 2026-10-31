@@ -1,7 +1,7 @@
 import pg from 'pg';
-import { setPool, closePool, exec } from '../../src/lib/server/db/index';
-import { time } from '../../src/lib/server/tenant/context';
-import { migrate } from '../../src/lib/server/db/migrate';
+import { setPool, closePool, exec } from '../../src/platform/server/db/index';
+import { time } from '../../src/platform/server/tenant/context';
+import { migrate } from '../../src/platform/server/db/migrate';
 
 /**
  * Creates an isolated PostgreSQL database per test file, runs the migrations,

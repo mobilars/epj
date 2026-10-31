@@ -1,21 +1,21 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createHash, generateKeyPairSync, randomBytes } from 'node:crypto';
-import { one, exec, query } from '../src/lib/server/db/index';
+import { one, exec, query } from '../src/platform/server/db/index';
 import { hasTestDatabase, createTestDatabase, emptyTables, type TestDatabase, setIn } from './fixtures/db';
-import { authenticateClient, validRedirectUri, registerClient, setKlientstatus, type OAuthClient } from '../src/lib/server/auth/clients';
+import { authenticateClient, validRedirectUri, registerClient, setKlientstatus, type OAuthClient } from '../src/platform/server/auth/clients';
 import {
 	exchangeInCode,
 	consumeLaunch,
 	createAuthorisationCode,
 	createLaunch,
 	validateAuthorisationRequest
-} from '../src/lib/server/auth/oauth';
-import { renewWithRefreshToken, introspiser, pkceChallenge, revokeForUser, issueTokens, validateAccessToken } from '../src/lib/server/auth/tokens';
-import { jwks, rotateKey, emptyKeyCache } from '../src/lib/server/auth/keys';
-import { sign, type Jwk } from '../src/lib/server/auth/jws';
-import { config } from '../src/lib/server/config';
-import { newId } from '../src/lib/server/util/ids';
-import { requireTenant } from '../src/lib/server/tenant/context';
+} from '../src/platform/server/auth/oauth';
+import { renewWithRefreshToken, introspiser, pkceChallenge, revokeForUser, issueTokens, validateAccessToken } from '../src/platform/server/auth/tokens';
+import { jwks, rotateKey, emptyKeyCache } from '../src/platform/server/auth/keys';
+import { sign, type Jwk } from '../src/platform/server/auth/jws';
+import { config } from '../src/platform/server/config';
+import { newId } from '../src/platform/server/util/ids';
+import { requireTenant } from '../src/platform/server/tenant/context';
 
 const describeIf = hasTestDatabase() ? describe : describe.skip;
 
@@ -481,7 +481,7 @@ describeIf('OAuth 2.1 og SMART App Launch', () => {
 });
 
 async function getClientRow(): Promise<OAuthClient> {
-	const { getClient } = await import('../src/lib/server/auth/clients');
+	const { getClient } = await import('../src/platform/server/auth/clients');
 	const row = await one<{ client_id: string }>('SELECT client_id FROM oauth_client ORDER BY created_at LIMIT 1');
 	const client = await getClient(row?.client_id as string);
 	if (!client) throw new Error('Fant ingen klient i testdatabasen');
@@ -489,6 +489,6 @@ async function getClientRow(): Promise<OAuthClient> {
 }
 
 async function layerFremmedKey() {
-	const { generateKeyPair } = await import('../src/lib/server/auth/jws');
+	const { generateKeyPair } = await import('../src/platform/server/auth/jws');
 	return generateKeyPair();
 }

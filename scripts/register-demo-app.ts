@@ -12,9 +12,9 @@
  *   npm run register:apper
  */
 
-import { exec } from '../src/lib/server/db';
-import { getTenant } from '../src/lib/server/tenant/tenant';
-import { requireTenant, withTenant } from '../src/lib/server/tenant/context';
+import { exec } from '../src/platform/server/db';
+import { getTenant } from '../src/platform/server/tenant/tenant';
+import { requireTenant, withTenant } from '../src/platform/server/tenant/context';
 import {
 	listClients,
 	registerClient,
@@ -22,7 +22,7 @@ import {
 	setReplacesTab,
 	setRequireConsent,
 	type Placement
-} from '../src/lib/server/auth/clients';
+} from '../src/platform/server/auth/clients';
 
 const READ = 'openid fhirUser launch launch/patient online_access patient/Patient.rs';
 

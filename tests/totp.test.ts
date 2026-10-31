@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { base32Decode, base32Encode, newTotpSecret, otpauthUrl, totpCode, verifyTotp } from '../src/lib/server/auth/totp';
+import { base32Decode, base32Encode, newTotpSecret, otpauthUrl, totpCode, verifyTotp } from '../src/platform/server/auth/totp';
 
 describe('base32', () => {
 	it('koder og dekoder fram og tilbake', () => {

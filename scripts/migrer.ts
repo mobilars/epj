@@ -1,7 +1,7 @@
 /** Runs the database migrations. Used by `npm run migrer` and in CI. */
-import { migrate, currentVersion } from '../src/lib/server/db/migrate';
-import { closePool } from '../src/lib/server/db/index';
-import { ensureDefaultOrganisation } from '../src/lib/server/tenant/tenant';
+import { migrate, currentVersion } from '../src/platform/server/db/migrate';
+import { closePool } from '../src/platform/server/db/index';
+import { ensureDefaultOrganisation } from '../src/platform/server/tenant/tenant';
 
 const kjort = await migrate();
 // The default organisation gets its address and organisation details from the

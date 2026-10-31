@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { highlight, matchesAll, searchTerms } from '../src/lib/server/journal/notesearch';
+import { highlight, matchesAll, searchTerms } from '../src/apps/notes/server/notesearch';
 
 /**
  * Searching a patient's notes in memory.

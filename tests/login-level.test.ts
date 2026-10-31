@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LOGIN_LEVELS, allows, isLoginLevel, levelOfMethod, methodIsEnough } from '../src/lib/server/auth/login-level';
+import { LOGIN_LEVELS, allows, isLoginLevel, levelOfMethod, methodIsEnough } from '../src/platform/server/auth/login-level';
 
 /**
  * Hvor sterkt en bruker må bevise hvem hen er, per virksomhet.

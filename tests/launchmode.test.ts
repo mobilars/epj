@@ -5,7 +5,7 @@ import {
 	launchModeFlags,
 	launchModeOf,
 	type LaunchMode
-} from '../src/lib/server/auth/launchmode';
+} from '../src/platform/server/auth/launchmode';
 
 /**
  * Three ways to put an app in front of the user, stored as two booleans.

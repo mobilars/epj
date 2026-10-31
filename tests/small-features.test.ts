@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { templateProblem } from '../src/lib/server/journal/templates';
-import { describeDevice, describeMethod } from '../src/lib/server/auth/activesessions';
-import { isTheme, themeAttribute } from '../src/lib/server/auth/settings';
+import { templateProblem } from '../src/apps/notes/server/templates';
+import { describeDevice, describeMethod } from '../src/platform/server/auth/activesessions';
+import { isTheme, themeAttribute } from '../src/platform/server/auth/settings';
 
 const template = (over: Partial<Parameters<typeof templateProblem>[0]> = {}) => ({
 	name: 'Årskontroll diabetes',

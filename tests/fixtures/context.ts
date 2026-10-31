@@ -1,7 +1,7 @@
-import type { Tenant } from '../../src/lib/server/tenant/context';
-import type { AuthContext } from '../../src/lib/server/authz/context';
-import { parseScopes } from '../../src/lib/server/authz/scopes';
-import { permissionsForRoles, scopesForRoles, type Role } from '../../src/lib/server/authz/roles';
+import type { Tenant } from '../../src/platform/server/tenant/context';
+import type { AuthContext } from '../../src/platform/server/authz/context';
+import { parseScopes } from '../../src/platform/server/authz/scopes';
+import { permissionsForRoles, scopesForRoles, type Role } from '../../src/platform/server/authz/roles';
 
 /** Builds an access context for the tests, with the role's full scope set. */
 export function context(over: Partial<AuthContext> & { roles?: Role[] } = {}): AuthContext {

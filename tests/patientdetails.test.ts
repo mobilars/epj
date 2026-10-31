@@ -8,10 +8,10 @@ import {
 	identitySearch,
 	nationalIdOf,
 	type PatientDetails
-} from '../src/lib/server/journal/patientdetails';
-import { SYSTEM, validNorwegianNationalId } from '../src/lib/server/fhir/codesystems';
-import { toPatientDisplay } from '../src/lib/server/fhir/display';
-import type { FhirResource } from '../src/lib/server/fhir/types';
+} from '../src/platform/server/journal/patientdetails';
+import { SYSTEM, validNorwegianNationalId } from '../src/platform/server/fhir/codesystems';
+import { toPatientDisplay } from '../src/platform/server/fhir/display';
+import type { FhirResource } from '../src/platform/server/fhir/types';
 
 /** A number with correct check digits, built rather than remembered. */
 function validNumber(): string {

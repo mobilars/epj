@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ICPC2, icpc2Chapters, isIcpc2Code, lookupIcpc2, searchIcpc2 } from '../src/lib/server/terminology/icpc2';
-import { codeSystemOperation, valueSetOperation } from '../src/lib/server/terminology/operations';
-import { SYSTEM } from '../src/lib/server/fhir/codesystems';
+import { ICPC2, icpc2Chapters, isIcpc2Code, lookupIcpc2, searchIcpc2 } from '../src/platform/server/terminology/icpc2';
+import { codeSystemOperation, valueSetOperation } from '../src/platform/server/terminology/operations';
+import { SYSTEM } from '../src/platform/server/fhir/codesystems';
 
 /**
  * ICPC-2 from the Directorate's own table.

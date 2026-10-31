@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ICPC2, isIcpc2Code, lookupIcpc2, searchIcpc2, searchIcpc2WithReasons } from '../src/lib/server/terminology/icpc2';
-import { EVERYDAY_TERMS, editDistance, exclusionPointers, foldText } from '../src/lib/server/terminology/icpc2-search';
+import { ICPC2, isIcpc2Code, lookupIcpc2, searchIcpc2, searchIcpc2WithReasons } from '../src/platform/server/terminology/icpc2';
+import { EVERYDAY_TERMS, editDistance, exclusionPointers, foldText } from '../src/platform/server/terminology/icpc2-search';
 
 const top = (query: string, n = 3) => searchIcpc2(query).slice(0, n).map((c) => c.code);
 

@@ -14,8 +14,9 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
 	resolve: {
 		alias: {
-			$srv: fileURLToPath(new URL('../src/lib/server', import.meta.url)),
-			$lib: fileURLToPath(new URL('../src/lib', import.meta.url))
+			$srv: fileURLToPath(new URL('../src/platform/server', import.meta.url)),
+			$apps: fileURLToPath(new URL('../src/apps', import.meta.url)),
+			$lib: fileURLToPath(new URL('../src/platform', import.meta.url))
 		}
 	},
 	build: {

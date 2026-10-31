@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { exec } from '../src/lib/server/db/index';
+import { exec } from '../src/platform/server/db/index';
 import { hasTestDatabase, createTestDatabase, emptyTables, type TestDatabase, setIn } from './fixtures/db';
 import { appContext, context } from './fixtures/context';
 import {
@@ -11,11 +11,11 @@ import {
 	blockedPatients,
 	allowedPatients,
 	evaluate
-} from '../src/lib/server/authz/access';
-import { STOTTEDE_RESSURSTYPER } from '../src/lib/server/fhir/searchparams';
-import { newId } from '../src/lib/server/util/ids';
-import { ROLES } from '../src/lib/server/authz/roles';
-import { parseScopes } from '../src/lib/server/authz/scopes';
+} from '../src/platform/server/authz/access';
+import { STOTTEDE_RESSURSTYPER } from '../src/platform/server/fhir/searchparams';
+import { newId } from '../src/platform/server/util/ids';
+import { ROLES } from '../src/platform/server/authz/roles';
+import { parseScopes } from '../src/platform/server/authz/scopes';
 
 const describeIf = hasTestDatabase() ? describe : describe.skip;
 

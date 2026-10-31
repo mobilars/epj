@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { one, exec, query } from '../src/lib/server/db/index';
+import { one, exec, query } from '../src/platform/server/db/index';
 import { hasTestDatabase, createTestDatabase, emptyTables, type TestDatabase, setIn } from './fixtures/db';
-import { getAuditEvent, getLog, log, unreviewedEmergencyAccess, verifyLogChain, type AuditActor } from '../src/lib/server/audit';
-import { newId } from '../src/lib/server/util/ids';
+import { getAuditEvent, getLog, log, unreviewedEmergencyAccess, verifyLogChain, type AuditActor } from '../src/platform/server/audit';
+import { newId } from '../src/platform/server/util/ids';
 
 const canRun = hasTestDatabase();
 const describeIf = canRun ? describe : describe.skip;

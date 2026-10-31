@@ -31,7 +31,7 @@ COPY --from=bygg --chown=epj:epj /app/build ./build
 COPY --from=bygg --chown=epj:epj /app/node_modules ./node_modules
 COPY --from=bygg --chown=epj:epj /app/package.json ./package.json
 # Migrasjonene leses fra disk ved oppstart.
-COPY --from=bygg --chown=epj:epj /app/src/lib/server/db/migrations ./src/lib/server/db/migrations
+COPY --from=bygg --chown=epj:epj /app/src/platform/server/db/migrations ./src/platform/server/db/migrations
 
 USER epj
 EXPOSE 3000

@@ -18,12 +18,12 @@
  * Synthetic numbers from HelseID's own test set. They belong to no real person.
  */
 
-import { exec, one, query } from '../src/lib/server/db';
-import { ensureDefaultOrganisation, getTenant } from '../src/lib/server/tenant/tenant';
-import { PLATFORM_TENANT, requireTenant, withTenant } from '../src/lib/server/tenant/context';
-import { createUser } from '../src/lib/server/auth/users';
-import { newId } from '../src/lib/server/util/ids';
-import type { Role } from '../src/lib/server/authz/roles';
+import { exec, one, query } from '../src/platform/server/db';
+import { ensureDefaultOrganisation, getTenant } from '../src/platform/server/tenant/tenant';
+import { PLATFORM_TENANT, requireTenant, withTenant } from '../src/platform/server/tenant/context';
+import { createUser } from '../src/platform/server/auth/users';
+import { newId } from '../src/platform/server/util/ids';
+import type { Role } from '../src/platform/server/authz/roles';
 
 interface TestPerson {
 	nationalId: string;

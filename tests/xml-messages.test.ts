@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { document, el, find, parseXml, serialiser, textValue } from '../src/lib/server/util/xml';
-import { buildMsgHead, ownPart, MESSAGETYPES, type Part, type PatientPart } from '../src/lib/server/integrations/nhn/msg-head';
-import { buildDialogueMessage, buildDischargeSummary, buildReferral, buildLabOrder, DIALOG_TEMA } from '../src/lib/server/integrations/nhn/messages';
-import { APPREC_ERROR, buildApprec, readApprec, readMsgHead } from '../src/lib/server/integrations/nhn/apprec';
+import { document, el, find, parseXml, serialiser, textValue } from '../src/platform/server/util/xml';
+import { buildMsgHead, ownPart, MESSAGETYPES, type Part, type PatientPart } from '../src/apps/messages/server/nhn/msg-head';
+import { buildDialogueMessage, buildDischargeSummary, buildReferral, buildLabOrder, DIALOG_TEMA } from '../src/apps/messages/server/nhn/messages';
+import { APPREC_ERROR, buildApprec, readApprec, readMsgHead } from '../src/apps/messages/server/nhn/apprec';
 
 const recipient: Part = {
 	name: 'Oslo universitetssykehus HF',
