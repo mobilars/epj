@@ -284,11 +284,25 @@ vises som avvist. Manglende databehandleravtale varsles.
 *Realisert:* `autentiserKlient()`, token-endepunktet.
 *Testet:* `tests/oauth.test.ts`.
 
-**K-4.7 Apper skal registreres, og kunne sperres.**
-Registrering er administrativ og loggført. Sperring trekker samtidig tilbake
-alle appens tokens.
-*Realisert:* `src/platform/routes/admin/apper/`.
-*Testet:* `tests/oauth.test.ts`.
+**K-4.7 Apper skal registreres gjennom utviklerportalen, og kunne sperres.**
+Utviklere registrerer apper i utviklerportalen, og plattformeier godkjenner dem.
+En virksomhet installerer fra appgalleriet og kan ikke registrere apper selv eller
+endre adressene og tilgangene til en installert app. Sperring trekker samtidig
+tilbake alle appens tokens, og en app plattformeier har trukket tilbake kan ikke
+aktiveres igjen av virksomheten.
+*Realisert:* `src/platform/server/developer/catalogue.ts`,
+`src/platform/routes/admin/apper/`.
+*Testet:* `tests/oauth.test.ts`, `tests/catalogue.test.ts`.
+
+**K-4.7a En app som ikke er godkjent, skal være tydelig merket.**
+En virksomhet kan installere en app som venter på vurdering, men må bekrefte det
+uttrykkelig. Appen merkes med varseltrekant i rammen, på lenker og i
+samtykkedialogen, også når merking av eksterne apper er slått av. Virksomheten kan
+ikke godkjenne en slik app på brukernes vegne. Merkingen forsvinner når
+plattformeier godkjenner appen, og det som da kjører, er det som ble godkjent.
+Apper som ble registrert direkte før denne regelen, virker videre og er merket.
+*Realisert:* `unapprovedClients()`, `ExternalFrame.svelte`, `/oauth/authorize`.
+*Testet:* `tests/catalogue.test.ts`, `e2e/smart.spec.ts`.
 
 **K-4.8 API-et skal ikke lekke informasjon i feilmeldinger.**
 Feil returneres som `OperationOutcome`. Interne detaljer logges på serveren;

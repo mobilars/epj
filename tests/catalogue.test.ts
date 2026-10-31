@@ -3,8 +3,8 @@ import { exec, one, query } from '../src/platform/server/db/index';
 import { hasTestDatabase, createTestDatabase, emptyTables, type TestDatabase } from './fixtures/db';
 import { withTenant } from '../src/platform/server/tenant/context';
 import { getTenant } from '../src/platform/server/tenant/tenant';
-import { getClient } from '../src/platform/server/auth/clients';
-import { createApp, submitApp, reviewApp, installApp, uninstallApp, getCatalogueApp, publishersForTenant } from '../src/platform/server/developer/catalogue';
+import { getClient, registerClient } from '../src/platform/server/auth/clients';
+import { createApp, submitApp, reviewApp, installApp, uninstallApp, getCatalogueApp, publishersForTenant, unapprovedClients, mayBeActivated, installableApps, updateApp } from '../src/platform/server/developer/catalogue';
 import type { Tenant } from '../src/platform/server/tenant/context';
 
 const describeIf = hasTestDatabase() ? describe : describe.skip;
@@ -85,6 +85,78 @@ describeIf('catalogue', () => {
 
 		await exec("UPDATE developer SET organisation = 'Appmakerne AS' WHERE id = 'dev1'");
 		expect((await withTenant(a, () => publishersForTenant())).get(clientId)?.publisher).toBe('Appmakerne AS');
+	});
+
+	describe('approval by the platform owner', () => {
+		async function submitted(): Promise<string> {
+			const id = await createApp('dev1', {
+				name: 'Uvurdert', summary: 's', description: 'd', launchUrl: 'https://u.example/launch?c={client_id}',
+				redirectUris: ['https://u.example/cb'], scopes: ['launch'], placement: 'ingen',
+				contactEmail: '', privacyUrl: '', databehandleravtale: ''
+			});
+			await submitApp(id, 'dev1');
+			return id;
+		}
+
+		it('offers an app waiting for review, but not a draft or a refused one', async () => {
+			const waiting = await submitted();
+			const draft = await createApp('dev1', {
+				name: 'Utkast', summary: '', description: '', launchUrl: 'https://d.example/launch',
+				redirectUris: ['https://d.example/cb'], scopes: ['launch'], placement: 'ingen',
+				contactEmail: '', privacyUrl: '', databehandleravtale: ''
+			});
+			const refused = await submitted();
+			await reviewApp(refused, false, 'nei', null);
+
+			const offered = (await withTenant(a, () => installableApps())).map((app) => app.id);
+			expect(offered).toContain(waiting);
+			expect(offered).toContain(appId);
+			expect(offered).not.toContain(draft);
+			expect(offered).not.toContain(refused);
+		});
+
+		it('marks an installed app until it is approved, and then what runs is what was approved', async () => {
+			const id = await submitted();
+			const { clientId } = await withTenant(a, async () => installApp((await getCatalogueApp(id))!, null));
+			expect(await withTenant(a, () => unapprovedClients())).toContain(clientId);
+
+			await updateApp(id, 'dev1', {
+				name: 'Uvurdert', summary: 's', description: 'd', launchUrl: 'https://ny.example/launch?c={client_id}',
+				redirectUris: ['https://ny.example/cb'], scopes: ['launch', 'patient/Patient.rs'], placement: 'ingen',
+				contactEmail: '', privacyUrl: '', databehandleravtale: ''
+			});
+			await reviewApp(id, true, 'ok', null);
+
+			expect(await withTenant(a, () => unapprovedClients())).not.toContain(clientId);
+			const client = (await withTenant(a, () => getClient(clientId)))!;
+			expect(client.redirect_uris).toEqual(['https://ny.example/cb']);
+			expect(client.allowed_scopes).toEqual(['launch', 'patient/Patient.rs']);
+			expect(client.launch_url).toBe(`https://ny.example/launch?c=${clientId}`);
+		});
+
+		it('marks a directly registered app, but not one the platform registered itself', async () => {
+			const [direct, own] = await withTenant(a, async () => [
+				(await registerClient({ name: 'Direkte', type: 'public', category: 'smart-ehr', redirectUris: ['https://x.example/cb'], scopes: ['launch'] })).client,
+				(await registerClient({ name: 'Egen', type: 'public', category: 'smart-ehr', redirectUris: ['https://y.example/cb'], scopes: ['launch'], firstParty: true })).client
+			]);
+			const unapproved = await withTenant(a, () => unapprovedClients());
+			expect(unapproved).toContain(direct.client_id);
+			expect(unapproved).not.toContain(own.client_id);
+		});
+
+		it('a withdrawn or removed app cannot be switched back on by the practice', async () => {
+			const app = (await getCatalogueApp(appId))!;
+			const { clientId } = await withTenant(a, () => installApp(app, null));
+			expect(await withTenant(a, () => mayBeActivated(clientId))).toBe(true);
+
+			await reviewApp(appId, false, 'trukket', null);
+			expect(await withTenant(a, () => mayBeActivated(clientId))).toBe(false);
+
+			await reviewApp(appId, true, 'ok igjen', null);
+			expect(await withTenant(a, () => mayBeActivated(clientId))).toBe(true);
+			await withTenant(a, () => uninstallApp(appId));
+			expect(await withTenant(a, () => mayBeActivated(clientId))).toBe(false);
+		});
 	});
 
 	it('uninstalling blocks the client and revokes its tokens', async () => {

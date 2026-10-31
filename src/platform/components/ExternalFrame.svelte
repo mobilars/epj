@@ -6,13 +6,14 @@
 	 * a clinician has to be able to see at a glance which of the two they are in.
 	 *
 	 * All frames go through here, so a new place to show an app cannot forget the
-	 * marking. It is on unless the person has turned it off under Innstillinger.
+	 * marking. It is on unless the person has turned it off under Innstillinger,
+	 * except for an app the platform owner has not approved, which is always marked.
 	 *
 	 * The app's name opens who made it and where it runs. A native popover, because
 	 * the frame's rounded edge clips anything hanging off the strip inside it.
 	 */
 	import { page } from '$app/state';
-	import { externalAppLabel } from '$lib/external-app';
+	import { externalAppLabel, NOT_APPROVED, NOT_APPROVED_EXPLANATION } from '$lib/external-app';
 	import type { HTMLIframeAttributes } from 'svelte/elements';
 
 	interface AppDetails {
@@ -20,6 +21,7 @@
 		publisher: string | null;
 		contactEmail: string | null;
 		host: string | null;
+		approved: boolean;
 	}
 
 	let {
@@ -38,10 +40,11 @@
 		class?: string;
 	} = $props();
 
-	const marked = $derived(page.data.markExternalApps !== false);
 	const details = $derived(
 		clientId ? ((page.data.apps ?? []) as AppDetails[]).find((app) => app.clientId === clientId) : undefined
 	);
+	const unapproved = $derived(details?.approved === false);
+	const marked = $derived(page.data.markExternalApps !== false || unapproved);
 	const popoverId = $props.id();
 
 	let nameButton = $state<HTMLButtonElement | null>(null);
@@ -57,11 +60,11 @@
 	}
 </script>
 
-<div class="ekstern" class:merket={marked}>
+<div class="ekstern" class:merket={marked} class:ikke-godkjent={unapproved}>
 	{#if marked}
 		<div class="ekstern-stripe">
 			{#if details}
-				{externalAppLabel('')}<button type="button" class="appnavn" popovertarget={popoverId} bind:this={nameButton}>{title}</button>
+				{#if unapproved}<span aria-hidden="true">⚠ </span>{/if}{externalAppLabel('')}<button type="button" class="appnavn" popovertarget={popoverId} bind:this={nameButton}>{title}</button>{#if unapproved}{` - ${NOT_APPROVED}`}{/if}
 			{:else}
 				{label ?? externalAppLabel(title)}
 			{/if}
@@ -72,6 +75,9 @@
 					<h3>{title}</h3>
 					<button type="button" class="liten" popovertarget={popoverId} popovertargetaction="hide">Lukk</button>
 				</div>
+				{#if unapproved}
+					<p class="appinfo-advarsel"><strong>⚠ Ikke godkjent av plattformeier.</strong> {NOT_APPROVED_EXPLANATION}</p>
+				{/if}
 				<dl>
 					<dt>Laget av</dt>
 					<dd>
@@ -103,6 +109,24 @@
 		font-weight: 600;
 		line-height: 1.2;
 		padding: 0.15rem 0.5rem 0.25rem;
+	}
+
+	/* Amber rather than the usual colour, so the difference shows without reading. */
+	.ikke-godkjent.merket {
+		border-color: var(--advarsel);
+	}
+
+	.ikke-godkjent .ekstern-stripe {
+		background: var(--advarsel);
+		color: var(--flate);
+	}
+
+	.appinfo-advarsel {
+		margin: 0 0 0.5rem;
+		padding: 0.5rem 0.6rem;
+		background: var(--advarsel-svak);
+		border-radius: var(--radius);
+		font-size: 0.85rem;
 	}
 
 	.appnavn {

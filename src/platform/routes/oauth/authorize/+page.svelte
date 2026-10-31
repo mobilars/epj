@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { NOT_APPROVED_EXPLANATION } from '$lib/external-app';
 	let { data, form } = $props();
 </script>
 
@@ -19,6 +20,12 @@
 				{data.client.category === 'smart-ehr' ? 'Journalstartet app' : 'Selvstendig app'}
 			</span>
 		</div>
+
+		{#if !data.client.approved}
+			<div class="varsel varsel-advarsel" role="alert" style="margin-top: 1rem">
+				<strong>⚠ Ikke godkjent av plattformeier.</strong> {NOT_APPROVED_EXPLANATION}
+			</div>
+		{/if}
 
 		{#if data.launch.patientId}
 			<div class="varsel varsel-info" style="margin-top: 1rem">

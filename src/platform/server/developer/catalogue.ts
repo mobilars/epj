@@ -17,7 +17,9 @@ import { requireTenant } from '../tenant/context';
  * The status of an entry moves:
  *
  *   utkast        the developer is still working on it
- *   til-vurdering submitted, waiting for the platform
+ *   til-vurdering submitted, waiting for the platform. A practice may install it,
+ *                 having confirmed that it knows, and the app is marked as not
+ *                 approved wherever it is shown
  *   godkjent      installable
  *   avvist        refused, with a reason the developer can read
  *
@@ -141,7 +143,19 @@ export async function reviewApp(id: string, approved: boolean, note: string, rev
 			 WHERE id = $1`,
 			[id, approved ? 'godkjent' : 'avvist', note, reviewer]
 		);
-		if (!approved) {
+		if (approved) {
+			// What runs is what was approved. A practice may have installed this
+			// before the review, and the developer may have edited it since.
+			await exec(
+				`UPDATE oauth_client c
+				 SET redirect_uris = a.redirect_uris, allowed_scopes = a.scopes,
+					 launch_url = REPLACE(a.launch_url, '{client_id}', c.client_id)
+				 FROM catalogue_install i
+				 JOIN catalogue_app a ON a.id = i.catalogue_id
+				 WHERE i.catalogue_id = $1 AND c.tenant_id = i.tenant_id AND c.client_id = i.client_id`,
+				[id]
+			);
+		} else {
 			// Deliberately across organisations: the platform is the one caller
 			// that may reach into every practice's client register for this.
 			await exec(
@@ -168,15 +182,15 @@ export async function installCounts(): Promise<Map<string, number>> {
 }
 
 /**
- * What the practice's gallery shows: every approved app, plus any app this
- * practice installed that has since lost its approval. The latter has already
- * been blocked; it stays listed so the administrator learns why, instead of
- * finding the app gone and the users asking.
+ * What the practice's gallery shows: every approved app, every app waiting for
+ * review, plus any app this practice installed that has since lost its approval.
+ * The last has already been blocked; it stays listed so the administrator learns
+ * why, instead of finding the app gone and the users asking.
  */
 export async function installableApps(): Promise<CatalogueApp[]> {
 	return query<CatalogueApp>(
 		`SELECT ${FIELD} FROM catalogue_app
-		 WHERE status = 'godkjent'
+		 WHERE status IN ('godkjent', 'til-vurdering')
 		    OR id IN (SELECT catalogue_id FROM catalogue_install WHERE tenant_id = $1)
 		 ORDER BY name`,
 		[requireTenant().id]
@@ -202,6 +216,43 @@ export async function publishersForTenant(): Promise<Map<string, { publisher: st
 			{ publisher: row.organisation || row.name || null, contactEmail: row.contact_email || null }
 		])
 	);
+}
+
+/**
+ * The apps in this practice the platform owner has not approved.
+ *
+ * Asked rather than stored, so the marking goes away by itself the moment the
+ * platform owner approves an app.
+ */
+export async function unapprovedClients(): Promise<Set<string>> {
+	const rows = await query<{ client_id: string }>(
+		`SELECT c.client_id
+		 FROM oauth_client c
+		 LEFT JOIN catalogue_install i ON i.tenant_id = c.tenant_id AND i.client_id = c.client_id
+		 LEFT JOIN catalogue_app a ON a.id = i.catalogue_id
+		 WHERE c.tenant_id = $1 AND NOT c.first_party AND a.status IS DISTINCT FROM 'godkjent'`,
+		[requireTenant().id]
+	);
+	return new Set(rows.map((row) => row.client_id));
+}
+
+/**
+ * Whether a practice may switch this app back on.
+ *
+ * An app the platform withdrew has to stay off, and so does one removed from the
+ * practice: its client stays behind for the log's sake, and switching that on would
+ * bring the app back outside the catalogue.
+ */
+export async function mayBeActivated(clientId: string): Promise<boolean> {
+	const row = await one<{ ok: boolean }>(
+		`SELECT c.first_party OR a.status IN ('godkjent', 'til-vurdering') AS ok
+		 FROM oauth_client c
+		 LEFT JOIN catalogue_install i ON i.tenant_id = c.tenant_id AND i.client_id = c.client_id
+		 LEFT JOIN catalogue_app a ON a.id = i.catalogue_id
+		 WHERE c.client_id = $1 AND c.tenant_id = $2`,
+		[clientId, requireTenant().id]
+	);
+	return row?.ok === true;
 }
 
 export interface Install {

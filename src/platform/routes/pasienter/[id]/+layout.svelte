@@ -50,7 +50,8 @@
 				: `/pasienter/${data.patientId}${segment ? `/${segment}` : ''}`,
 			text,
 			app: Boolean(app),
-			appName: app?.name
+			appName: app?.name,
+			approved: !app || page.data.apps?.find((a: { clientId: string }) => a.clientId === app.clientId)?.approved !== false
 		};
 	};
 
@@ -95,7 +96,7 @@
 	// with this patient in context - the Apper tab was a page you had to open
 	// before you could press start. An app the practice has given a tab of its
 	// own sits beside the record's tabs; the rest wait under the dropdown.
-	const apps = $derived((page.data.apps ?? []) as { clientId: string; name: string; inPatientTabs?: boolean; openInNewTab?: boolean }[]);
+	const apps = $derived((page.data.apps ?? []) as { clientId: string; name: string; approved: boolean; inPatientTabs?: boolean; openInNewTab?: boolean }[]);
 	/**
 	 * Where a link to an app should go.
 	 *
@@ -148,20 +149,20 @@
 			<a
 				href={f.href}
 				class:ekstern-lenke={f.app}
-				title={f.appName ? externalAppLabel(f.appName) : undefined}
+				title={f.appName ? externalAppLabel(f.appName, f.approved) : undefined}
 				aria-current={page.url.pathname === f.href ? 'page' : undefined}
-			>{f.text}</a>
+			>{#if !f.approved}⚠ {/if}{f.text}</a>
 		{/each}
 		{#each tabAppsOwn as app (app.clientId)}
 			{@const href = appLenke(app)}
 			<a
 				{href}
 				class="ekstern-lenke"
-				title={externalAppLabel(app.name)}
+				title={externalAppLabel(app.name, app.approved)}
 				target={app.openInNewTab ? '_blank' : undefined}
 				rel={app.openInNewTab ? 'noopener' : undefined}
 				aria-current={page.url.pathname === href ? 'page' : undefined}
-			>{app.name}{#if app.openInNewTab} ↗{/if}</a>
+			>{#if !app.approved}⚠ {/if}{app.name}{#if app.openInNewTab} ↗{/if}</a>
 		{/each}
 
 		<Nedtrekk etikett="Apper ▾">
@@ -170,10 +171,10 @@
 						<a
 							href={appLenke(app)}
 							class="ekstern-lenke"
-							title={externalAppLabel(app.name)}
+							title={externalAppLabel(app.name, app.approved)}
 							target={app.openInNewTab ? '_blank' : undefined}
 							rel={app.openInNewTab ? 'noopener' : undefined}
-						>{app.name}{#if app.openInNewTab} ↗{/if}</a>
+						>{#if !app.approved}⚠ {/if}{app.name}{#if app.openInNewTab} ↗{/if}</a>
 					{:else}
 						<span class="svak" style="padding: 0.4rem 0.55rem">
 							{apps.length ? 'Alle apper har egen fane.' : 'Ingen apper er registrert.'}
@@ -186,7 +187,7 @@
 			<Nedtrekk etikett="Mer ▾" aktiv={paMerSide}>
 				{#snippet children()}
 					{#each merFaner as f (f.text)}
-						<a href={f.href} aria-current={page.url.pathname === f.href ? 'page' : undefined}>{f.text}</a>
+						<a href={f.href} aria-current={page.url.pathname === f.href ? 'page' : undefined}>{#if !f.approved}⚠ {/if}{f.text}</a>
 					{/each}
 				{/snippet}
 			</Nedtrekk>

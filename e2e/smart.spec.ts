@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { createHash, randomBytes } from 'node:crypto';
+import pg from 'pg';
 import { logIn, waitOnHydration } from './hjelpere';
 
 /**
@@ -115,6 +116,41 @@ test.describe('SMART on FHIR', () => {
 		await expect(details).toBeVisible();
 		await page.keyboard.press('Escape');
 		await expect(details).toBeHidden();
+	});
+
+	test('an app the platform owner has not approved is marked, even with marking turned off', async ({ page }) => {
+		const db = new pg.Client({ connectionString: process.env.E2E_DATABASE_URL });
+		await db.connect();
+		const setFirstParty = (value: boolean) =>
+			db.query("UPDATE epj.oauth_client SET first_party = $1 WHERE name = 'Diabetesoversikt (demo)'", [value]);
+		await setFirstParty(false);
+		try {
+			await logIn(page, 'lege');
+			const clientId = await getClientId(page);
+			const patientId = page.url().split('/pasienter/')[1].split(/[/?]/)[0];
+			await page.goto(`/innstillinger`);
+			await page.getByLabel('Merk eksterne apper').uncheck();
+			await page.locator('form[action="?/externalApps"] button').click();
+			await expect(page.getByLabel('Merk eksterne apper')).not.toBeChecked();
+
+			await page.goto(`/pasienter/${patientId}/apper/${clientId}`);
+			await waitOnHydration(page);
+			const stripe = page.locator('.ekstern-stripe');
+			await expect(stripe).toContainText('⚠');
+			await expect(stripe).toContainText('Diabetesoversikt (demo) - ikke godkjent av plattformeier');
+			await stripe.getByRole('button', { name: 'Diabetesoversikt (demo)' }).click();
+			await expect(page.locator('.appinfo')).toContainText('Plattformeier har ikke vurdert denne appen');
+
+			// The practice cannot wave the question away, and the user is told.
+			await page.goto(`/pasienter/${patientId}/apper`);
+			await expect(page.getByText('⚠ ikke godkjent av plattformeier')).toBeVisible();
+		} finally {
+			await setFirstParty(true);
+			await db.end();
+			await page.goto(`/innstillinger`);
+			await page.getByLabel('Merk eksterne apper').check();
+			await page.locator('form[action="?/externalApps"] button').click();
+		}
 	});
 
 	test('the hop back refuses an address no app has registered', async ({ request }) => {

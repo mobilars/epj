@@ -6,6 +6,7 @@ import { describeScope, narrowIn } from '$srv/authz/scopes';
 import { scopesForRoles } from '$srv/authz/roles';
 import { log } from '$srv/audit';
 import { alreadyConsented, rememberConsent } from '$srv/auth/consent';
+import { unapprovedClients } from '$srv/developer/catalogue';
 import { fhirClient } from '$srv/fhir/client';
 import type { FhirResource } from '$srv/fhir/types';
 
@@ -95,9 +96,14 @@ export const load: PageServerLoad = async (event) => {
 	 * it placed in the record itself, or this user has agreed to these scopes
 	 * before. Anything the user has not already granted brings the dialog back,
 	 * which is when there is something to read.
+	 *
+	 * A practice cannot grant on everyone's behalf for an app the platform owner
+	 * has not approved: each user is told, once, what they are agreeing to use.
 	 */
+	const approved = !(await unapprovedClients()).has(validation.client.client_id);
+	const grantedByPractice = approved && !validation.client.require_consent;
 	const alreadyGranted =
-		!validation.client.require_consent ||
+		grantedByPractice ||
 		(await alreadyConsented(ctx.userId as string, validation.client.client_id, innsnevret));
 
 	if (alreadyGranted && innsnevret) {
@@ -121,7 +127,7 @@ export const load: PageServerLoad = async (event) => {
 				details: {
 					client_id: validation.client.client_id,
 					scope: innsnevret,
-					grunnlag: validation.client.require_consent ? 'tidligere samtykke' : 'godkjent av virksomheten'
+					grunnlag: grantedByPractice ? 'godkjent av virksomheten' : 'tidligere samtykke'
 				}
 			},
 			{
@@ -151,7 +157,8 @@ export const load: PageServerLoad = async (event) => {
 			clientId: validation.client.client_id,
 			logoUrl: validation.client.logo_url,
 			category: validation.client.client_category,
-			databehandleravtale: validation.client.databehandleravtale
+			databehandleravtale: validation.client.databehandleravtale,
+			approved
 		},
 		user: { name: ctx.name, roles: ctx.roles },
 		scopes: innsnevret.split(/\s+/).filter(Boolean).map((s) => ({ scope: s, description: describeScope(s) })),

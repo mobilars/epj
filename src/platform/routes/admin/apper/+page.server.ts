@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { listClients, registerClient, setKlientstatus, type ClientCategory , setInMainMenu, setInPatientTabs, setLaunchMode, updateClient, setPlacement, setRequireConsent, type Placement } from '$srv/auth/clients';
+import { listClients, setDatabehandleravtale, setKlientstatus, setInMainMenu, setInPatientTabs, setLaunchMode, setPlacement, setRequireConsent, type Placement } from '$srv/auth/clients';
+import { mayBeActivated, unapprovedClients } from '$srv/developer/catalogue';
 import { isLaunchMode, launchModeOf } from '$srv/auth/launchmode';
 import { createLaunch } from '$srv/auth/oauth';
 import { describeScope } from '$srv/authz/scopes';
@@ -12,9 +13,12 @@ import { fhirBaseFor, requireTenant, issuerFor } from '$srv/tenant/context';
 /**
  * Register of SMART apps and backend services.
  *
- * Registration is an administrative act: an app not listed here does not reach
- * the record. The data processing agreement is recorded with the app, so the
- * consent dialog can warn if it is missing.
+ * An app reaches this list by being installed from the gallery: developers
+ * register apps in the developer portal, and the platform owner approves them. A
+ * practice decides where an installed app appears and whether it may run, but not
+ * what it may do, since its addresses and scopes are what was reviewed. The data
+ * processing agreement is the practice's own, recorded with the app so the consent
+ * dialog can warn if it is missing.
  */
 export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
@@ -27,6 +31,7 @@ export const load: PageServerLoad = async (event) => {
 		[requireTenant().id]
 	);
 	const tokenKart = new Map(aktiveTokens.map((t) => [t.client_id, t.n]));
+	const unapproved = await unapprovedClients();
 
 	return {
 		fhirBaseUrl: fhirBaseFor(requireTenant()),
@@ -35,6 +40,7 @@ export const load: PageServerLoad = async (event) => {
 		apper: (await listClients()).map((k) => ({
 			clientId: k.client_id,
 			name: k.name,
+			approved: !unapproved.has(k.client_id),
 			type: k.type,
 			category: k.client_category,
 			redirectUris: k.redirect_uris,
@@ -49,9 +55,6 @@ export const load: PageServerLoad = async (event) => {
 			placement: k.placement,
 			requireConsent: k.require_consent,
 			hasKeys: Boolean(k.jwks || k.jwks_uri),
-			jwksUri: k.jwks_uri ?? '',
-			jwks: k.jwks ? JSON.stringify(k.jwks, null, 1) : '',
-			logoUrl: k.logo_url ?? '',
 			aktiveTokens: tokenKart.get(k.client_id) ?? 0,
 			created_at: new Date(k.created_at).toLocaleDateString('nb-NO')
 		}))
@@ -59,112 +62,15 @@ export const load: PageServerLoad = async (event) => {
 };
 
 export const actions: Actions = {
-	register: async (event) => {
-		const ctx = event.locals.auth;
-		if (!ctx?.permissions.has('admin:apper')) return fail(403, { error: 'Ingen tilgang.' });
-		const form = await event.request.formData();
-		// Handed back on failure so the form fills itself in again.
-		const values = Object.fromEntries(
-			['navn', 'kategori', 'type', 'redirectUris', 'scopes', 'launchUrl', 'jwks', 'jwksUri', 'logoUrl', 'databehandleravtale'].map(
-				(f) => [f, String(form.get(f) ?? '')]
-			)
-		);
-		const name = String(form.get('navn') ?? '').trim();
-		const redirectUris = String(form.get('redirectUris') ?? '').split(/\s+/).filter(Boolean);
-		const scopes = String(form.get('scopes') ?? '').split(/\s+/).filter(Boolean);
-		const category = String(form.get('kategori') ?? 'smart-ehr') as ClientCategory;
-		const type = String(form.get('type') ?? 'public') as 'public' | 'confidential';
-
-		if (!name) return fail(400, { error: 'Appen må ha et navn.', values });
-		if (category !== 'backend' && redirectUris.length === 0) {
-			return fail(400, { error: 'SMART-apper må ha minst én redirect-URI.', values });
-		}
-
-		let jwks: { keys: JsonWebKey[] } | undefined;
-		const jwksText = String(form.get('jwks') ?? '').trim();
-		if (jwksText) {
-			try {
-				jwks = JSON.parse(jwksText);
-			} catch {
-				return fail(400, { error: 'JWKS er ikke gyldig JSON.', values });
-			}
-		}
-		if (category === 'backend' && !jwks && !String(form.get('jwksUri') ?? '').trim()) {
-			return fail(400, { error: 'Backend-tjenester må autentisere med private_key_jwt, og trenger JWKS eller jwks_uri.', values });
-		}
-
-		const { client, secret } = await registerClient({
-			name, type, category, redirectUris, scopes,
-			jwks,
-			jwksUri: String(form.get('jwksUri') ?? '').trim() || undefined,
-			launchUrl: String(form.get('launchUrl') ?? '').trim() || undefined,
-			inMainMenu: form.get('iHovedmeny') === 'ja',
-			databehandleravtale: String(form.get('databehandleravtale') ?? '').trim() || undefined,
-			createdOf: ctx.userId ?? undefined
-		});
-		await log(
-			{ type: 'admin', subtype: 'app:registrert', action: 'C', outcome: '0', entityRef: `Device/${client.client_id}`, details: { name, category, scopes: scopes.join(' ') } },
-			actorFromContext(ctx)
-		);
-		return { ok: true, clientId: client.client_id, secret };
-	},
-
-	oppdater: async (event) => {
+	databehandleravtale: async (event) => {
 		const ctx = event.locals.auth;
 		if (!ctx?.permissions.has('admin:apper')) return fail(403, { error: 'Ingen tilgang.' });
 		const form = await event.request.formData();
 		const clientId = String(form.get('clientId') ?? '');
-		const existing = (await listClients()).find((c) => c.client_id === clientId);
-		if (!existing) return fail(404, { error: 'Ukjent app.' });
-
-		const name = String(form.get('navn') ?? '').trim();
-		const redirectUris = String(form.get('redirectUris') ?? '').split(/\s+/).filter(Boolean);
-		const scopes = String(form.get('scopes') ?? '').split(/\s+/).filter(Boolean);
-		if (!name) return fail(400, { error: 'Appen må ha et navn.' });
-		if (existing.client_category !== 'backend' && redirectUris.length === 0) {
-			return fail(400, { error: 'SMART-apper må ha minst én redirect-URI.' });
-		}
-		// An exact address, https except on localhost, and no fragment.
-		const badUri = redirectUris.find((u) => {
-			try {
-				const url = new URL(u);
-				const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
-				return (url.protocol !== 'https:' && !local) || Boolean(url.hash);
-			} catch {
-				return true;
-			}
-		});
-		if (badUri) return fail(400, { error: `Ugyldig redirect-URI: ${badUri}` });
-
-		let jwks: { keys: JsonWebKey[] } | undefined;
-		const jwksText = String(form.get('jwks') ?? '').trim();
-		if (jwksText) {
-			try {
-				jwks = JSON.parse(jwksText);
-			} catch {
-				return fail(400, { error: 'JWKS er ikke gyldig JSON.' });
-			}
-		}
-		const jwksUri = String(form.get('jwksUri') ?? '').trim() || undefined;
-		if (existing.client_category === 'backend' && !jwks && !jwksUri) {
-			return fail(400, { error: 'Backend-tjenester trenger JWKS eller jwks_uri.' });
-		}
-
-		await updateClient(clientId, {
-			name, redirectUris, scopes, jwks, jwksUri,
-			launchUrl: String(form.get('launchUrl') ?? '').trim() || undefined,
-			logoUrl: String(form.get('logoUrl') ?? '').trim() || undefined,
-			databehandleravtale: String(form.get('databehandleravtale') ?? '').trim() || undefined
-		});
+		const value = String(form.get('databehandleravtale') ?? '').trim() || null;
+		await setDatabehandleravtale(clientId, value);
 		await log(
-			{
-				type: 'admin', subtype: 'app:endret', action: 'U', outcome: '0', entityRef: `Device/${clientId}`,
-				details: {
-					name, redirectUris: redirectUris.join(' '), scopes: scopes.join(' '),
-					previousName: existing.name, previousRedirectUris: existing.redirect_uris.join(' '),
-					previousScopes: existing.allowed_scopes.join(' ')
-				}
-			},
+			{ type: 'admin', subtype: 'app:endret', action: 'U', outcome: '0', entityRef: `Device/${clientId}`, details: { databehandleravtale: value } },
 			actorFromContext(ctx)
 		);
 		redirect(303, '/admin/apper');
@@ -210,6 +116,9 @@ export const actions: Actions = {
 		const form = await event.request.formData();
 		const clientId = String(form.get('clientId') ?? '');
 		const requireConsent = form.get('krevSamtykke') === 'ja';
+		if (!requireConsent && (await unapprovedClients()).has(clientId)) {
+			return fail(400, { error: 'En app som ikke er godkjent av plattformeier, må godkjennes av hver bruker.' });
+		}
 		await setRequireConsent(clientId, requireConsent);
 		await log(
 			{ type: 'admin', subtype: 'app:samtykke', action: 'U', outcome: '0', entityRef: `Device/${clientId}`, details: { requireConsent } },
@@ -224,6 +133,9 @@ export const actions: Actions = {
 		const form = await event.request.formData();
 		const clientId = String(form.get('clientId') ?? '');
 		const status = String(form.get('status') ?? 'aktiv') as 'aktiv' | 'sperret';
+		if (status === 'aktiv' && !(await mayBeActivated(clientId))) {
+			return fail(400, { error: 'Appen kan ikke aktiveres igjen. Installer den fra appgalleriet hvis den er tilgjengelig der.' });
+		}
 		await setKlientstatus(clientId, status);
 		await log(
 			{ type: 'admin', subtype: 'app:status', action: 'U', outcome: '0', entityRef: `Device/${clientId}`, details: { status } },
@@ -235,7 +147,7 @@ export const actions: Actions = {
 	/** Launches an app from the record (EHR launch), to try the integration. */
 	testlaunch: async (event) => {
 		const ctx = event.locals.auth;
-		if (!ctx?.userId) return fail(403, { error: 'Ingen tilgang.' });
+		if (!ctx?.userId || !ctx.permissions.has('admin:apper')) return fail(403, { error: 'Ingen tilgang.' });
 		const form = await event.request.formData();
 		const clientId = String(form.get('clientId') ?? '');
 		const patientId = String(form.get('patientId') ?? '').trim() || null;

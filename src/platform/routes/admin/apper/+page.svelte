@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { NOT_APPROVED, NOT_APPROVED_EXPLANATION } from '$lib/external-app';
 	let { data, form } = $props();
 
 	/**
@@ -38,7 +39,7 @@
 
 <div class="rad-mellom">
 	<h2>SMART-apper og tjenester</h2>
-	<a class="knapp" href="/admin/apper/galleri">Appgalleri</a>
+	<a class="knapp knapp-primar" href="/admin/apper/galleri">Legg til fra appgalleriet</a>
 </div>
 
 <div class="varsel varsel-info">
@@ -50,12 +51,6 @@
 </div>
 
 {#if form?.error}<div class="varsel varsel-feil" role="alert">{form.error}</div>{/if}
-{#if form?.clientId}
-	<div class="varsel varsel-ok" role="status">
-		Registrert. <span class="mono">client_id: {form.clientId}</span>
-		{#if form.secret}<br />Klienthemmelighet (vises kun nå): <strong class="mono">{form.secret}</strong>{/if}
-	</div>
-{/if}
 {#if form?.launchId}
 	<div class="varsel varsel-info">
 		Launch-kontekst opprettet: <span class="mono">{form.launchId}</span>. Appen må åpnes med
@@ -63,51 +58,10 @@
 	</div>
 {/if}
 
-<section class="kort">
-	<details class="nyapp">
-		<summary><h3>Registrer app</h3></summary>
-	<form method="POST" action="?/register">
-		<div class="feltrad">
-			<div style="flex:1 1 14rem"><label for="navn">Navn</label><input id="navn" name="navn" required /></div>
-			<div style="flex:0 0 12rem">
-				<label for="kategori">Type</label>
-				<select id="kategori" name="kategori">
-					<option value="smart-ehr">SMART, startet fra journalen</option>
-					<option value="smart-standalone">SMART, selvstendig</option>
-					<option value="backend">Backend-tjeneste</option>
-				</select>
-			</div>
-			<div style="flex:0 0 12rem">
-				<label for="type">Klienttype</label>
-				<select id="type" name="type"><option value="public">Offentlig (PKCE)</option><option value="confidential">Konfidensiell</option></select>
-			</div>
-		</div>
-		<div class="felt">
-			<label for="redirectUris">Redirect-URI-er</label>
-			<textarea id="redirectUris" name="redirectUris" placeholder="https://app.example/callback" style="min-height:4rem"></textarea>
-			<small>Én per linje. Sammenliknes eksakt.</small>
-		</div>
-		<div class="felt">
-			<label for="scopes">Tillatte scope</label>
-			<textarea id="scopes" name="scopes" placeholder="openid fhirUser launch launch/patient patient/Patient.rs" style="min-height:4rem"></textarea>
-			<small>Appen kan aldri få mer enn dette, og aldri mer enn brukerens rolle tillater.</small>
-		</div>
-		<div class="feltrad">
-			<div style="flex:1 1 16rem"><label for="jwksUri">jwks_uri</label><input id="jwksUri" name="jwksUri" placeholder="https://app.example/jwks.json" /></div>
-			<div style="flex:1 1 12rem"><label for="databehandleravtale">Databehandleravtale</label><input id="databehandleravtale" name="databehandleravtale" placeholder="DBA-2026-001" /></div>
-		</div>
-		<div class="feltrad">
-			<div style="flex:1 1 18rem"><label for="launchUrl">Launch-URL (EHR launch)</label><input id="launchUrl" name="launchUrl" placeholder="https://app.example/launch" /></div>
-		</div>
-		<label class="avkryssing">
-			<input type="checkbox" name="iHovedmeny" value="ja" />
-			Vis appen i hovedmenyen — for apper som virker på tvers av pasienter og startes uten pasient (ellers under pasientens «Apper»)
-		</label>
-		<div class="felt"><label for="jwks">JWKS (JSON)</label><textarea id="jwks" name="jwks" placeholder={'{"keys":[...]}'}></textarea></div>
-		<button type="submit" class="primar">Registrer</button>
-	</form>
-	</details>
-</section>
+<p class="svak">
+	Nye apper legges til fra appgalleriet. Utviklere registrerer dem i utviklerportalen, og
+	plattformeier godkjenner dem.
+</p>
 
 <h3 class="listetittel">Registrerte apper ({data.apper.length})</h3>
 
@@ -119,6 +73,7 @@
 					<div class="appkort-tittel">
 						<span class="appkort-navn">{a.name}</span>
 						<span class="merker">
+							{#if !a.approved}<span class="merke merke-advarsel">⚠ {NOT_APPROVED}</span>{/if}
 							{#if a.status !== 'aktiv'}<span class="merke merke-fare">sperret</span>{/if}
 							{#if !a.databehandleravtale}<span class="merke merke-advarsel">uten DBA</span>{/if}
 							{#if !a.requireConsent}<span class="merke merke-ok">godkjent av virksomheten</span>{/if}
@@ -131,6 +86,9 @@
 			</summary>
 
 			<div class="appkort-detalj">
+				{#if !a.approved}
+					<div class="varsel varsel-advarsel">⚠ {NOT_APPROVED_EXPLANATION} Brukerne ser en advarsel når de åpner den.</div>
+				{/if}
 				<dl class="fakta">
 					<div><dt>Registrert</dt><dd>{a.created_at}</dd></div>
 					<div><dt>Aktive tokens</dt><dd>{a.aktiveTokens}</dd></div>
@@ -208,10 +166,15 @@
 					<section class="gruppe">
 						<h4>Samtykke</h4>
 						<p class="gruppe-hjelp">
-							{a.requireConsent
-								? 'Hver bruker må godkjenne appen første gang de starter den.'
-								: 'Virksomheten har godkjent appen på alles vegne. Ingen blir spurt.'}
+							{#if !a.approved}
+								Hver bruker må godkjenne appen første gang de starter den, så lenge plattformeier ikke har godkjent den.
+							{:else if a.requireConsent}
+								Hver bruker må godkjenne appen første gang de starter den.
+							{:else}
+								Virksomheten har godkjent appen på alles vegne. Ingen blir spurt.
+							{/if}
 						</p>
+						{#if a.approved}
 						<div class="knapperad">
 							<form method="POST" action="?/samtykke">
 								<input type="hidden" name="clientId" value={a.clientId} />
@@ -221,63 +184,19 @@
 								</button>
 							</form>
 						</div>
+						{/if}
 					</section>
 				{/if}
 
-				<details class="underseksjon">
-					<summary>Rediger appen</summary>
-					<!-- Everything but the client id and the client type. A wider scope
-					     list withdraws the users' remembered consents; they are asked again. -->
-					<form method="POST" action="?/oppdater" class="redigerskjema">
+				<section class="gruppe">
+					<h4>Databehandleravtale</h4>
+					<p class="gruppe-hjelp">Virksomhetens egen avtale med leverandøren. Adresser og tilganger følger det som er vurdert.</p>
+					<form method="POST" action="?/databehandleravtale" class="rad">
 						<input type="hidden" name="clientId" value={a.clientId} />
-						<div class="feltrad">
-							<div style="flex:1 1 14rem">
-								<label for="navn-{a.clientId}">Navn</label>
-								<input id="navn-{a.clientId}" name="navn" value={a.name} required />
-							</div>
-							<div style="flex:1 1 12rem">
-								<label for="dba-{a.clientId}">Databehandleravtale</label>
-								<input id="dba-{a.clientId}" name="databehandleravtale" value={a.databehandleravtale ?? ''} />
-							</div>
-						</div>
-						{#if a.category !== 'backend'}
-							<div class="felt">
-								<label for="redirect-{a.clientId}">Redirect-URI-er</label>
-								<textarea id="redirect-{a.clientId}" name="redirectUris" style="min-height:4rem">{a.redirectUris.join('\n')}</textarea>
-								<small>
-									Én per linje. Sammenliknes eksakt, så <span class="mono">/callback</span> og
-									<span class="mono">/callback/</span> er to ulike adresser.
-								</small>
-							</div>
-						{/if}
-						<div class="felt">
-							<label for="scopes-{a.clientId}">Tillatte scope</label>
-							<textarea id="scopes-{a.clientId}" name="scopes" style="min-height:4rem">{a.scopes.map((s) => s.scope).join(' ')}</textarea>
-							<small>Utvides listen, må hver bruker godkjenne appen på nytt.</small>
-						</div>
-						<div class="feltrad">
-							<div style="flex:1 1 18rem">
-								<label for="launch-{a.clientId}">Launch-URL (EHR launch)</label>
-								<input id="launch-{a.clientId}" name="launchUrl" value={a.launchUrl ?? ''} />
-							</div>
-							<div style="flex:1 1 16rem">
-								<label for="jwksuri-{a.clientId}">jwks_uri</label>
-								<input id="jwksuri-{a.clientId}" name="jwksUri" value={a.jwksUri} />
-							</div>
-						</div>
-						<div class="feltrad">
-							<div style="flex:1 1 18rem">
-								<label for="logo-{a.clientId}">Logo-URL</label>
-								<input id="logo-{a.clientId}" name="logoUrl" value={a.logoUrl} />
-							</div>
-						</div>
-						<div class="felt">
-							<label for="jwks-{a.clientId}">JWKS (JSON)</label>
-							<textarea id="jwks-{a.clientId}" name="jwks">{a.jwks}</textarea>
-						</div>
-						<button type="submit" class="primar liten">Lagre endringer</button>
+						<input aria-label="Databehandleravtale" name="databehandleravtale" value={a.databehandleravtale ?? ''} style="flex:1 1 14rem" />
+						<button type="submit" class="liten">Lagre</button>
 					</form>
-				</details>
+				</section>
 
 				<div class="bunnrad">
 					{#if a.category !== 'backend'}
@@ -305,27 +224,6 @@
 		margin: 1.75rem 0 0.6rem;
 		font-size: 1rem;
 	}
-
-	/* Registration is an occasional act; the list is what the page is for. */
-	.nyapp > summary {
-		cursor: pointer;
-		list-style: none;
-	}
-
-	.nyapp > summary::-webkit-details-marker { display: none; }
-
-	.nyapp > summary h3 {
-		display: inline;
-		font-size: 1rem;
-	}
-
-	.nyapp > summary::before {
-		content: '+ ';
-		color: var(--primar);
-		font-weight: 600;
-	}
-
-	.nyapp[open] > summary::before { content: '− '; }
 
 	/* One app is one row until you ask for more. Ten apps used to be ten screens.
 	   Named appkort, not app: `.app` is the application shell in app.css and
@@ -471,8 +369,6 @@
 	}
 
 	.scopeliste li { margin-bottom: 0.15rem; }
-
-	.redigerskjema { margin-top: 0.6rem; }
 
 	/* Testing and blocking are not settings, so they sit below the rule. */
 	.bunnrad {

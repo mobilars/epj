@@ -87,7 +87,12 @@ app legges til eller fjernes:
   som ikke finnes
 - en app ikke er registrert, eller to apper krever samme fane, tast eller kort
 
-**Slik legger du til en app:** Lag `src/apps/<navn>/` med `manifest.ts` og `routes/`,
+**Eksterne apper** kommer inn gjennom utviklerportalen: en utvikler registrerer appen,
+plattformeier godkjenner den, og en virksomhet installerer den fra appgalleriet. En
+virksomhet kan også installere en app som venter på vurdering, men da er appen merket
+med varseltrekant overalt. Virksomheten kan ikke registrere apper selv.
+
+**Slik legger du til en app i kodebasen:** Lag `src/apps/<navn>/` med `manifest.ts` og `routes/`,
 legg manifestet i `registry.ts`, og legg de korte filene i `src/platform/routes/`.
 Testen sier fra om det mangler noe.
 

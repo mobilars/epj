@@ -27,7 +27,7 @@
 		children: Snippet;
 	} = $props();
 
-	type MenuApp = { clientId: string; name: string; inMainMenu: boolean; inPatientTabs: boolean; openInNewTab?: boolean };
+	type MenuApp = { clientId: string; name: string; approved: boolean; inMainMenu: boolean; inPatientTabs: boolean; openInNewTab?: boolean };
 
 	type UserInfo = {
 		name: string;
@@ -127,9 +127,9 @@
 			     through the start endpoint that mints its launch. -->
 			{#each mainMenuApps as app (app.clientId)}
 				{#if app.openInNewTab}
-					<a class="ekstern-lenke" title={externalAppLabel(app.name)} href="/apper/{app.clientId}/start" target="_blank" rel="noopener">{app.name} ↗</a>
+					<a class="ekstern-lenke" title={externalAppLabel(app.name, app.approved)} href="/apper/{app.clientId}/start" target="_blank" rel="noopener">{#if !app.approved}⚠ {/if}{app.name} ↗</a>
 				{:else}
-					<a class="ekstern-lenke" title={externalAppLabel(app.name)} href="/apper/{app.clientId}" aria-current={page.url.pathname === `/apper/${app.clientId}` ? 'page' : undefined}>{app.name}</a>
+					<a class="ekstern-lenke" title={externalAppLabel(app.name, app.approved)} href="/apper/{app.clientId}" aria-current={page.url.pathname === `/apper/${app.clientId}` ? 'page' : undefined}>{#if !app.approved}⚠ {/if}{app.name}</a>
 				{/if}
 			{/each}
 

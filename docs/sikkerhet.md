@@ -148,7 +148,8 @@ har søkt på, er selv blitt et personregister.
 | Ansatt som slutter, men beholder tilgang | Deaktivering avslutter sesjoner og trekker tilbake alle tokens |
 | Stjålet sesjonscookie | HttpOnly, SameSite=Strict, Secure; feil token avslutter sesjonen; inaktivitetsgrense |
 | Stjålet access token | Kort levetid, hash lagret slik at det kan trekkes tilbake, bundet til klient |
-| App som ber om for mye | Scope snevres inn mot både klientregistrering og brukerens rolle |
+| App som ber om for mye | Scope snevres inn mot både klientregistrering og brukerens rolle. Plattformeier vurderer appen før den regnes som godkjent |
+| Uvurdert app tas i bruk | Virksomheten må bekrefte det, appen er merket overalt, og hver bruker må godkjenne den selv |
 | App som prøver seg på en annen pasient | `patient/`-scope bindes til launch-konteksten |
 | Kompromittert app | Sperring trekker tilbake alle appens tokens umiddelbart |
 | Manipulering av loggen | Append-only i databasen, og hash-lenke som avslører endring |

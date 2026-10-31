@@ -82,7 +82,7 @@ async function ensure(app: App): Promise<string> {
 	if (clientId) {
 		await exec(
 			`UPDATE oauth_client
-			 SET redirect_uris = $2, allowed_scopes = $3, launch_url = $4, in_main_menu = $5, publisher = $7, status = 'aktiv'
+			 SET redirect_uris = $2, allowed_scopes = $3, launch_url = $4, in_main_menu = $5, publisher = $7, first_party = true, status = 'aktiv'
 			 WHERE client_id = $1 AND tenant_id = $6`,
 			[
 				clientId,
@@ -111,7 +111,8 @@ async function ensure(app: App): Promise<string> {
 		launchUrl: `${app.host}/launch`,
 		databehandleravtale: app.note,
 		inMainMenu: app.inMainMenu ?? false,
-		publisher: PUBLISHER
+		publisher: PUBLISHER,
+		firstParty: true
 	});
 	// Now that the id exists, put it on the launch URL.
 	await exec('UPDATE oauth_client SET launch_url = $2 WHERE client_id = $1 AND tenant_id = $3', [
