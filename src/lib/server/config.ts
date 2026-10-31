@@ -61,7 +61,7 @@ export const config = {
 	 * has modified the code has to point somewhere that serves *its* source, not
 	 * only upstream. `EPJ_VERSION` is the commit the image was built from.
 	 */
-	sourceUrl: env.EPJ_SOURCE_URL ?? 'https://github.com/apusroland/epj',
+	sourceUrl: env.EPJ_SOURCE_URL ?? 'https://github.com/mobilars/epj',
 	version: env.EPJ_VERSION ?? null,
 	get fhirBaseUrl() {
 		return `${this.baseUrl}/fhir`;
