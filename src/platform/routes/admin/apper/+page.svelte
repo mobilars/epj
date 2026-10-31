@@ -76,7 +76,7 @@
 							{#if !a.approved}<span class="merke merke-advarsel">⚠ {NOT_APPROVED}</span>{/if}
 							{#if a.status !== 'aktiv'}<span class="merke merke-fare">sperret</span>{/if}
 							{#if !a.databehandleravtale}<span class="merke merke-advarsel">uten DBA</span>{/if}
-							{#if !a.requireConsent}<span class="merke merke-ok">godkjent av virksomheten</span>{/if}
+							{#if !a.requireConsent && a.approved}<span class="merke merke-ok">godkjent av virksomheten</span>{/if}
 							<span class="merke">{a.category}</span>
 						</span>
 					</div>
@@ -95,6 +95,15 @@
 					<div><dt>Klientautentisering</dt><dd>{a.hasKeys ? 'asymmetrisk' : a.type}</dd></div>
 					<div><dt>Databehandleravtale</dt><dd>{a.databehandleravtale || '—'}</dd></div>
 				</dl>
+
+				{#if a.launchUrl}
+					<dl class="fakta">
+						<div class="bred">
+							<dt>Launch-URL</dt>
+							<dd class="mono">{a.launchUrl}</dd>
+						</div>
+					</dl>
+				{/if}
 
 				{#if a.redirectUris.length}
 					<dl class="fakta">
