@@ -2,7 +2,6 @@ import { one, exec, query } from '../../db';
 import { requireTenant } from '../../tenant/context';
 import { config } from '../../config';
 import { newId } from '../../util/ids';
-import { getMachineToken } from '../helseid-machine';
 import { SYSTEM } from '../../fhir/codesystems';
 import type { FhirResource } from '../../fhir/types';
 import { fhirClient } from '../../fhir/client';
@@ -12,15 +11,13 @@ import { mockSfm } from './mock';
 /**
  * Sentral forskrivningsmodul (SFM), the national prescribing module.
  *
- * SFM is operated by Norsk helsenett and is the way into e-prescription and the
- * patient's medication list (PLL). Record vendors can either use SFM's own user
- * interface or integrate against the SFM Basis API. This record uses the API
- * variant: prescribing happens in the record's own screen, and SFM handles the
- * communication towards Reseptformidleren.
+ * This file is the record's own prescribing screen, and it only ever talks to a
+ * local simulator. It exists to show the flow: nothing here reaches NHN.
  *
- * All calls are authenticated with a HelseID machine token. In `mock` mode a
- * local simulator answers, so the whole prescribing flow can be run and tested
- * without a connection to NHN's test environment.
+ * The real integration is SFM Full, where SFM's own screen runs in a frame: see
+ * `session-gateway.ts` and docs/sfm.md. SFM Basis, which is what a screen like
+ * this one would need, is meant for major vendors with their own medication
+ * module, and is approved through the e-resept value chain.
  */
 
 export type SfmOperation =
@@ -101,7 +98,7 @@ async function call<T>(operation: SfmOperation, body: unknown, patientId: string
 		const response =
 			config.integrations.mode === 'mock'
 				? await mockSfm<T>(operation, body, patientId)
-				: await callLive<T>(operation, body);
+				: notConnected<T>();
 
 		await exec(
 			`UPDATE sfm_sync SET status = $2, response = $3, feilmelding = $4, reseptid = $5, updated_at = now()
@@ -128,25 +125,13 @@ async function call<T>(operation: SfmOperation, body: unknown, patientId: string
 	}
 }
 
-async function callLive<T>(operation: SfmOperation, body: unknown): Promise<SfmResponse<T>> {
-	const { baseUrl, scope } = config.integrations.sfm;
-	if (!baseUrl) throw new Error('SFM-endepunkt er ikke konfigurert (EPJ_SFM_BASE_URL)');
-	const token = await getMachineToken(scope);
-	const response = await fetch(`${baseUrl}/${operation}`, {
-		method: 'POST',
-		headers: {
-			authorization: `Bearer ${token}`,
-			'content-type': 'application/json',
-			accept: 'application/json'
-		},
-		body: JSON.stringify(body),
-		signal: AbortSignal.timeout(30_000)
-	});
-	if (!response.ok) {
-		return { ok: false, error: `SFM svarte ${response.status}: ${(await response.text()).slice(0, 300)}` };
-	}
-	const data = (await response.json()) as T & { prescriptionId?: string };
-	return { ok: true, data, prescriptionId: data.prescriptionId };
+/**
+ * Says so rather than pretending. There used to be a `live` path here, with a
+ * machine token and addresses that do not exist at NHN: SFM acts on the signed-in
+ * clinician's own token, through its own screen.
+ */
+function notConnected<T>(): SfmResponse<T> {
+	return { ok: false, error: 'Journalens eget forskrivningsskjema er ikke koblet til SFM. Slå på SFM Full (EPJ_SFM_FULL).' };
 }
 
 export async function getMedicationList(patientId: string, actor: AuditActor): Promise<SfmResponse<MedicationList>> {

@@ -110,8 +110,7 @@ pasientsikkerhetsrisiko.
 
 ### 2.4 Strukturert legemiddelgjennomgang **[N]**
 
-Legemiddellisten hentes fra SFM, men det finnes ingen flate for systematisk
-gjennomgang: seponering med begrunnelse, samstemming mot pasientens egen liste,
+Det finnes ingen flate for systematisk legemiddelgjennomgang: seponering med begrunnelse, samstemming mot pasientens egen liste,
 og dokumentasjon av gjennomgangen som et eget journalnotat.
 
 ### 2.5 Sykmelding og legeerklæringer **[N]**
@@ -126,9 +125,9 @@ Det er ingen strukturert svangerskapsjournal.
 
 ### 2.7 Interaksjonsvarsler fra en vedlikeholdt kilde **[N]**
 
-SFM-simulatoren har fire kjente interaksjoner, nok til å vise flyten. I
-`live`-modus kommer varslene fra SFM. Skal journalen gi egne varsler i tillegg,
-trengs en klinisk vedlikeholdt kilde (FEST, Interaksjonsdatabasen).
+SFM-simulatoren har fire kjente interaksjoner, nok til å vise flyten. Med SFM
+Full kommer varslene fra SFMs eget skjermbilde. Skal journalen gi egne varsler i
+tillegg, trengs en klinisk vedlikeholdt kilde (FEST, Interaksjonsdatabasen).
 
 ---
 
@@ -192,12 +191,33 @@ Bør kjøres mot `https://epj.apps.apus.no` før flere apper slippes til.
 
 <https://inferno.healthit.gov/test-kits/smart-app-launch/>
 
+### 3.8 SFM: fra simulator til NHN **[K]**
+
+Koblingen til SFM Full er bygget, men avslått, og er bare testet mot en lokal
+simulator. Se [sfm.md](sfm.md) for hva som er bygget, hva som må bevises, og NHNs
+krav. Det viktigste som gjenstår:
+
+- Få testtilgang og HelseID-klient med SFM-scope hos NHN. Forespørsel er sendt.
+- Teste tredjepartskaken i rammen. Det er den største tekniske risikoen.
+- Vise SFM-oppgaver i en arbeidsliste. Det er et krav fra NHN.
+- Hente legemiddelliste og signerte journalnotater inn i journalen.
+- Bygge Persontjenesten, som NHN krever.
+- Godkjent akseptansetest hos NHN.
+
+DPoP blir påkrevd mot SFMs API-er 11. januar 2027. Koblingen bruker det allerede.
+
+### 3.9 Nye nummerserier for fødselsnummer fra 2032 **[V]**
+
+Skatteetaten innfører nye nummerserier og ny kontrollberegning fra 2032.
+`validNorwegianNationalId()` følger dagens regler, og vil avvise gyldige nye
+nummer. Reglene må hentes fra Skatteetaten og innføres i god tid.
+
 ### 3.7 Øvrige NHN-tjenester **[N]**
 
 Norsk helsenett dokumenterer API-ene sine på **<https://utviklerportal.nhn.no/>**
 — HelseID, Adresseregisteret, Grunndata/personoppslag, Kjernejournal, SFM,
-meldingsutveksling og flere. Vi bruker i dag bare HelseID og SFM, og resten er
-uimplementert.
+meldingsutveksling og flere. Vi bruker i dag bare HelseID. SFM er bygget, men
+ikke koblet til NHN (se 3.8). Resten er uimplementert.
 
 Bruk portalen som kilde når disse skal bygges: kravene er detaljerte og ikke
 alltid det man ville gjettet. Et eksempel fra HelseID-klientassertionen, som
@@ -390,6 +410,16 @@ ingen test snakker med den ekte serveren slik den er konfigurert i drift.
 
 Det som mangler er en test som starter HAPI med *manifestenes egen*
 konfigurasjon og kontrollerer at partisjonsstien svarer.
+
+### 6.7 Tolv ende-til-ende-tester har gått ut på dato **[V]**
+
+Testene kjøres for hånd etter at de ble tatt ut av CI. Tolv av 50 feiler, og de
+samme tolv feiler uten endringene for SFM. De fleste har ikke fulgt med på endringer
+i grensesnittet: fanene Utlevering og Sperring ligger nå under «Mer», hurtignotatet
+gir to felt med samme etikett, utlogging lander på `/logg-ut`, og
+POST-kall i testene mangler `Origin`. Demo-brukeren `sykepleier` er nå
+`behandler` og har derfor utleveringsrett, mens testen venter 403. Hver test må gås
+gjennom, for en utdatert test kan skjule en reell feil.
 
 ### 6.6 Kontrakttest av manifestenes HAPI-konfigurasjon **[V]**
 

@@ -87,6 +87,18 @@
 			{/each}
 		</fieldset>
 
+		<div class="rad">
+			<div style="flex:1 1 18rem">
+				<label for="sfmJournalId">Journal-id i SFM</label>
+				<input id="sfmJournalId" name="sfmJournalId" autocomplete="off" value={v.sfmJournalId ?? ''} />
+				<small class="svak">Bare med en multi-tenant HelseID-klient. Tom betyr ikke på SFM.</small>
+			</div>
+			<div style="flex:1 1 14rem">
+				<label for="sfmOverordnet">Overordnet organisasjonsnummer</label>
+				<input id="sfmOverordnet" name="sfmOverordnet" inputmode="numeric" autocomplete="off" value={v.sfmParentOrganisationNumber ?? ''} />
+				<small class="svak">Toppnivået i Enhetsregisteret. Tomt når virksomheten selv er toppnivå.</small>
+			</div>
+		</div>
 		<div><label for="merknad">Merknad</label><input id="merknad" name="merknad" value={v.note ?? ''} /></div>
 		<button type="submit" class="primar">Lagre</button>
 	</form>

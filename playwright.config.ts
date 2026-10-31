@@ -51,7 +51,9 @@ Object.assign(process.env, miljo);
 if (!process.env.E2E_DB_KLAR) {
 	execFileSync('npx', ['vite-node', '-c', 'scripts/vite.config.ts', 'scripts/nullstill-e2e-db.ts'], {
 		stdio: 'inherit',
-		env: { ...process.env, ...miljo }
+		env: { ...process.env, ...miljo },
+		// On Windows npx is a .cmd file, which only a shell can start.
+		shell: process.platform === 'win32'
 	});
 	process.env.E2E_DB_KLAR = '1';
 }
@@ -87,7 +89,7 @@ export default defineConfig({
 	],
 	webServer: [
 		{
-			command: `TEST_FHIR_PORT=${FHIR_PORT} npx vite-node -c scripts/vite.config.ts scripts/test-fhir-server.ts`,
+			command: 'npx vite-node -c scripts/vite.config.ts scripts/test-fhir-server.ts',
 			url: `http://127.0.0.1:${FHIR_PORT}/fhir/metadata`,
 			// Databasen nullstilles for hver kjøring, så serverne må starte på nytt
 			// og ikke gjenbrukes med tilkoblinger til den gamle databasen.
@@ -95,7 +97,7 @@ export default defineConfig({
 			// slik at loggen deres er synlig mens testene kjører.
 			reuseExistingServer: process.env.E2E_GJENBRUK === '1',
 			timeout: 60_000,
-			env: miljo
+			env: { ...miljo, TEST_FHIR_PORT: String(FHIR_PORT) }
 		},
 		{
 			command: `npx vite dev --port ${APP_PORT} --host 127.0.0.1`,

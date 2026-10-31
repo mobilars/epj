@@ -63,6 +63,26 @@ export function validNorwegianNationalId(nr: string): boolean {
 	return validDateDel(nr) !== null;
 }
 
+/**
+ * Whether numbers from a synthetic population are accepted.
+ *
+ * SyntPop, which NHN's test environments use, adds 65 or 80 to the month. Such a
+ * number can never be a real person's, and the date part is otherwise refused.
+ * On for test installations; a clinical one leaves it off, so a test patient
+ * cannot be mistaken for a real one there.
+ */
+function allowsSyntheticNumbers(): boolean {
+	const setting = process.env.EPJ_ALLOW_SYNTHETIC_IDS;
+	if (setting !== undefined) return setting === '1' || setting.toLowerCase() === 'true';
+	return process.env.NODE_ENV !== 'production';
+}
+
+function withoutSyntheticOffset(month: number): number {
+	if (month > 80 && month <= 92) return month - 80;
+	if (month > 65 && month <= 77) return month - 65;
+	return month;
+}
+
 /** Returns the date of birth as an ISO date, or null if the date part is invalid. */
 export function validDateDel(nr: string): string | null {
 	if (!/^\d{11}$/.test(nr)) return null;
@@ -70,6 +90,7 @@ export function validDateDel(nr: string): string | null {
 	let maned = Number(nr.slice(2, 4));
 	const yearTo = Number(nr.slice(4, 6));
 	if (dag > 40) dag -= 40; // D-nummer
+	if (allowsSyntheticNumbers()) maned = withoutSyntheticOffset(maned);
 	if (maned > 40) maned -= 40; // H-nummer
 	if (maned < 1 || maned > 12 || dag < 1 || dag > 31) return null;
 	const individ = Number(nr.slice(6, 9));

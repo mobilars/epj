@@ -100,6 +100,7 @@ export async function endSession(cookies: Cookies): Promise<void> {
 	if (raw) {
 		const id = raw.split('.')[0];
 		await exec('UPDATE user_session SET ended = true WHERE id = $1', [id]);
+		await exec('DELETE FROM helseid_session_token WHERE session_id = $1', [id]);
 	}
 	cookies.delete(config.session.cookieName, { path: '/' });
 }

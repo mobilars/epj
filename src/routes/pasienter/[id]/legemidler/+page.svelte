@@ -1,7 +1,12 @@
 <script lang="ts">
+	import SfmFrame from '$lib/components/SfmFrame.svelte';
 	let { data, form } = $props();
-
 </script>
+
+{#if data.sfmFull}
+	<h2>Legemidler</h2>
+	<SfmFrame patientId={data.patientId} />
+{:else}
 
 <div class="rad-mellom">
 	<h2>Legemidler</h2>
@@ -157,3 +162,4 @@
 		</tbody>
 	</table>
 </details>
+{/if}

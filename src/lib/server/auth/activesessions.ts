@@ -1,5 +1,5 @@
 import { config } from '../config';
-import { one, query } from '../db';
+import { exec, one, query } from '../db';
 import { requireTenant } from '../tenant/context';
 
 /**
@@ -53,6 +53,7 @@ export async function endSessionById(id: string): Promise<{ userId: string; name
 		 RETURNING u.id AS user_id, u.name`,
 		[id, requireTenant().id]
 	);
+	if (row) await exec('DELETE FROM helseid_session_token WHERE session_id = $1', [id]);
 	return row ? { userId: row.user_id, name: row.name } : null;
 }
 

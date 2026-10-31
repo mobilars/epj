@@ -57,6 +57,8 @@ export const TEST_TENANT: Tenant = {
 	base_url: 'http://localhost:5173',
 	partition_id: 1,
 	status: 'aktiv',
+	sfm_journal_id: null,
+	sfm_parent_organisation_number: null,
 	login_level: 'passord',
 	note: null,
 	created_at: new Date(0).toISOString()

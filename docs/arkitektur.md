@@ -131,7 +131,7 @@ meldingstjener ──ebXML/XML──▶ mottaMelding()
 ### En forskrivning
 
 ```
-lege ──skjema──▶ forskriv() ──▶ SFM (HelseID-maskintoken)
+lege ──skjema──▶ forskriv() ──▶ SFM-simulator (SFM Full: se sfm.md)
                                   │
                                   ├── reseptid + varsler
                                   ├── speil som MedicationRequest i FHIR

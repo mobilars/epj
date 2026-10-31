@@ -12,7 +12,9 @@ export default async function setup(): Promise<void> {
 
 	execFileSync('npx', ['vite-node', '-c', 'scripts/vite.config.ts', 'scripts/seed.ts'], {
 		stdio: 'inherit',
-		env: { ...process.env }
+		env: { ...process.env },
+		// On Windows npx is a .cmd file, which only a shell can start.
+		shell: process.platform === 'win32'
 	});
 }
 

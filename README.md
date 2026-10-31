@@ -45,6 +45,7 @@ npm run dev
 | [API](docs/api.md) | FHIR R5-endepunktet, OAuth 2.1, scopes og feilhåndtering |
 | [SMART on FHIR](docs/smart-on-fhir.md) | Hvordan en app kobles til, med fullstendig eksempel |
 | [Integrasjoner](docs/integrasjoner.md) | SFM, NHN meldingstjener og Helfo |
+| [SFM](docs/sfm.md) | Koblingen til Sentral forskrivningsmodul: status og krav |
 | [Installasjon med Docker](docs/installasjon-docker.md) | Én maskin, tre containere, herding før produksjon |
 | [Installasjon i Kubernetes](docs/installasjon-kubernetes.md) | Manifester, nettverkspolicyer og flere virksomheter |
 | [Drift](docs/drift.md) | Oppsett, konfigurasjon, nøkkelrotasjon og sikkerhetskopi |

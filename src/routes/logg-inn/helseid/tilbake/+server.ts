@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { completeLogin, endFlow } from '$srv/auth/helseid';
 import { createSession } from '$srv/auth/session';
 import { log } from '$srv/audit';
+import { storeHelseIdTokens } from '$srv/integrations/sfm/tokens';
 
 /** Callback from HelseID after authentication. */
 export const GET: RequestHandler = async (event) => {
@@ -39,7 +40,13 @@ export const GET: RequestHandler = async (event) => {
 		redirect(303, '/logg-inn?feil=Kontoen%20er%20ikke%20aktiv');
 	}
 
-	await createSession(result.user.id, 'helseid', event.locals.clientIp, event.request.headers.get('user-agent'), event.cookies);
+	const sessionId = await createSession(result.user.id, 'helseid', event.locals.clientIp, event.request.headers.get('user-agent'), event.cookies);
+	// A failure here costs SFM, not the sign-in: the Legemidler tab says so.
+	if (result.tokens) {
+		await storeHelseIdTokens(sessionId, result.tokens).catch((err) => {
+			console.error('[sfm] could not keep the HelseID token', (err as Error).message);
+		});
+	}
 	await log(
 		{
 			type: 'login', subtype: 'helseid', action: 'E', outcome: '0',

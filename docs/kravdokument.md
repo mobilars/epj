@@ -436,8 +436,12 @@ innsynslogg.
 
 **K-7.1 Forskrivning skal gå gjennom Sentral forskrivningsmodul.**
 SFM er kilden til Pasientens legemiddelliste og veien til Reseptformidleren.
-*Realisert:* `src/lib/server/integrasjoner/sfm/`.
-*Testet:* `tests/integrasjoner.test.ts`, `e2e/journal.spec.ts`.
+Journalen bruker SFM Full: SFMs eget skjermbilde i en ramme, innlogget som legen,
+åpnet med en pasientbillett, slik at fødselsnummeret aldri når nettleseren. Tokenet
+lagres kryptert på tjeneren så lenge økten varer. Koblingen er bygget og testet mot
+en lokal simulator, men ikke mot NHN, og er avslått som standard. Se [sfm.md](sfm.md).
+*Realisert:* `src/lib/server/integrations/sfm/`, `src/lib/sfm/handshake.ts`.
+*Testet:* `tests/sfm.test.ts`, `tests/sfm-tokens.test.ts`, `e2e/sfm.spec.ts`.
 
 **K-7.2 Resepter skal være synlige i journalen og på API-et.**
 Hver resept speiles som `MedicationRequest`.
@@ -637,7 +641,7 @@ enkelttegns-snarveier.
 | API og apper | K-4.1 – K-4.14 | `oauth`, `scopes`, `gateway`, `cds`, `launchmode`, `r4`, `openlink` | `smart.spec.ts` |
 | Sikkerhetslogg | K-5.1 – K-5.5 | `audit` | `tilgang.spec.ts` |
 | Retting, sletting og innsyn | K-6.1 – K-6.8 | `utlevering` | `utlevering.spec.ts` |
-| Legemidler | K-7.1 – K-7.4 | `integrasjoner` | `journal.spec.ts` |
+| Legemidler | K-7.1 – K-7.4 | `integrasjoner`, `sfm`, `sfm-tokens` | `journal.spec.ts`, `sfm.spec.ts` |
 | Meldinger | K-8.1 – K-8.5 | `xml-meldinger`, `integrasjoner` | — |
 | Oppgjør | K-9.1 – K-9.5 | `takster`, `integrasjoner` | `oppgjor.spec.ts` |
 | Multitenancy | K-10.11 – K-10.17 | `multitenancy` | — |

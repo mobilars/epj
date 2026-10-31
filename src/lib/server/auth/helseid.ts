@@ -7,6 +7,7 @@ import { one, exec, transaction } from '../db';
 import { requireTenant, issuerFor } from '../tenant/context';
 import { createUser, getUser, rolesFor, type User } from './users';
 import type { Role } from '../authz/roles';
+import { sfmAuthorizationDetails } from '../integrations/sfm/authorization';
 
 /**
  * HelseID as identity provider.
@@ -52,6 +53,9 @@ export const CLAIM = {
  * assertion is used once, immediately.
  */
 const HELSEID_ASSERTION_LIFETIME = 5;
+
+/** Seconds a signed request object is valid. NHN's sample uses the same. */
+const REQUEST_OBJECT_LIFETIME = 10;
 
 /**
  * A client holding API scopes must bind its tokens to a key with DPoP (RFC
@@ -207,9 +211,11 @@ export async function startLogin(cookies: Cookies, returnTo: string): Promise<st
 		maxAge: 600
 	});
 
-	const parameters = {
+	const { sfm } = config.integrations;
+	const parameters: Record<string, string> = {
 		redirect_uri: redirectUri(),
-		scope: config.integrations.healthId.scopes.join(' '),
+		// SFM acts as the signed-in clinician, so its scope belongs to this sign-in.
+		scope: [...config.integrations.healthId.scopes, ...(sfm.full ? [sfm.scope] : [])].join(' '),
 		state,
 		nonce,
 		code_challenge: codeChallenge,
@@ -219,11 +225,32 @@ export async function startLogin(cookies: Cookies, returnTo: string): Promise<st
 	// HelseID requires the request to be pushed to the authorization server
 	// first (RFC 9126), so the parameters never travel through the browser. The
 	// push is authenticated with the same client assertion as the token call.
+	//
+	// A multi-tenant client also says which practice and which SFM journal this
+	// is. That goes in a signed request object, short-lived like the assertion,
+	// so it cannot be altered on the way.
+	const details = sfm.full ? sfmAuthorizationDetails(requireTenant()) : null;
+	const outgoing = details
+		? (
+				await oidc.buildAuthorizationUrlWithJAR(
+					configuration,
+					{ ...parameters, authorization_details: JSON.stringify(details) },
+					await clientKey(),
+					{
+						[oidc.modifyAssertion]: (_header, payload) => {
+							payload.nbf = payload.iat as number;
+							payload.exp = (payload.iat as number) + REQUEST_OBJECT_LIFETIME;
+						}
+					}
+				)
+			).searchParams
+		: parameters;
+
 	const url = configuration.serverMetadata().pushed_authorization_request_endpoint
-		? await oidc.buildAuthorizationUrlWithPAR(configuration, parameters, {
+		? await oidc.buildAuthorizationUrlWithPAR(configuration, outgoing, {
 				DPoP: await dpopHandle(configuration, dpop)
 			})
-		: oidc.buildAuthorizationUrl(configuration, parameters);
+		: oidc.buildAuthorizationUrl(configuration, outgoing);
 	return url.toString();
 }
 
@@ -254,6 +281,22 @@ function readState(cookies: Cookies): FlowState | null {
 
 export function endFlow(cookies: Cookies): void {
 	cookies.delete(STATE_COOKIE, { path: '/' });
+}
+
+/** What SFM needs kept from a sign-in. Only returned while SFM is switched on. */
+export interface HelseIdTokens {
+	accessToken: string;
+	refreshToken: string | null;
+	expiresIn: number;
+	dpop: { privateJwk: JWK; publicJwk: JWK };
+}
+
+/** A DPoP handle for a key kept from a sign-in, for calls made later. */
+export function dpopHandleFor(
+	configuration: oidc.Configuration,
+	dpop: { privateJwk: JWK; publicJwk: JWK }
+): Promise<oidc.DPoPHandle> {
+	return dpopHandle(configuration, dpop);
 }
 
 export interface HelseIdClaims {
@@ -289,7 +332,7 @@ export function checkSecurityLevel(
 }
 
 export type LoginResult =
-	| { ok: true; claims: HelseIdClaims; returnTo: string; user: User; roles: Role[]; newUser: boolean }
+	| { ok: true; claims: HelseIdClaims; returnTo: string; user: User; roles: Role[]; newUser: boolean; tokens?: HelseIdTokens }
 	| { ok: false; error: string };
 
 /**
@@ -305,6 +348,7 @@ export async function completeLogin(cookies: Cookies, currentUrl: URL): Promise<
 	if (!flowState) return { ok: false, error: 'Påloggingen tok for lang tid. Prøv igjen.' };
 
 	let claims: Record<string, unknown>;
+	let kept: HelseIdTokens | undefined;
 	try {
 		const configuration = await helseIdConfiguration();
 		const DPoP = flowState.dpop ? await dpopHandle(configuration, flowState.dpop) : undefined;
@@ -322,6 +366,14 @@ export async function completeLogin(cookies: Cookies, currentUrl: URL): Promise<
 		);
 		const verified = tokens.claims();
 		if (!verified) return { ok: false, error: 'HelseID returnerte ikke id_token' };
+		if (config.integrations.sfm.full && flowState.dpop) {
+			kept = {
+				accessToken: tokens.access_token,
+				refreshToken: tokens.refresh_token ?? null,
+				expiresIn: tokens.expires_in ?? 60,
+				dpop: flowState.dpop
+			};
+		}
 		// HelseID does not necessarily put pid, HPR number and security level in
 		// the id_token - which ones appear there depends on how the client is
 		// registered. Userinfo is asked as well and fills the gaps; the id_token
@@ -354,7 +406,7 @@ export async function completeLogin(cookies: Cookies, currentUrl: URL): Promise<
 	};
 
 	const { user, roles, newUser } = await linkToLocalUser(parsed);
-	return { ok: true, claims: parsed, returnTo: flowState.returnTo, user, roles, newUser };
+	return { ok: true, claims: parsed, returnTo: flowState.returnTo, user, roles, newUser, tokens: kept };
 }
 
 /**

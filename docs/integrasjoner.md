@@ -54,14 +54,9 @@ klinisk vedlikeholdt kilde — se [åpne punkter](apne-punkter.md).
 
 ### Konfigurasjon
 
-```bash
-EPJ_SFM_BASE_URL=https://sfm.test.nhn.no/api
-EPJ_SFM_SCOPE=nhn:sfm/api
-EPJ_HELSEID_CLIENT_ID=…
-EPJ_HELSEID_PRIVATE_KEY=…
-```
-
-Tilgang til SFM testmiljø bestilles hos Norsk helsenett.
+Skjemaet over snakker bare med simulatoren. Den virkelige koblingen er SFM Full,
+der SFMs eget skjermbilde kjører i en ramme. Den er beskrevet, med konfigurasjon og
+status, i [sfm.md](sfm.md).
 
 ---
 
