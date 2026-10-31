@@ -119,8 +119,14 @@ Finnkode, og følger med systemet. En kode som ikke finnes, eller som er et
 kapittel og ikke en diagnose, avvises. Navnet hentes fra kodeverket, aldri fra
 skjemaet. `CodeSystem/$lookup`, `$validate-code` og `ValueSet/$expand` svarer
 på journalens eget FHIR-endepunkt.
+
+Søket forstår det klinikere faktisk skriver: hverdagsord («høyt blodtrykk», «uvi»),
+bøyde ord, manglende æøå, skrivefeil og ICD-10-koder. Det bruker også
+Helsedirektoratets egne henvisninger i eksklusjonsnotatene. Et eksklusjonsnotat
+teller aldri for koden det står på. Søket foreslår bare, og alt skjer på journalens
+egen tjener. Listen over hverdagsord bør gjennomgås av en kliniker.
 *Realisert:* `src/lib/server/terminology/`.
-*Testet:* `tests/terminology.test.ts`.
+*Testet:* `tests/terminology.test.ts`, `tests/icpc2-search.test.ts`, `e2e/icpc2.spec.ts`.
 
 **K-1.13 Pasientens egne opplysninger skal kunne rettes.**
 Navn, fødselsnummer, fødselsdato, kjønn, telefon, e-post og adresse kan endres

@@ -8,11 +8,13 @@
 	 *
 	 * Works without JavaScript: the visible input is the code field, and a
 	 * clinician who knows the code can type it and submit. With JavaScript, it
-	 * searches as they type and lets them pick from the official names.
+	 * searches as they type, in everyday words as well as official ones, and shows
+	 * why a code came up when its name does not say so. What is picked is always
+	 * the official code and name.
 	 */
 	let { name, value = '', label = 'Kode eller søkeord' }: { name: string; value?: string; label?: string } = $props();
 
-	type Hit = { code: string; display: string; chapter: string | null; icd10: string | null; inclusion: string | null };
+	type Hit = { code: string; display: string; chapter: string | null; icd10: string | null; inclusion: string | null; via: string | null };
 
 	// svelte-ignore state_referenced_locally -- the initial code is all that is wanted; the field owns it from here
 	let query = $state(value);
@@ -81,7 +83,7 @@
 		aria-expanded={open}
 		aria-controls={listId}
 		aria-autocomplete="list"
-		placeholder="K86 eller «hypertensjon»"
+		placeholder="K86, «høyt blodtrykk» eller «uvi»"
 		style="max-width: 24rem"
 	/>
 	{#if chosen}
@@ -102,7 +104,7 @@
 					onclick={() => choose(hit)}
 				>
 					<span class="mono kode">{hit.code}</span>
-					<span class="navn">{hit.display}</span>
+					<span class="navn">{hit.display}{#if hit.via}<span class="svak via"> – {hit.via}</span>{/if}</span>
 					{#if hit.inclusion}<span class="svak inkl">{hit.inclusion}</span>{/if}
 				</li>
 			{/each}

@@ -1,5 +1,6 @@
 import table from './icpc2.json';
 import { SYSTEM } from '../fhir/codesystems';
+import { createSmartSearch, type SmartHit } from './icpc2-search';
 
 /**
  * ICPC-2, the Norwegian edition, as published by Helsedirektoratet.
@@ -62,49 +63,19 @@ export function isIcpc2Code(code: string): boolean {
 	return Boolean(found && found.level === 2 && found.active);
 }
 
-const fold = (s: string) => s.toLowerCase().normalize('NFC');
+const smartSearch = createSmartSearch(data.codes);
 
 /**
- * Finds codes for what a clinician typed.
- *
- * A code prefix wins outright - `K8` lists K80 onwards - and then words. A
- * match at the start of the name ranks above one inside it, and one in the
- * name above one only in the inclusion notes, so "hypertensjon" gives K86
- * before the pregnancy code that merely mentions it. Chapter and range rows
- * are left out: nothing is filed under them.
+ * Finds codes for what a clinician typed, with why each one matched. Chapter and
+ * range rows are left out: nothing is filed under them. See `icpc2-search.ts`.
  */
+export function searchIcpc2WithReasons(query: string, limit = 20): SmartHit[] {
+	return smartSearch(query, limit);
+}
+
+/** The same, for callers that only want the codes. */
 export function searchIcpc2(query: string, limit = 20): Icpc2Code[] {
-	const q = fold(query.trim());
-	if (!q) return [];
-
-	if (/^[a-z]\d{0,2}$/i.test(q)) {
-		const prefix = q.toUpperCase();
-		return codes.filter((c) => c.active && c.code.startsWith(prefix)).slice(0, limit);
-	}
-
-	const words = q.split(/\s+/).filter(Boolean);
-	const scored: { code: Icpc2Code; score: number }[] = [];
-	for (const c of codes) {
-		if (!c.active) continue;
-		const name = fold(c.display);
-		const notes = fold(c.inclusion ?? '');
-		let score = 0;
-		for (const w of words) {
-			if (name.startsWith(w)) score += 3;
-			else if (name.split(/[\s/,()-]+/).some((t) => t.startsWith(w))) score += 2;
-			else if (name.includes(w)) score += 1;
-			else if (notes.includes(w)) score += 0.5;
-			else {
-				score = 0;
-				break;
-			}
-		}
-		if (score > 0) scored.push({ code: c, score });
-	}
-	return scored
-		.sort((a, b) => b.score - a.score || a.code.code.localeCompare(b.code.code))
-		.slice(0, limit)
-		.map((s) => s.code);
+	return smartSearch(query, limit).map((hit) => hit.code);
 }
 
 /** The seventeen chapters, in order. */
