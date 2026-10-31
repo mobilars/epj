@@ -36,7 +36,10 @@ export const load: PageServerLoad = async (event) => {
 			scopes: a.scopes.map((s) => ({ scope: s, description: describeScope(s) })),
 			installed: installed.has(a.id),
 			clientId: installed.get(a.id)?.client_id ?? null,
-			unapproved: a.status === 'til-vurdering',
+			// What this practice runs, or for an app it does not have, what is on offer.
+			unapproved: installed.has(a.id) ? !installed.get(a.id)?.approved_copy : a.status === 'til-vurdering',
+			// An approved copy is running, and the developer has sent in a change.
+			changePending: Boolean(installed.get(a.id)?.approved_copy) && a.status === 'til-vurdering',
 			// Set when the platform withdrew its approval after this practice
 			// installed the app. The client is already blocked.
 			withdrawn: a.status !== 'godkjent' && a.status !== 'til-vurdering',

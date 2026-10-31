@@ -38,6 +38,7 @@
 				{#if app.withdrawn}<span class="merke merke-fare">Trukket tilbake</span>
 				{:else if app.installed}<span class="merke merke-ok">Installert</span>{/if}
 				{#if app.unapproved}<span class="merke merke-advarsel">⚠ {NOT_APPROVED}</span>{/if}
+				{#if app.changePending}<span class="merke">Endring venter på godkjenning</span>{/if}
 			</span>
 		</div>
 		{#if app.withdrawn}
@@ -52,6 +53,12 @@
 				<strong>⚠ Plattformeier har ikke vurdert denne appen.</strong> Ingen har kontrollert at beskrivelsen
 				stemmer, eller at appen bare ber om det den trenger. Bruker dere den, er det virksomhetens eget
 				ansvar. Brukerne ser en advarsel, og hver av dem må godkjenne appen selv.
+			</div>
+		{/if}
+		{#if app.changePending}
+			<div class="varsel varsel-info">
+				Utvikleren har sendt inn en endring. Virksomheten bruker den godkjente versjonen til plattformeier
+				har godkjent endringen, og da oppdateres appen av seg selv. Teksten under viser den nye versjonen.
 			</div>
 		{/if}
 		{#if app.summary}<p>{app.summary}</p>{/if}

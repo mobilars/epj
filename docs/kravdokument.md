@@ -299,7 +299,9 @@ En virksomhet kan installere en app som venter på vurdering, men må bekrefte d
 uttrykkelig. Appen merkes med varseltrekant i rammen, på lenker og i
 samtykkedialogen, også når merking av eksterne apper er slått av. Virksomheten kan
 ikke godkjenne en slik app på brukernes vegne. Merkingen forsvinner når
-plattformeier godkjenner appen, og det som da kjører, er det som ble godkjent.
+plattformeier godkjenner appen, og det som da kjører, er det som ble godkjent. En
+endring av en godkjent app når virksomhetene først når plattformeier har godkjent
+endringen. Til da bruker de den godkjente versjonen, uten varsel.
 Apper som ble registrert direkte før denne regelen, virker videre og er merket.
 *Realisert:* `unapprovedClients()`, `ExternalFrame.svelte`, `/oauth/authorize`.
 *Testet:* `tests/catalogue.test.ts`, `e2e/smart.spec.ts`.

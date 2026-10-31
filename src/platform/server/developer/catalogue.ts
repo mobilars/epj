@@ -25,7 +25,8 @@ import { requireTenant } from '../tenant/context';
  *
  * Editing an approved entry sends it back for review. What was approved was a
  * particular set of scopes and addresses, and an app that can change those
- * afterwards has not really been reviewed at all.
+ * afterwards has not really been reviewed at all. So an edit reaches the practices
+ * when it is approved, and until then they keep running the copy they have.
  */
 
 export type CatalogueStatus = 'utkast' | 'til-vurdering' | 'godkjent' | 'avvist';
@@ -148,13 +149,14 @@ export async function reviewApp(id: string, approved: boolean, note: string, rev
 			// before the review, and the developer may have edited it since.
 			await exec(
 				`UPDATE oauth_client c
-				 SET redirect_uris = a.redirect_uris, allowed_scopes = a.scopes,
+				 SET name = a.name, redirect_uris = a.redirect_uris, allowed_scopes = a.scopes,
 					 launch_url = REPLACE(a.launch_url, '{client_id}', c.client_id)
 				 FROM catalogue_install i
 				 JOIN catalogue_app a ON a.id = i.catalogue_id
 				 WHERE i.catalogue_id = $1 AND c.tenant_id = i.tenant_id AND c.client_id = i.client_id`,
 				[id]
 			);
+			await exec('UPDATE catalogue_install SET approved_copy = true WHERE catalogue_id = $1', [id]);
 		} else {
 			// Deliberately across organisations: the platform is the one caller
 			// that may reach into every practice's client register for this.
@@ -229,8 +231,7 @@ export async function unapprovedClients(): Promise<Set<string>> {
 		`SELECT c.client_id
 		 FROM oauth_client c
 		 LEFT JOIN catalogue_install i ON i.tenant_id = c.tenant_id AND i.client_id = c.client_id
-		 LEFT JOIN catalogue_app a ON a.id = i.catalogue_id
-		 WHERE c.tenant_id = $1 AND NOT c.first_party AND a.status IS DISTINCT FROM 'godkjent'`,
+		 WHERE c.tenant_id = $1 AND NOT c.first_party AND i.approved_copy IS NOT TRUE`,
 		[requireTenant().id]
 	);
 	return new Set(rows.map((row) => row.client_id));
@@ -259,10 +260,11 @@ export interface Install {
 	catalogue_id: string;
 	client_id: string;
 	installed_at: string;
+	approved_copy: boolean;
 }
 
 export async function installsForTenant(): Promise<Install[]> {
-	return query<Install>('SELECT catalogue_id, client_id, installed_at FROM catalogue_install WHERE tenant_id = $1', [
+	return query<Install>('SELECT catalogue_id, client_id, installed_at, approved_copy FROM catalogue_install WHERE tenant_id = $1', [
 		requireTenant().id
 	]);
 }
@@ -308,8 +310,8 @@ export async function installApp(
 		await setReplacesTab(client.client_id, null);
 
 		await exec(
-			'INSERT INTO catalogue_install (id, catalogue_id, tenant_id, client_id, installed_by) VALUES ($1,$2,$3,$4,$5)',
-			[newId(), app.id, tenantId, client.client_id, installedBy]
+			'INSERT INTO catalogue_install (id, catalogue_id, tenant_id, client_id, installed_by, approved_copy) VALUES ($1,$2,$3,$4,$5,$6)',
+			[newId(), app.id, tenantId, client.client_id, installedBy, app.status === 'godkjent']
 		);
 		return { clientId: client.client_id, secret };
 	});

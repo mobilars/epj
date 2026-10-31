@@ -121,7 +121,7 @@ describeIf('catalogue', () => {
 			expect(await withTenant(a, () => unapprovedClients())).toContain(clientId);
 
 			await updateApp(id, 'dev1', {
-				name: 'Uvurdert', summary: 's', description: 'd', launchUrl: 'https://ny.example/launch?c={client_id}',
+				name: 'Nytt navn', summary: 's', description: 'd', launchUrl: 'https://ny.example/launch?c={client_id}',
 				redirectUris: ['https://ny.example/cb'], scopes: ['launch', 'patient/Patient.rs'], placement: 'ingen',
 				contactEmail: '', privacyUrl: '', databehandleravtale: ''
 			});
@@ -129,9 +129,31 @@ describeIf('catalogue', () => {
 
 			expect(await withTenant(a, () => unapprovedClients())).not.toContain(clientId);
 			const client = (await withTenant(a, () => getClient(clientId)))!;
+			expect(client.name).toBe('Nytt navn');
 			expect(client.redirect_uris).toEqual(['https://ny.example/cb']);
 			expect(client.allowed_scopes).toEqual(['launch', 'patient/Patient.rs']);
 			expect(client.launch_url).toBe(`https://ny.example/launch?c=${clientId}`);
+		});
+
+		it('an edit to an approved app reaches the practice when approved, and is not marked meanwhile', async () => {
+			const { clientId } = await withTenant(a, async () => installApp((await getCatalogueApp(appId))!, null));
+			await updateApp(appId, 'dev1', {
+				name: 'Endret', summary: 's', description: 'd', launchUrl: 'https://app.example/launch/smart',
+				redirectUris: ['https://app.example/cb'], scopes: ['launch', 'patient/Patient.rs'], placement: 'side',
+				contactEmail: 'dev@example.com', privacyUrl: '', databehandleravtale: ''
+			});
+
+			// Still running the copy that was approved, so nothing to warn about.
+			expect((await getCatalogueApp(appId))!.status).toBe('til-vurdering');
+			expect(await withTenant(a, () => unapprovedClients())).not.toContain(clientId);
+			const before = (await withTenant(a, () => getClient(clientId)))!;
+			expect(before.name).toBe('Testapp');
+			expect(before.launch_url).toBe('https://app.example/launch');
+
+			await reviewApp(appId, true, 'ok', null);
+			const after = (await withTenant(a, () => getClient(clientId)))!;
+			expect(after.name).toBe('Endret');
+			expect(after.launch_url).toBe('https://app.example/launch/smart');
 		});
 
 		it('marks a directly registered app, but not one the platform registered itself', async () => {
