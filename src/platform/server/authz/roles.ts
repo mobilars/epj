@@ -73,6 +73,8 @@ export const PLATFORM_PERMISSIONS = [
 	'time:administrer',
 	'pasient:opprett',
 	'pasient:sperr',
+	// Registering oneself as carer of a patient, which is what opens the record.
+	'pasient:tilknytt',
 	'admin:brukere',
 	'admin:apper',
 	'admin:logg',
@@ -123,7 +125,7 @@ const PLATFORM_ROLE_DEFINITIONS: Record<Role, RoleDefinisjon> = {
 		],
 		permissions: [
 			'journal:les', 'journal:skriv', 'journal:signer', 'journal:rett', 'journal:slett-begjaering',
-			'journal:utlever', 'time:administrer', 'pasient:opprett', 'pasient:sperr', 'logg:innsyn'
+			'journal:utlever', 'time:administrer', 'pasient:opprett', 'pasient:sperr', 'pasient:tilknytt', 'logg:innsyn'
 		],
 		canEmergencyAccess: true,
 		canSeeAllPatients: false

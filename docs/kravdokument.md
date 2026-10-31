@@ -150,9 +150,13 @@ lesetilgang, men har sikkerhetsloggen.
 
 **K-2.2 Tilgang skal kreve tjenstlig behov.**
 Utover rollen kreves en dokumentert behandlingsrelasjon til den enkelte pasient.
-Uten relasjon gis ingen tilgang, og pasienten vises ikke i søk.
+En behandler kan registrere seg selv på en pasient i virksomheten uten
+godkjenning, fra pasientsøket eller fra siden som sier at tilgang mangler. Før det
+vises bare navn, maskert fødselsnummer og alder. Registreringen loggføres, og en
+sperring gjelder fortsatt. En pasient som har sperret for brukeren, tilbys ikke.
+Uten relasjon gis ingen tilgang til journalen.
 *Realisert:* `care_relationship`, `tillattePasienter()` i `authz/tilgang.ts`.
-*Testet:* `tests/tilgang.test.ts`, `e2e/tilgang.spec.ts`.
+*Testet:* `tests/tilgang.test.ts`, `tests/care-relationship.test.ts`, `e2e/tilgang.spec.ts`.
 
 **K-2.3 Søk skal avgrenses, ikke etterfiltreres i grensesnittet.**
 Avgrensningen legges inn i selve spørringen mot FHIR-serveren. Et bredt søk kan
@@ -164,14 +168,14 @@ ikke returnere pasienter brukeren mangler relasjon til.
 Sperring mot en navngitt bruker, mot en rolle, mot alle, eller mot et enkelt
 dokument. Sperrede pasienter filtreres også bort fra søkeresultater.
 *Realisert:* `journal_sperring`, `erSperret()`, `sperredePasienter()`.
-*Testet:* `tests/tilgang.test.ts`, `e2e/tilgang.spec.ts`.
+*Testet:* `tests/tilgang.test.ts`, `tests/care-relationship.test.ts`, `e2e/tilgang.spec.ts`.
 
 **K-2.5 Nødrettstilgang skal finnes, og den skal koste noe.**
 Krever begrunnelse på minst 15 tegn, ny bekreftelse av engangskode, og varer
 fire timer. Oppslaget merkes `ETREAT` i loggen og legges i kø for gjennomgang.
 Nødrett overstyrer tjenstlig behov og sperring, men aldri scope eller rolle.
 *Realisert:* `break_glass`, `src/platform/routes/pasienter/[id]/nodrett/`.
-*Testet:* `tests/tilgang.test.ts`, `e2e/tilgang.spec.ts`.
+*Testet:* `tests/tilgang.test.ts`, `tests/care-relationship.test.ts`, `e2e/tilgang.spec.ts`.
 
 **K-2.6 Tilgangsbeslutningen skal tas ett sted.**
 Journalens eget grensesnitt går gjennom nøyaktig samme vokter som eksterne

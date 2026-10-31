@@ -22,6 +22,7 @@
 		emergencyAccess: boolean;
 		blocked: boolean;
 		canBeAboutEmergencyAccess: boolean;
+		canRegisterAsCarer: boolean;
 		canUtlevere: boolean;
 		canSkrive: boolean;
 		canRestrict: boolean;
@@ -285,6 +286,15 @@
 		</p>
 		{#if data.blocked && data.canRestrict && !onRestrictionPage}
 			<p><a href="/pasienter/{data.patientId}/sperring">Se og forvalt sperringene på journalen</a></p>
+		{/if}
+
+		{#if data.canRegisterAsCarer}
+			<h3>Er du behandler av pasienten?</h3>
+			<p class="svak">Registrerer du deg, får du tilgang til journalen. Det krever ingen godkjenning, men loggføres på deg.</p>
+			<form method="POST" action="/pasienter?/registrerBehandler">
+				<input type="hidden" name="patientId" value={data.patientId} />
+				<button type="submit" class="primar">Registrer som behandler av denne pasienten</button>
+			</form>
 		{/if}
 
 		{#if data.canBeAboutEmergencyAccess}

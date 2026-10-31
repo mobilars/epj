@@ -13,7 +13,7 @@ const EXPECTED: Record<(typeof ROLES)[number], string[]> = {
 	behandler: [
 		'journal:les', 'journal:rett', 'journal:signer', 'journal:skriv', 'journal:slett-begjaering', 'journal:utlever',
 		'logg:innsyn', 'melding:les', 'melding:send', 'melding:signer', 'oppgjor:registrer', 'pasient:opprett',
-		'pasient:sperr', 'resept:fornye', 'resept:forskriv', 'time:administrer'
+		'pasient:sperr', 'pasient:tilknytt', 'resept:fornye', 'resept:forskriv', 'time:administrer'
 	],
 	lab: ['journal:les', 'journal:skriv', 'melding:les'],
 	resepsjon: [

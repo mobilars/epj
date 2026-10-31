@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import pg from 'pg';
 import { logIn, totp, waitOnHydration } from './hjelpere';
 
 /**
@@ -30,6 +31,63 @@ test.describe('tilgangsstyring', () => {
 		await expect(page.getByRole('alert')).toContainText('behandlingsrelasjon');
 		// The record content is not shown.
 		await expect(page.getByRole('heading', { name: 'Diagnoser og problemer' })).toHaveCount(0);
+	});
+
+	test('a clinician finds a patient they are not linked to and registers as carer', async ({ page }) => {
+		await logIn(page, 'lege');
+		const id = await findPatientId(page, 'Vik');
+		await page.getByRole('button', { name: 'Logg ut' }).click();
+
+		const db = new pg.Client({ connectionString: process.env.E2E_DATABASE_URL });
+		await db.connect();
+		try {
+			await logIn(page, 'sykepleier');
+			await page.goto('/pasienter?sok=Vik');
+			await waitOnHydration(page);
+
+			// Found, but offered rather than opened, with only enough to pick the person.
+			const others = page.locator('.kort').filter({ hasText: 'Andre pasienter i virksomheten' });
+			await expect(others).toContainText('Vik');
+			await expect(others.getByRole('link')).toHaveCount(0);
+			await expect(others).not.toContainText('Telefon');
+
+			await others.getByRole('button', { name: 'Registrer som behandler av denne pasienten' }).first().click();
+			await expect(page).toHaveURL(new RegExp(`/pasienter/${id}$`));
+			await expect(page.getByRole('heading', { name: 'Diagnoser og problemer' })).toBeVisible();
+
+			const logged = await db.query(
+				"SELECT count(*)::int AS n FROM epj.audit_event WHERE subtype = 'behandlingsrelasjon:registrert' AND patient_id = $1",
+				[id]
+			);
+			expect(logged.rows[0].n).toBe(1);
+		} finally {
+			// The other tests rely on the nurse having no access to this patient.
+			await db.query("DELETE FROM epj.care_relationship WHERE basis = 'selvregistrert'");
+			await db.end();
+		}
+	});
+
+	test('reception finds no patients to take on, and cannot post its way to one', async ({ page }) => {
+		await logIn(page, 'sekretaer');
+		await page.goto('/pasienter?sok=Vik');
+		await expect(page.getByRole('button', { name: 'Registrer som behandler av denne pasienten' })).toHaveCount(0);
+		await expect(page.getByText('Andre pasienter i virksomheten')).toHaveCount(0);
+
+		const response = await page.request.post('/pasienter?/registrerBehandler', {
+			headers: { accept: 'text/html', origin: new URL(page.url()).origin },
+			form: { patientId: 'hvem-som-helst' },
+			maxRedirects: 0
+		});
+		expect(response.status()).toBe(403);
+	});
+
+	test('the no-access page offers it too, before emergency access', async ({ page }) => {
+		await logIn(page, 'lege');
+		const id = await findPatientId(page, 'Vik');
+		await page.getByRole('button', { name: 'Logg ut' }).click();
+		await logIn(page, 'sykepleier');
+		await page.goto(`/pasienter/${id}`);
+		await expect(page.getByRole('button', { name: 'Registrer som behandler av denne pasienten' })).toBeVisible();
 	});
 
 	test('sperret journal stenger ute den sperringen gjelder', async ({ page }) => {

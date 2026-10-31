@@ -45,10 +45,16 @@ alt annet, så den gir aldri mer enn den som utleverer selv har tilgang til.
 ### Tjenstlig behov
 
 En behandlingsrelasjon registreres i `care_relationship` med et grunnlag
-(fastlege, konsultasjon, vikar, henvisning, administrativ) og en gyldighets-
-periode. Uten en gyldig relasjon:
+(fastlege, konsultasjon, vikar, henvisning, administrativ, selvregistrert) og en
+gyldighetsperiode.
 
-* vises ikke pasienten i søk — avgrensningen legges inn i selve FHIR-spørringen,
+En behandler kan registrere seg selv på en pasient i virksomheten uten godkjenning.
+Tjenstlig behov håndheves da gjennom logg og etterkontroll, ikke gjennom en kontroll
+på forhånd. Dette må virksomheten ta med i sin egen risikovurdering. Uten en gyldig
+relasjon:
+
+* gir pasientsøket bare navn, maskert fødselsnummer og alder, som valg om å registrere
+  seg, og bare til behandlere. Journalsøket avgrenses i selve FHIR-spørringen,
 * gir oppslag på ressurs-id 403, og
 * forsøket loggføres.
 

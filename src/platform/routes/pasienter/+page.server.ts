@@ -1,5 +1,7 @@
-import { error, redirect } from '@sveltejs/kit';
-import type { PageServerLoad } from './$types';
+import { error, fail, redirect } from '@sveltejs/kit';
+import type { Actions, PageServerLoad } from './$types';
+import { fhirClient } from '$srv/fhir/client';
+import { mayJoinPatient, patientsToJoin, registerAsCarer } from '$srv/journal/care-relationship';
 import { resources, searchResources } from '$srv/fhir/internal';
 import { toPatientDisplay } from '$srv/fhir/display';
 import { validNorwegianNationalId } from '$srv/fhir/codesystems';
@@ -40,6 +42,7 @@ export const load: PageServerLoad = async (event) => {
 		return {
 			search: '',
 			match: patients.map(toPatientDisplay),
+			others: [],
 			countMine: mine.length,
 			sokteAfterFnr: false,
 			canRegister: ctx.permissions.has('pasient:opprett')
@@ -56,10 +59,26 @@ export const load: PageServerLoad = async (event) => {
 		: await searchResources(ctx, 'Patient', { name: search, _count: 40, _sort: 'family' });
 	const invalidNumber = isFnr && !validNorwegianNationalId(search);
 
+	// Those at the practice this user has no relationship with, for a clinician who
+	// is taking one on. Two characters at least: this is for finding a person, not
+	// for paging through the practice's patients.
+	const others =
+		ctx.permissions.has('pasient:tilknytt') && search.length >= 2
+			? await patientsToJoin(
+					ctx,
+					new URLSearchParams(
+						isFnr
+							? { identifier: identitySearch(search), _count: '20' }
+							: { name: search, _count: '20', _sort: 'family' }
+					),
+					new Set(resources(bundle).map((p) => p.id as string))
+				)
+			: [];
+
 	await log(
 		{
 			type: 'rest', subtype: 'pasientsøk', action: 'E', outcome: '0',
-			details: { type: isFnr ? 'fødselsnummer' : 'navn', match: (bundle.entry ?? []).length }
+			details: { type: isFnr ? 'fødselsnummer' : 'navn', match: (bundle.entry ?? []).length, andreTreff: others.length }
 		},
 		actorFromContext(ctx)
 	);
@@ -67,10 +86,40 @@ export const load: PageServerLoad = async (event) => {
 	return {
 		search,
 		match: resources(bundle).map(toPatientDisplay),
+		others,
 		countMine: mine.length,
 		sokteAfterFnr: isFnr,
 		canRegister: ctx.permissions.has('pasient:opprett'),
 		// Said, not enforced: the search has been done all the same.
 		...(invalidNumber ? { notice: 'Dette er ikke et gyldig fødselsnummer: kontrollsifrene stemmer ikke.' } : {})
 	};
+};
+
+export const actions: Actions = {
+	registrerBehandler: async (event) => {
+		const ctx = event.locals.auth;
+		if (!ctx?.userId || !ctx.permissions.has('pasient:tilknytt')) return fail(403, { error: 'Ingen tilgang.' });
+		const form = await event.request.formData();
+		const patientId = String(form.get('patientId') ?? '');
+		if (!/^[A-Za-z0-9.-]{1,64}$/.test(patientId)) return fail(400, { error: 'Ugyldig pasient.' });
+		if (!(await mayJoinPatient(ctx, patientId))) return fail(403, { error: 'Du kan ikke registrere deg på denne pasienten.' });
+		// A relationship to someone who does not exist would be a row nothing explains.
+		const patient = await fhirClient.read('Patient', patientId).catch(() => null);
+		if (!patient) return fail(404, { error: 'Fant ikke pasienten.' });
+
+		await registerAsCarer(ctx.userId, patientId);
+		await log(
+			{
+				type: 'rest',
+				subtype: 'behandlingsrelasjon:registrert',
+				action: 'C',
+				outcome: '0',
+				patientId,
+				entityRef: `Patient/${patientId}`,
+				details: { grunnlag: 'selvregistrert' }
+			},
+			actorFromContext(ctx)
+		);
+		redirect(303, `/pasienter/${patientId}`);
+	}
 };

@@ -13,6 +13,7 @@ import { clientAtPlacement, clientsByTab, listClients } from '$srv/auth/clients'
 import { createLaunch } from '$srv/auth/oauth';
 import { SETTING, getSetting } from '$srv/auth/settings';
 import { launchModeOf } from '$srv/auth/launchmode';
+import { mayJoinPatient } from '$srv/journal/care-relationship';
 
 /**
  * The frame around a single patient record.
@@ -123,6 +124,7 @@ export const load: LayoutServerLoad = async (event) => {
 		blocked: restrictions.length > 0,
 		restrictions: restrictions.map((s) => ({ scope_extent: s.scope_extent, justification: s.justification, registered_at: s.registered_at })),
 		canBeAboutEmergencyAccess: canEmergencyAccess(ctx.roles),
+		canRegisterAsCarer: !patient && (await mayJoinPatient(ctx, patientId)),
 		canUtlevere: ctx.permissions.has('journal:utlever'),
 		canSkrive: ctx.permissions.has('journal:skriv'),
 		canRestrict: ctx.permissions.has('pasient:sperr'),
