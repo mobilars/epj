@@ -18,19 +18,21 @@ export const load: PageServerLoad = async (event) => {
 	const ctx = event.locals.auth;
 	if (!ctx?.userId) redirect(303, `/logg-inn?retur=${encodeURIComponent(event.url.pathname)}`);
 
-	const [apps, standard, chosen, arbeidsflate, pasientoversikt, theme, shortcuts] = await Promise.all([
+	const [apps, standard, chosen, arbeidsflate, pasientoversikt, theme, shortcuts, marking] = await Promise.all([
 		listClients(),
 		clientAtPlacement('side'),
 		getSetting(ctx.userId, SETTING.SIDE_APP),
 		resolveLayout('arbeidsflate', ctx.userId),
 		resolveLayout('pasientoversikt', ctx.userId),
 		getSetting(ctx.userId, SETTING.THEME),
-		getSetting(ctx.userId, SETTING.SHORTCUTS)
+		getSetting(ctx.userId, SETTING.SHORTCUTS),
+		getSetting(ctx.userId, SETTING.MARK_EXTERNAL_APPS)
 	]);
 
 	return {
 		theme: isTheme(theme) ? theme : 'system',
 		shortcuts: shortcuts !== 'off',
+		markExternalApps: marking !== 'off',
 		// Which cards each surface shows, and where the arrangement came from.
 		layouts: {
 			arbeidsflate: { ...arbeidsflate, cards: CARDS.arbeidsflate, chosen: arbeidsflate.cards },
@@ -53,6 +55,16 @@ export const actions: Actions = {
 		const value = form.get('tema');
 		if (isTheme(value)) await setSetting(ctx.userId, SETTING.THEME, value);
 		else await clearSetting(ctx.userId, SETTING.THEME);
+		redirect(303, '/innstillinger');
+	},
+
+	/** The coloured frame around external apps, on or off. */
+	externalApps: async (event) => {
+		const ctx = event.locals.auth;
+		if (!ctx?.userId) redirect(303, '/logg-inn');
+		const form = await event.request.formData();
+		if (form.get('merkEksterne') === 'ja') await clearSetting(ctx.userId, SETTING.MARK_EXTERNAL_APPS);
+		else await setSetting(ctx.userId, SETTING.MARK_EXTERNAL_APPS, 'off');
 		redirect(303, '/innstillinger');
 	},
 

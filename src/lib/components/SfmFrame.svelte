@@ -9,8 +9,9 @@
 	 */
 	import { onMount } from 'svelte';
 	import { createHandshake, type SfmState } from '$lib/sfm/handshake';
+	import ExternalFrame from '$lib/components/ExternalFrame.svelte';
 
-	let { patientId }: { patientId: string } = $props();
+	let { patientId, simulated = false }: { patientId: string; simulated?: boolean } = $props();
 
 	/** A little more than NHN's lower bound for how long the one-time code lives. */
 	const LOAD_TIMEOUT_MS = 30_000;
@@ -124,23 +125,17 @@
 {/if}
 
 {#if src}
-	<iframe
-		bind:this={frame}
-		class="sfm"
+	<!-- Not a SMART app, but just as much not the record's own. The label must not
+	     claim SFM while it is only the local simulator. -->
+	<ExternalFrame
+		bind:frame
+		class="appramme appramme-full sfm"
+		label={simulated ? 'SFM-simulator – ikke koblet til Norsk helsenett' : 'Sentral forskrivningsmodul – tjeneste fra Norsk helsenett'}
 		{src}
 		title="Sentral forskrivningsmodul"
 		allow="clipboard-write"
 		referrerpolicy="no-referrer"
 		data-state={sfmState}
-	></iframe>
+	/>
 {/if}
 
-<style>
-	.sfm {
-		width: 100%;
-		height: min(86vh, 1100px);
-		border: 1px solid var(--kant);
-		border-radius: 8px;
-		background: var(--flate);
-	}
-</style>

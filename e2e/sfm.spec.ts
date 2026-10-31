@@ -33,4 +33,34 @@ test.describe('SFM Full against the simulator', () => {
 		// The record's own prescribing form is gone: prescribing happens in SFM.
 		await expect(page.getByRole('button', { name: /Forskriv/ })).toHaveCount(0);
 	});
+
+	test('marks the frame as external, says it is a simulator, and the marking can be turned off', async ({ page }) => {
+		await logIn(page, 'lege');
+		const patientId = await openFirstPatient(page);
+		const legemidler = `/pasienter/${patientId}/legemidler`;
+
+		await page.goto(legemidler);
+		await waitOnHydration(page);
+		const stripe = page.locator('.ekstern-stripe');
+		await expect(stripe).toContainText('SFM-simulator');
+		await expect(stripe).toContainText('ikke koblet til Norsk helsenett');
+
+		await page.goto('/innstillinger');
+		await waitOnHydration(page);
+		await page.getByLabel('Merk eksterne apper').uncheck();
+		await page.locator('form[action="?/externalApps"] button').click();
+		await expect(page.getByLabel('Merk eksterne apper')).not.toBeChecked();
+
+		await page.goto(legemidler);
+		await waitOnHydration(page);
+		await expect(page.locator('iframe.sfm')).toBeVisible();
+		await expect(page.locator('.ekstern-stripe')).toHaveCount(0);
+
+		// Back on, so the next test finds it as a new user would.
+		await page.goto('/innstillinger');
+		await waitOnHydration(page);
+		await page.getByLabel('Merk eksterne apper').check();
+		await page.locator('form[action="?/externalApps"] button').click();
+		await expect(page.getByLabel('Merk eksterne apper')).toBeChecked();
+	});
 });

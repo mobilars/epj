@@ -16,7 +16,9 @@ export const SETTING = {
 	/** `light` or `dark`. Absent means follow the operating system. */
 	THEME: 'theme',
 	/** `off` turns the single-key shortcuts off (WCAG 2.1.4). Absent means on. */
-	SHORTCUTS: 'shortcuts'
+	SHORTCUTS: 'shortcuts',
+	/** `off` removes the coloured frame around external apps. Absent means on. */
+	MARK_EXTERNAL_APPS: 'mark-external-apps'
 } as const;
 
 export type Theme = 'light' | 'dark';

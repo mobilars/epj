@@ -31,6 +31,21 @@
 </section>
 
 <section class="kort">
+	<h2>Eksterne apper</h2>
+	<p class="svak">
+		Apper fra andre leverandører kan se ut som en del av journalen. Med merking får de en farget
+		ramme, og fanene og menyvalgene som fører til dem får en farget prikk.
+	</p>
+	<form method="POST" action="?/externalApps">
+		<label class="avkryssing">
+			<input type="checkbox" name="merkEksterne" value="ja" checked={data.markExternalApps} />
+			Merk eksterne apper
+		</label>
+		<button type="submit" class="liten primar">Lagre</button>
+	</form>
+</section>
+
+<section class="kort">
 	<h2>Hurtigtaster</h2>
 	<p class="svak">
 		Enkeltaster som <kbd>/</kbd> for søk og <kbd>n</kbd> for nytt notat. Trykk <kbd>?</kbd> for å se alle.

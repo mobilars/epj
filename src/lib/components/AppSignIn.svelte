@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ExternalFrame from './ExternalFrame.svelte';
 	/**
 	 * An app that cannot be framed until the user has signed in somewhere else.
 	 *
@@ -52,7 +53,7 @@
 </script>
 
 {#if framed}
-	<iframe class="appramme" src={frameUrl} title={name} allow="clipboard-write"></iframe>
+	<ExternalFrame class="appramme appramme-full" src={frameUrl} title={name} allow="clipboard-write" />
 	<p class="svak omstart">
 		Er rammen tom? Da varte ikke påloggingen.
 		<button type="button" class="lenkeknapp" onclick={() => { framed = false; started = false; }}>
@@ -83,13 +84,6 @@
 {/if}
 
 <style>
-	.appramme {
-		width: 100%;
-		height: min(86vh, 1100px);
-		border: 1px solid var(--kant);
-		border-radius: 8px;
-		background: var(--flate);
-	}
 
 	.handlinger {
 		display: flex;

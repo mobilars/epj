@@ -40,10 +40,14 @@ export const load: LayoutServerLoad = async (event) => {
 	// On unless the user has turned them off.
 	const shortcuts = ctx?.userId ? (await getSetting(ctx.userId, SETTING.SHORTCUTS)) !== 'off' : false;
 
+	// The same: on unless the user has turned it off.
+	const markExternalApps = ctx?.userId ? (await getSetting(ctx.userId, SETTING.MARK_EXTERNAL_APPS)) !== 'off' : true;
+
 	return {
 		apps,
 		recentPatients: recent,
 		shortcuts,
+		markExternalApps,
 		user: ctx
 			? {
 					name: ctx.name,

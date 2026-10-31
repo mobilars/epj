@@ -1,5 +1,6 @@
 <script lang="ts">
 	import AppSignIn from '$lib/components/AppSignIn.svelte';
+	import ExternalFrame from '$lib/components/ExternalFrame.svelte';
 	let { data } = $props();
 </script>
 
@@ -30,7 +31,7 @@
 {:else if data.mode === 'signin'}
 	<AppSignIn name={data.app.name} startUrl={data.startUrl} frameUrl={data.frameUrl} />
 {:else}
-	<iframe class="appramme" src={data.launchUrl} title={data.app.name} allow="clipboard-write"></iframe>
+	<ExternalFrame class="appramme appramme-full" src={data.launchUrl} title={data.app.name} allow="clipboard-write" />
 {/if}
 
 <style>
@@ -59,11 +60,4 @@
 		gap: 0.4rem;
 	}
 
-	.appramme {
-		width: 100%;
-		height: min(86vh, 1100px);
-		border: 1px solid var(--kant);
-		border-radius: 8px;
-		background: var(--flate);
-	}
 </style>

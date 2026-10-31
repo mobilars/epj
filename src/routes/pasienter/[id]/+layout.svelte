@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Nedtrekk from '$lib/components/Nedtrekk.svelte';
+	import ExternalFrame from '$lib/components/ExternalFrame.svelte';
 
 	// Measured, so the side panel can stick just below the header whatever the
 	// header's height turns out to be on this screen.
@@ -54,6 +55,8 @@
 	 *
 	 * What a clinician opens many times a day, and what the tab bar is for.
 	 */
+	const EXTERNAL_TITLE = 'Ekstern app – ikke en del av journalen';
+
 	const faner = $derived([
 		fane('', 'Oversikt'),
 		fane('notater', 'Journalnotater'),
@@ -138,12 +141,19 @@
 
 	<nav class="faner" aria-label="Journalfaner">
 		{#each faner as f (f.text)}
-			<a href={f.href} aria-current={page.url.pathname === f.href ? 'page' : undefined}>{f.text}</a>
+			<a
+				href={f.href}
+				class:ekstern-lenke={f.app}
+				title={f.app ? EXTERNAL_TITLE : undefined}
+				aria-current={page.url.pathname === f.href ? 'page' : undefined}
+			>{f.text}</a>
 		{/each}
 		{#each tabAppsOwn as app (app.clientId)}
 			{@const href = appLenke(app)}
 			<a
 				{href}
+				class="ekstern-lenke"
+				title={EXTERNAL_TITLE}
 				target={app.openInNewTab ? '_blank' : undefined}
 				rel={app.openInNewTab ? 'noopener' : undefined}
 				aria-current={page.url.pathname === href ? 'page' : undefined}
@@ -155,6 +165,8 @@
 					{#each dropdownApps as app (app.clientId)}
 						<a
 							href={appLenke(app)}
+							class="ekstern-lenke"
+							title={EXTERNAL_TITLE}
 							target={app.openInNewTab ? '_blank' : undefined}
 							rel={app.openInNewTab ? 'noopener' : undefined}
 						>{app.name}{#if app.openInNewTab} ↗{/if}</a>
@@ -198,7 +210,7 @@
 							Åpne {data.widePanel.name}
 						</a>
 					{:else if data.widePanel.url}
-						<iframe class="appramme appramme-hoved" src={data.widePanel.url} title={data.widePanel.name}></iframe>
+						<ExternalFrame class="appramme appramme-hoved" src={data.widePanel.url} title={data.widePanel.name} />
 					{/if}
 				</section>
 			{/if}
@@ -230,7 +242,7 @@
 							Åpne {data.sidePanel.name}
 						</a>
 					{:else if data.sidePanel.url}
-						<iframe class="appramme appramme-side" src={data.sidePanel.url} title={data.sidePanel.name}></iframe>
+						<ExternalFrame class="appramme appramme-side" src={data.sidePanel.url} title={data.sidePanel.name} />
 					{/if}
 				</section>
 			{:else if data.canSkrive}

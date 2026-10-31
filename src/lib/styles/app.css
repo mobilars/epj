@@ -31,6 +31,11 @@
 	--on-danger: #ffffff;
 	--masthead: #0d3a5c;
 	--masthead-text: #ffffff;
+	/* What the record did not make. Purple, because blue, amber, red and green
+	   already say something else here. */
+	--external-app: #6b3fa0;
+	--on-external-app: #ffffff;
+	--external-app-on-masthead: #d9c2ff;
 	color-scheme: light;
 	--radius: 6px;
 	--skygge: 0 1px 2px rgb(20 24 29 / 8%), 0 2px 8px rgb(20 24 29 / 6%);
@@ -63,6 +68,9 @@
 		   masthead with light text was about 2:1. */
 		--masthead: #0e2a40;
 		--masthead-text: #e8ecf1;
+		--external-app: #c9a6f5;
+		--on-external-app: #1c0f2e;
+		--external-app-on-masthead: #d9c2ff;
 		color-scheme: dark;
 	}
 }
@@ -93,6 +101,9 @@
 	   masthead with light text was about 2:1. */
 	--masthead: #0e2a40;
 	--masthead-text: #e8ecf1;
+	--external-app: #c9a6f5;
+	--on-external-app: #1c0f2e;
+	--external-app-on-masthead: #d9c2ff;
 	color-scheme: dark;
 }
 
@@ -365,7 +376,21 @@ main.bred { max-width: none; }
 .apppanel h2 { margin: 0 0 0.5rem; font-size: 1rem; }
 .appramme { width: 100%; border: 1px solid var(--kant); border-radius: 6px; background: var(--flate); }
 .appramme-side { height: 30rem; }
+.appramme-full { height: min(86vh, 1100px); }
 .appramme-hoved { height: min(60vh, 700px); }
+/* A link that leads to an external app, wherever it sits. The frame itself is
+   ExternalFrame; this is what tells you before you press. */
+.merk-eksterne a.ekstern-lenke::before {
+  content: '';
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.35rem;
+  border-radius: 50%;
+  background: var(--external-app);
+  vertical-align: 0.05em;
+}
+.merk-eksterne .topplinje a.ekstern-lenke::before { background: var(--external-app-on-masthead); }
 .snarveier { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
 @media (max-width: 1100px) {
   .journalflate { grid-template-columns: minmax(0, 1fr); }

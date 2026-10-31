@@ -5,7 +5,7 @@
 
 {#if data.sfmFull}
 	<h2>Legemidler</h2>
-	<SfmFrame patientId={data.patientId} />
+	<SfmFrame patientId={data.patientId} simulated={data.mode === 'mock'} />
 {:else}
 
 <div class="rad-mellom">

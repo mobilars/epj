@@ -16,6 +16,7 @@
 			apps: MenuApp[];
 			recentPatients: { id: string; name: string; age: number | null }[];
 			shortcuts: boolean;
+			markExternalApps: boolean;
 		};
 		children: Snippet;
 	} = $props();
@@ -66,7 +67,7 @@
 	<title>EPJ · {data.organisation}</title>
 </svelte:head>
 
-<div class="app">
+<div class="app" class:merk-eksterne={data.markExternalApps}>
 	{#if showMiljobanner}
 		<div class="miljobanner" role="status">
 			Testmiljø · integrasjoner i «{data.miljo.integrations}»-modus · ikke bruk ekte pasientopplysninger
@@ -121,9 +122,9 @@
 			     through the start endpoint that mints its launch. -->
 			{#each mainMenuApps as app (app.clientId)}
 				{#if app.openInNewTab}
-					<a href="/apper/{app.clientId}/start" target="_blank" rel="noopener">{app.name} ↗</a>
+					<a class="ekstern-lenke" title="Ekstern app – ikke en del av journalen" href="/apper/{app.clientId}/start" target="_blank" rel="noopener">{app.name} ↗</a>
 				{:else}
-					<a href="/apper/{app.clientId}" aria-current={page.url.pathname === `/apper/${app.clientId}` ? 'page' : undefined}>{app.name}</a>
+					<a class="ekstern-lenke" title="Ekstern app – ikke en del av journalen" href="/apper/{app.clientId}" aria-current={page.url.pathname === `/apper/${app.clientId}` ? 'page' : undefined}>{app.name}</a>
 				{/if}
 			{/each}
 
