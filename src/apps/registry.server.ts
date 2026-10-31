@@ -1,6 +1,7 @@
 import type { AuthContext } from '$srv/authz/context';
 import { registerLoginExtension } from '$srv/auth/login-extensions';
 import { billingExtension } from './billing/server/extension';
+import { medicationsExtension } from './medications/server/extension';
 import { messagesExtension } from './messages/server/extension';
 import { sfmLogin } from './sfm/server/extension';
 
@@ -29,6 +30,13 @@ export async function workspaceNotices(ctx: AuthContext): Promise<WorkspaceNotic
 /** Figures for the administration page. */
 export async function adminFacts(): Promise<{ label: string; value: number }[]> {
 	return (await Promise.all([messagesExtension.adminFacts()])).flat();
+}
+
+/** Each app moves its own data when two records of one person are joined. */
+export async function movePatientInApps(from: string, to: string): Promise<void> {
+	await messagesExtension.movePatient(from, to);
+	await billingExtension.movePatient(from, to);
+	await medicationsExtension.movePatient(from, to);
 }
 
 registerLoginExtension(sfmLogin);

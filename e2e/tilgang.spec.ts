@@ -78,6 +78,64 @@ test.describe('tilgangsstyring', () => {
 		await expect(page.getByRole('alert').getByRole('link')).toContainText('Ola Vik');
 	});
 
+	test('correcting a fødselsnummer needs a reason, and is refused if the number is taken', async ({ page }) => {
+		await logIn(page, 'lege');
+		const id = await findPatientId(page, 'Emma');
+		await page.goto(`/pasienter/${id}/rediger`);
+		await waitOnHydration(page);
+		const number = page.getByLabel('Fødselsnummer eller D-nummer');
+		const original = await number.inputValue();
+		const save = page.getByRole('button', { name: 'Lagre', exact: true });
+
+		// The number of Ola Vik, in the demo data.
+		await number.fill('24035810281');
+		await save.click();
+		await expect(page.getByRole('alert')).toContainText('Skriv hvorfor');
+
+		await waitOnHydration(page);
+		await page.getByLabel('Årsak til at fødselsnummeret rettes').fill('Feil tastet ved registrering');
+		await save.click();
+		await expect(page.getByRole('alert')).toContainText('allerede registrert');
+
+		await page.goto(`/pasienter/${id}/rediger`);
+		await expect(number).toHaveValue(original);
+	});
+
+	test('a record registered twice is joined, and the old address finds the kept one', async ({ page, request }) => {
+		await logIn(page, 'lege');
+		const keptId = await findPatientId(page, 'Nordli');
+		await page.goto(`/pasienter/${keptId}/rediger`);
+		const number = await page.getByLabel('Fødselsnummer eller D-nummer').inputValue();
+
+		// A duplicate as it arose before registration checked: straight in the FHIR server.
+		const created = await request.post(`${process.env.EPJ_HAPI_BASE_URL}/standard/Patient`, {
+			headers: { 'content-type': 'application/fhir+json' },
+			data: {
+				resourceType: 'Patient',
+				active: true,
+				identifier: [{ system: 'urn:oid:2.16.578.1.12.4.1.4.1', value: number }],
+				name: [{ use: 'official', family: 'Nordli', given: ['Duplikat'] }]
+			}
+		});
+		const copyId = (await created.json()).id as string;
+
+		await page.goto(`/pasienter/${keptId}/slaa-sammen`);
+		await waitOnHydration(page);
+		const card = page.locator('section.kort', { hasText: 'Duplikat' });
+		await expect(card).toContainText('Samme fødselsnummer');
+
+		await card.getByLabel('Hvorfor slås journalene sammen?').fill('Registrert to ganger ved en feil');
+		await card.getByLabel('Jeg har kontrollert').check();
+		await card.getByRole('button', { name: 'Flytt alt hit og slå sammen' }).click();
+		await expect(page).toHaveURL(new RegExp(`/pasienter/${keptId}$`));
+
+		await page.goto(`/pasienter/${copyId}`);
+		await expect(page).toHaveURL(new RegExp(`/pasienter/${keptId}$`));
+
+		await page.goto(`/pasienter/${keptId}/slaa-sammen`);
+		await expect(page.locator('section.kort', { hasText: 'Duplikat' })).toHaveCount(0);
+	});
+
 	test('reception finds no patients to take on, and cannot post its way to one', async ({ page }) => {
 		await logIn(page, 'sekretaer');
 		await page.goto('/pasienter?sok=Vik');

@@ -180,6 +180,11 @@ export const fhirClient = {
 		return call('DELETE', `${resourceType}/${encodeURIComponent(id)}`, undefined, o);
 	},
 
+	/** A further page of a result, by the address the server gave for it. */
+	async page(url: string, o?: CallOpsjoner): Promise<Bundle> {
+		return (await call('GET', url, undefined, o)).resource as Bundle;
+	},
+
 	async transaction(bundle: Bundle, o?: CallOpsjoner): Promise<Bundle> {
 		return (await call('POST', '', bundle, o)).resource as Bundle;
 	},

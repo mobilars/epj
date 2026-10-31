@@ -14,6 +14,7 @@ import { createLaunch } from '$srv/auth/oauth';
 import { SETTING, getSetting } from '$srv/auth/settings';
 import { launchModeOf } from '$srv/auth/launchmode';
 import { mayJoinPatient } from '$srv/journal/care-relationship';
+import { keptPatientFor } from '$srv/journal/patient-merge';
 
 /**
  * The frame around a single patient record.
@@ -31,6 +32,10 @@ export const load: LayoutServerLoad = async (event) => {
 		error(403, 'Rollen din har ikke tilgang til pasientopplysninger.');
 	}
 	const patientId = event.params.id;
+
+	// A record merged into another: an old link or bookmark goes to where it is now.
+	const kept = await keptPatientFor(patientId);
+	if (kept) redirect(303, event.url.pathname.replace(`/pasienter/${patientId}`, `/pasienter/${kept}`));
 
 	let patient = null;
 	let nektet: string | null = null;
@@ -130,6 +135,7 @@ export const load: LayoutServerLoad = async (event) => {
 		canRestrict: ctx.permissions.has('pasient:sperr'),
 		// Whoever may register a patient may correct one's details.
 		canEditDetails: ctx.permissions.has('pasient:opprett'),
+		canMerge: ctx.permissions.has('pasient:slaa-sammen'),
 		requireIsOneTimeCode: config.security.requireMfa && ctx.amr !== 'helseid'
 	};
 };

@@ -40,7 +40,11 @@ export interface PatientToJoin {
  */
 export async function patientsToJoin(ctx: AuthContext, search: URLSearchParams, alreadyVisible: Set<string>): Promise<PatientToJoin[]> {
 	const [bundle, blocked] = await Promise.all([fhirClient.search('Patient', search), blockedPatients(ctx)]);
-	const patients = resources(bundle).map(toPatientDisplay);
+	// A record merged into another is not someone to take on.
+	const current = resources(bundle).filter(
+		(p) => !((p.link as { type?: string }[] | undefined) ?? []).some((l) => l.type === 'replaced-by')
+	);
+	const patients = current.map(toPatientDisplay);
 	const numbers = patients.map((patient) => patient.nationalId).filter(Boolean);
 	return patients
 		.filter((patient) => !alreadyVisible.has(patient.id) && !blocked.has(patient.id))

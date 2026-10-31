@@ -181,6 +181,8 @@ export async function log(
 
 export interface LogFilter {
 	patientId?: string;
+	/** For a record that other records have been merged into. */
+	patientIds?: string[];
 	userId?: string;
 	from?: string;
 	to?: string;
@@ -216,6 +218,7 @@ export async function getLog(filter: LogFilter): Promise<{ rows: LogRow[]; total
 		conditions.push(sql.replace('?', `$${params.length}`));
 	};
 	if (filter.patientId) add('patient_id = ?', filter.patientId);
+	if (filter.patientIds) add('patient_id = ANY(?)', filter.patientIds);
 	if (filter.userId) add('actor_user_id = ?', filter.userId);
 	if (filter.from) add('recorded >= ?', filter.from);
 	if (filter.to) add('recorded <= ?', filter.to);

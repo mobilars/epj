@@ -30,6 +30,53 @@
 				'openid fhirUser launch launch/patient online_access ' +
 				'patient/Patient.rs patient/Composition.rs patient/Composition.c patient/Encounter.c patient/Condition.c';
 
+			const ICPC2_SYSTEM = 'urn:oid:2.16.578.1.12.4.1.1.7170';
+
+			/**
+			 * The record's own ICPC-2 search, as any app can reach it: a code or an everyday
+			 * word goes in, and picking a hit fills in both the code and the text. What is
+			 * typed is kept if nothing is picked, for someone who knows the code.
+			 */
+			function wireIcpcSearch() {
+				const input = document.getElementById('diagnose');
+				const text = document.getElementById('diagnosetekst');
+				const hits = document.getElementById('icpc-treff');
+				if (!input || !hits) return;
+				let latest = 0;
+				let timer;
+
+				input.addEventListener('input', () => {
+					clearTimeout(timer);
+					const query = input.value.trim();
+					if (query.length < 2) {
+						hits.replaceChildren();
+						return;
+					}
+					timer = setTimeout(async () => {
+						const asked = ++latest;
+						const params = new URLSearchParams({ url: ICPC2_SYSTEM, filter: query, count: '8' });
+						const result = await smart.read(`ValueSet/$expand?${params}`);
+						// An older answer must not replace a newer one.
+						if (asked !== latest || !result.ok) return;
+						hits.replaceChildren(
+							...(result.body?.expansion?.contains ?? []).map((hit) => {
+								const button = document.createElement('button');
+								button.type = 'button';
+								button.className = 'liten';
+								button.style.cssText = 'display:block;width:100%;text-align:left;margin-top:0.2rem';
+								button.textContent = `${hit.code} ${hit.display}`;
+								button.addEventListener('click', () => {
+									input.value = hit.code;
+									text.value = hit.display;
+									hits.replaceChildren();
+								});
+								return button;
+							})
+						);
+					}, 200);
+				});
+			}
+
 			const app = document.getElementById('app');
 			const el = (html) => (app.innerHTML = html);
 
@@ -84,9 +131,10 @@
 						<label for="vurdering">Vurdering og plan</label>
 						<textarea id="vurdering" rows="3"></textarea>
 						<div class="rad" style="margin-top:0.6rem">
-							<div><label for="diagnose">ICPC-2</label><input id="diagnose" placeholder="valgfritt, f.eks. T90" /></div>
+							<div><label for="diagnose">ICPC-2: kode eller søkeord</label><input id="diagnose" autocomplete="off" placeholder="f.eks. T90 eller høyt blodtrykk" /></div>
 							<div><label for="diagnosetekst">Diagnosetekst</label><input id="diagnosetekst" /></div>
 						</div>
+						<div id="icpc-treff" role="listbox" aria-label="Treff i ICPC-2"></div>
 						<p style="margin-top:0.7rem"><button type="submit" id="lagre">Lagre notat</button></p>
 					</form>
 
@@ -113,6 +161,8 @@
 					</div>
 					</div>
 				`);
+
+				wireIcpcSearch();
 
 				document.getElementById('skjema').addEventListener('submit', save);
 			}
@@ -155,7 +205,7 @@
 						clinicalStatus: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-clinical', code: 'active' }] },
 						verificationStatus: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-ver-status', code: 'provisional' }] },
 						category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-category', code: 'encounter-diagnosis' }] }],
-						code: { coding: [{ system: 'http://ehelse.no/fhir/CodeSystem/icpc-2', code, display: value('diagnosetekst') }], text: value('diagnosetekst') || code },
+						code: { coding: [{ system: ICPC2_SYSTEM, code, display: value('diagnosetekst') }], text: value('diagnosetekst') || code },
 						subject,
 						encounter: { reference: `Encounter/${encounter.body.id}` },
 						recordedDate: now

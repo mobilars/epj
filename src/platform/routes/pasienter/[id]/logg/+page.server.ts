@@ -1,6 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { getLog, log, actorFromContext } from '$srv/audit';
+import { mergedPatientIds } from '$srv/journal/patient-merge';
 
 /**
  * Access log.
@@ -16,7 +17,9 @@ export const load: PageServerLoad = async (event) => {
 	if (!parent.patient) return { rows: [], total: 0, page: 0 };
 
 	const page = Math.max(0, Number(event.url.searchParams.get('side') ?? 0));
-	const { rows, total } = await getLog({ patientId: event.params.id, limit: 50, offset: page * 50 });
+	// Who looked at a record merged into this one is still something the patient may know.
+	const ids = [event.params.id, ...(await mergedPatientIds(event.params.id))];
+	const { rows, total } = await getLog({ patientIds: ids, limit: 50, offset: page * 50 });
 
 	await log(
 		{ type: 'rest', subtype: 'logg-innsyn', action: 'R', outcome: '0', patientId: event.params.id, purposeOfUse: 'HOPERAT' },

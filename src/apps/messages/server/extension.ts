@@ -1,10 +1,17 @@
 import type { AuthContext } from '$srv/authz/context';
+import { exec } from '$srv/db';
+import { requireTenant } from '$srv/tenant/context';
 import { listMessages, pendingKvitteringer } from './nhn/message-queue';
 
 /** How long a sent message may wait for its receipt before it is worth mentioning. */
 const RECEIPT_MINUTES = 60;
 
 export const messagesExtension = {
+	/** Messages follow the patient when two records are joined. */
+	movePatient: async (from: string, to: string) => {
+		await exec('UPDATE message SET patient_id = $3 WHERE tenant_id = $1 AND patient_id = $2', [requireTenant().id, from, to]);
+	},
+
 	workspaceCards: {
 		/** New messages for the card on the work surface. */
 		meldinger: async (ctx: AuthContext) => {

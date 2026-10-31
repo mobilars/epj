@@ -33,6 +33,7 @@ import {
  */
 
 interface Form {
+	askReason?: boolean;
 	error?: string;
 	values?: Record<string, string>;
 	duplicate?: { id: string; name: string };
@@ -85,6 +86,13 @@ export const actions: Actions = {
 			return fail(400, { values, confirmIdentity: problem.message } as Form);
 		}
 
+		// Everything in the record hangs on this number, so a correction is a special
+		// case: allowed, but only with a reason, and the old number stays in the log.
+		const reason = String(form.get('arsakFodselsnummer') ?? '').trim();
+		if (!sameNumber && before.nationalId && reason.length < 10) {
+			return back('Skriv hvorfor fødselsnummeret rettes (minst ti tegn). Årsaken loggføres.', { askReason: true });
+		}
+
 		// Two records for one person is the mistake hardest to undo. A changed
 		// number must not land on one somebody else already has.
 		if (!sameNumber) {
@@ -120,6 +128,7 @@ export const actions: Actions = {
 						? {}
 						: {
 								fodselsnummer: maskerNationalId(details.nationalId),
+								...(before.nationalId ? { forrigeFodselsnummer: maskerNationalId(before.nationalId), arsak: reason } : {}),
 								unverified: !validNorwegianNationalId(details.nationalId)
 							})
 				}

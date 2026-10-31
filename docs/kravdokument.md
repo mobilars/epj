@@ -148,6 +148,15 @@ lesetilgang, men har sikkerhetsloggen.
 *Realisert:* `src/platform/server/authz/roles.ts`.
 *Testet:* `tests/brukere.test.ts`, `e2e/tilgang.spec.ts`.
 
+**K-1.x To journaler for samme person skal kunne slås sammen.**
+En behandler med tilgang til journalen kan flytte alt fra en dobbeltregistrert journal
+dit, med årsak og bekreftelse, og en ekstra bekreftelse hvis fødselsnumrene er ulike.
+Ingenting slettes: alle tidligere versjoner er bevart, og den andre journalen merkes som
+erstattet. Sperringer, behandlingsrelasjoner og innsynsloggen følger med. En sammenslåing
+kan ikke angres i grensesnittet. Et fødselsnummer kan rettes med en loggført årsak.
+*Realisert:* `journal/patient-merge.ts`, `/pasienter/[id]/slaa-sammen`.
+*Testet:* `tests/patient-merge.test.ts`, `e2e/tilgang.spec.ts`.
+
 **K-2.2 Tilgang skal kreve tjenstlig behov.**
 Utover rollen kreves en dokumentert behandlingsrelasjon til den enkelte pasient.
 En behandler kan registrere seg selv på en pasient i virksomheten uten

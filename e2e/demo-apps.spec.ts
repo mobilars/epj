@@ -75,6 +75,17 @@ test.describe('demo apps', () => {
 		await expect(page.getByText('Metformin 500 mg')).toHaveCount(0);
 	});
 
+	test('Journalnotat finds a diagnosis from everyday words', async ({ page }) => {
+		await launch(page, 'notat.html', /Bakken/);
+		await page.getByLabel('ICPC-2: kode eller søkeord').pressSequentially('høyt blodtrykk');
+		const hit = page.getByRole('button', { name: /K86/ }).first();
+		await expect(hit).toBeVisible();
+		await hit.click();
+		await expect(page.getByLabel('ICPC-2: kode eller søkeord')).toHaveValue('K86');
+		await expect(page.getByLabel('Diagnosetekst')).toHaveValue(/Hypertensjon/);
+		await expect(page.getByRole('button', { name: /K86/ })).toHaveCount(0);
+	});
+
 	test('Hjerterisiko fills in what the record knows, and calculates when the rest is given', async ({ page }) => {
 		await launch(page, 'hjerterisiko.html', /Bakken/);
 		await expect(page.getByRole('heading', { name: 'Hjerterisiko' })).toBeVisible();

@@ -142,6 +142,20 @@ export async function patientsWithNationalId(nationalId: string): Promise<FhirRe
 	return resources(await fhirClient.search('Patient', new URLSearchParams({ identifier: identitySearch(nationalId), _count: '5' })));
 }
 
+/**
+ * A patient without the numbers that identify them, for a record that has been replaced.
+ * Kept under a system of their own, so the number is still there but no longer finds it.
+ */
+export function retireIdentifiers(patient: FhirResource): FhirResource {
+	const identifiers = (patient.identifier as { system?: string; value?: string }[] | undefined) ?? [];
+	return {
+		...patient,
+		identifier: identifiers.map((i) =>
+			i.system && IDENTITY_SYSTEMS.includes(i.system) ? { ...i, system: 'urn:epj:erstattet-identifikator', use: 'old' } : i
+		)
+	} as FhirResource;
+}
+
 /** The number on a patient, under whichever system it was filed. */
 export function nationalIdOf(patient: FhirResource): string {
 	const identifiers = (patient.identifier as { system?: string; value?: string }[] | undefined) ?? [];

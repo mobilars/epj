@@ -27,6 +27,7 @@
 		canSkrive: boolean;
 		canRestrict: boolean;
 		canEditDetails?: boolean;
+		canMerge?: boolean;
 		tabApps: Record<string, { name: string; clientId: string }>;
 		sidePanel: PanelApp | null;
 		widePanel: PanelApp | null;
@@ -81,6 +82,7 @@
 	 */
 	const merFaner = $derived([
 		...(data.canEditDetails ? [fane('rediger', 'Pasientopplysninger')] : []),
+		...(data.canMerge ? [fane('slaa-sammen', 'Slå sammen journaler')] : []),
 		fane('logg', 'Innsynslogg'),
 		...(data.canUtlevere ? [fane('utlevering', 'Utlevering')] : []),
 		...(data.canRestrict ? [fane('sperring', 'Sperring')] : [])

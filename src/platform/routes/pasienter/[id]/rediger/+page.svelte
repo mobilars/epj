@@ -13,6 +13,7 @@
 			{form.error}
 			{#if form.duplicate}
 				<a href="/pasienter/{form.duplicate.id}">Åpne journalen til {form.duplicate.name}</a>
+				· <a href="/pasienter/{data.patientId}/slaa-sammen">Slå sammen journalene</a>
 			{/if}
 		</div>
 	{/if}
@@ -50,7 +51,7 @@
 		<div class="felt" style="flex: 1 1 220px">
 			<label for="fodselsnummer">Fødselsnummer eller D-nummer</label>
 			<input id="fodselsnummer" name="fodselsnummer" inputmode="numeric" required autocomplete="off" value={value('fodselsnummer')} />
-			<small class="svak">Elleve siffer.</small>
+			<small class="svak">Elleve siffer. Rettes bare i spesielle tilfeller, og da med en årsak under.</small>
 		</div>
 		<div class="felt" style="flex: 0 1 180px">
 			<label for="fodselsdato">Fødselsdato</label>
@@ -99,6 +100,11 @@
 	</div>
 
 	<div class="rad">
+		<div class="felt">
+			<label for="arsakFodselsnummer">Årsak til at fødselsnummeret rettes</label>
+			<input id="arsakFodselsnummer" name="arsakFodselsnummer" autocomplete="off" aria-invalid={form?.askReason ? 'true' : undefined} />
+			<small class="svak">Må fylles ut bare hvis nummeret endres. Årsaken og det gamle nummeret, maskert, loggføres.</small>
+		</div>
 		<button type="submit" class="primar">Lagre</button>
 		<a class="knapp" href="/pasienter/{data.patientId}">Avbryt</a>
 	</div>
