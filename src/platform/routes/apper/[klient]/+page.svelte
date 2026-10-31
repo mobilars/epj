@@ -29,9 +29,9 @@
 		</p>
 	</section>
 {:else if data.mode === 'signin'}
-	<AppSignIn name={data.app.name} startUrl={data.startUrl} frameUrl={data.frameUrl} />
+	<AppSignIn name={data.app.name} clientId={data.app.clientId} startUrl={data.startUrl} frameUrl={data.frameUrl} />
 {:else}
-	<ExternalFrame class="appramme appramme-full" src={data.launchUrl} title={data.app.name} allow="clipboard-write" />
+	<ExternalFrame class="appramme appramme-full" src={data.launchUrl} title={data.app.name} clientId={data.app.clientId} allow="clipboard-write" />
 {/if}
 
 <style>

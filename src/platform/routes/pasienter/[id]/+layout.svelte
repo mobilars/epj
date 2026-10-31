@@ -214,7 +214,7 @@
 							Åpne {data.widePanel.name}
 						</a>
 					{:else if data.widePanel.url}
-						<ExternalFrame class="appramme appramme-hoved" src={data.widePanel.url} title={data.widePanel.name} />
+						<ExternalFrame class="appramme appramme-hoved" src={data.widePanel.url} title={data.widePanel.name} clientId={data.widePanel.clientId} />
 					{/if}
 				</section>
 			{/if}
@@ -244,7 +244,7 @@
 							Åpne {data.sidePanel.name}
 						</a>
 					{:else if data.sidePanel.url}
-						<ExternalFrame class="appramme appramme-side" src={data.sidePanel.url} title={data.sidePanel.name} />
+						<ExternalFrame class="appramme appramme-side" src={data.sidePanel.url} title={data.sidePanel.name} clientId={data.sidePanel.clientId} />
 					{/if}
 				</section>
 			{:else if data.canSkrive && SidePanel}
@@ -258,7 +258,7 @@
 				</div>
 				<ul class="snarveier">
 					{#each patientLinks as link (link.segment)}
-						<li><a href="/pasienter/{data.patientId}/{link.segment}">{link.label}</a></li>
+						<li><a href={fane(link.segment, link.label).href}>{link.label}</a></li>
 					{/each}
 					<li><a href="/pasienter/{data.patientId}/apper">Apper</a></li>
 				</ul>

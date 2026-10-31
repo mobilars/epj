@@ -4,7 +4,7 @@ import { hasTestDatabase, createTestDatabase, emptyTables, type TestDatabase } f
 import { withTenant } from '../src/platform/server/tenant/context';
 import { getTenant } from '../src/platform/server/tenant/tenant';
 import { getClient } from '../src/platform/server/auth/clients';
-import { createApp, submitApp, reviewApp, installApp, uninstallApp, getCatalogueApp } from '../src/platform/server/developer/catalogue';
+import { createApp, submitApp, reviewApp, installApp, uninstallApp, getCatalogueApp, publishersForTenant } from '../src/platform/server/developer/catalogue';
 import type { Tenant } from '../src/platform/server/tenant/context';
 
 const describeIf = hasTestDatabase() ? describe : describe.skip;
@@ -73,6 +73,18 @@ describeIf('catalogue', () => {
 		expect(ia.clientId).not.toBe(ib.clientId);
 		expect(await withTenant(a, () => getClient(ia.clientId))).toBeTruthy();
 		expect(await withTenant(a, () => getClient(ib.clientId))).toBeNull();
+	});
+
+	it('says who made an installed app, only for the practice that installed it', async () => {
+		const app = (await getCatalogueApp(appId))!;
+		const { clientId } = await withTenant(a, () => installApp(app, null));
+
+		const seen = await withTenant(a, () => publishersForTenant());
+		expect(seen.get(clientId)).toEqual({ publisher: 'Dev', contactEmail: 'dev@example.com' });
+		expect((await withTenant(b, () => publishersForTenant())).size).toBe(0);
+
+		await exec("UPDATE developer SET organisation = 'Appmakerne AS' WHERE id = 'dev1'");
+		expect((await withTenant(a, () => publishersForTenant())).get(clientId)?.publisher).toBe('Appmakerne AS');
 	});
 
 	it('uninstalling blocks the client and revokes its tokens', async () => {

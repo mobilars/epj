@@ -85,6 +85,29 @@ test.describe('SMART on FHIR', () => {
 		expect(assets).toEqual([]);
 	});
 
+	test("an app's name on its frame opens who made it and where it runs", async ({ page }) => {
+		await logIn(page, 'lege');
+		const clientId = await getClientId(page);
+		const patientId = page.url().split('/pasienter/')[1].split(/[/?]/)[0];
+		await page.goto(`/pasienter/${patientId}/apper/${clientId}`);
+		await waitOnHydration(page);
+
+		const stripe = page.locator('.ekstern-stripe');
+		await expect(stripe).toContainText('Ekstern app - Diabetesoversikt (demo)');
+		await expect(stripe).not.toContainText('ikke en del av journalen');
+
+		const details = page.locator('.appinfo');
+		await expect(details).toBeHidden();
+		await stripe.getByRole('button', { name: 'Diabetesoversikt (demo)' }).click();
+		await expect(details).toBeVisible();
+		// Registered directly by the practice, so no developer is on record.
+		await expect(details).toContainText('Ikke oppgitt');
+		await expect(details).toContainText('localhost:4000');
+		await expect(details).toContainText(clientId);
+		await page.keyboard.press('Escape');
+		await expect(details).toBeHidden();
+	});
+
 	test('the hop back refuses an address no app has registered', async ({ request }) => {
 		const response = await request.get(`/oauth/videresend?til=${encodeURIComponent('https://evil.example/callback')}`);
 		expect(response.status()).toBe(400);

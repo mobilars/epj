@@ -183,6 +183,27 @@ export async function installableApps(): Promise<CatalogueApp[]> {
 	);
 }
 
+/**
+ * Who made the apps this practice installed from the catalogue, by client id. An
+ * app registered directly by the practice has no developer on record.
+ */
+export async function publishersForTenant(): Promise<Map<string, { publisher: string | null; contactEmail: string | null }>> {
+	const rows = await query<{ client_id: string; organisation: string; name: string; contact_email: string }>(
+		`SELECT i.client_id, d.organisation, d.name, a.contact_email
+		 FROM catalogue_install i
+		 JOIN catalogue_app a ON a.id = i.catalogue_id
+		 JOIN developer d ON d.id = a.developer_id
+		 WHERE i.tenant_id = $1`,
+		[requireTenant().id]
+	);
+	return new Map(
+		rows.map((row) => [
+			row.client_id,
+			{ publisher: row.organisation || row.name || null, contactEmail: row.contact_email || null }
+		])
+	);
+}
+
 export interface Install {
 	catalogue_id: string;
 	client_id: string;

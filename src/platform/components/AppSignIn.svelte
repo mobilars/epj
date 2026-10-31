@@ -21,7 +21,7 @@
 	 * navigate. Coming back to the record is the signal we use instead: it costs
 	 * a keystroke at worst and gives the app nothing.
 	 */
-	let { name, startUrl, frameUrl }: { name: string; startUrl: string; frameUrl: string } = $props();
+	let { name, clientId, startUrl, frameUrl }: { name: string; clientId?: string; startUrl: string; frameUrl: string } = $props();
 
 	let started = $state(false);
 	let framed = $state(false);
@@ -53,7 +53,7 @@
 </script>
 
 {#if framed}
-	<ExternalFrame class="appramme appramme-full" src={frameUrl} title={name} allow="clipboard-write" />
+	<ExternalFrame class="appramme appramme-full" src={frameUrl} title={name} {clientId} allow="clipboard-write" />
 	<p class="svak omstart">
 		Er rammen tom? Da varte ikke påloggingen.
 		<button type="button" class="lenkeknapp" onclick={() => { framed = false; started = false; }}>

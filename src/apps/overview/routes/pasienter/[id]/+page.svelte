@@ -2,6 +2,11 @@
 	import type { PageProps } from '$routetypes/pasienter/[id]/$types';
 	let { data, form }: PageProps = $props();
 	const g = $derived(data.grupper);
+	// Where a tab goes, whether the built-in page or the app a practice gave it to.
+	const tabHref = (segment: string) => {
+		const app = data.tabApps?.[segment];
+		return app ? `/pasienter/${data.patientId}/apper/${app.clientId}` : `/pasienter/${data.patientId}/${segment}`;
+	};
 	// A card set aside stays aside for this view; the service has been told.
 	const visible = $derived((data.cds?.cards ?? []).filter((c) => (c.uuid ?? c.summary) !== form?.cdsDismissed));
 </script>
@@ -126,7 +131,7 @@
 							{/each}
 						</ul>
 					{/if}
-					<a class="knapp liten" href="/pasienter/{data.patientId}/legemidler">Åpne legemiddelliste</a>
+					<a class="knapp liten" href={tabHref('legemidler')}>Åpne legemiddelliste</a>
 				</section>
 			{:else if card === 'maalinger'}
 				<section class="kort">
@@ -156,7 +161,7 @@
 							{/each}
 						</ul>
 					{/if}
-					<a class="knapp liten" href="/pasienter/{data.patientId}/notater">Alle notater</a>
+					<a class="knapp liten" href={tabHref('notater')}>Alle notater</a>
 				</section>
 			{:else if card === 'kontakter'}
 				<section class="kort">

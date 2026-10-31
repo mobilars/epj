@@ -2,8 +2,18 @@ import type { LayoutServerLoad } from './$types';
 import { config } from '$srv/config';
 import { ROLE_DEFINISJONER } from '$srv/authz/roles';
 import { listClients } from '$srv/auth/clients';
+import { publishersForTenant } from '$srv/developer/catalogue';
 import { recentPatients } from '$srv/journal/recent';
 import { SETTING, getSetting } from '$srv/auth/settings';
+
+/** A badly registered address must not take every page down with it. */
+function hostOf(url: string | null): string | null {
+	try {
+		return url ? new URL(url).host : null;
+	} catch {
+		return null;
+	}
+}
 
 /** Data shared by the whole application: who is signed in, and in which environment. */
 export const load: LayoutServerLoad = async (event) => {
@@ -17,11 +27,12 @@ export const load: LayoutServerLoad = async (event) => {
 	 * the rest live under a dropdown, so a practice with many apps does not push
 	 * the record's own pages off the bar.
 	 */
+	const publishers = ctx?.permissions.has('journal:les') ? await publishersForTenant() : new Map();
 	const apps =
 		ctx?.permissions.has('journal:les')
 			? (await listClients())
 					.filter((c) => c.status === 'aktiv' && c.launch_url && c.client_category !== 'backend')
-					.map((c) => ({ clientId: c.client_id, name: c.name, inMainMenu: c.in_main_menu, inPatientTabs: c.in_patient_tabs, openInNewTab: c.open_in_new_tab }))
+					.map((c) => ({ clientId: c.client_id, name: c.name, inMainMenu: c.in_main_menu, inPatientTabs: c.in_patient_tabs, openInNewTab: c.open_in_new_tab, host: hostOf(c.launch_url), publisher: publishers.get(c.client_id)?.publisher ?? null, contactEmail: publishers.get(c.client_id)?.contactEmail ?? null }))
 			: [];
 
 	/**
