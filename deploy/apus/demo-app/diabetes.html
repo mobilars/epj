@@ -15,15 +15,16 @@
 			 *
 			 * What a clinician looks over before a diabetes check, on one screen: how
 			 * HbA1c, blood pressure and weight have moved, and what the patient takes.
-			 * Read only, and it draws no conclusions: it sets no treatment goals, since
-			 * those are for the guideline and the clinician.
+			 * It draws no conclusions: it sets no treatment goals, since those are for the
+			 * guideline and the clinician. It writes nothing but example data, on request.
 			 */
 			import { connect, escapeHtml as esc, SmartError } from '/smart.js';
 			import { lineChart, series } from '/chart.js';
+			import { exampleObservation, monthsAgo, mountExampleControls } from '/example-data.js';
 
 			const SCOPE =
 				'openid fhirUser launch launch/patient online_access ' +
-				'patient/Patient.rs patient/Observation.rs patient/Condition.rs patient/MedicationRequest.rs';
+				'patient/Patient.rs patient/Observation.rs patient/Observation.cu patient/Condition.rs patient/MedicationRequest.rs';
 
 			const app = document.getElementById('app');
 			const el = (html) => (app.innerHTML = html);
@@ -41,6 +42,19 @@
 				el(`<h1>Diabetesoversikt</h1><p class="svak">Startes fra journalen.</p>`);
 			} else {
 				await render();
+			}
+
+			/** Two years of a patient slowly getting better controlled. Invented. */
+			function examples() {
+				const months = [24, 18, 12, 6, 1];
+				const trend = (code, display, unit, values, lab = false) =>
+					values.map((value, i) => exampleObservation(smart.patientId, { code, display, unit, value, lab, when: monthsAgo(months[i]) }));
+				return [
+					...trend('4548-4', 'HbA1c', 'mmol/mol', [68, 62, 57, 54, 52], true),
+					...trend('8480-6', 'Systolisk blodtrykk', 'mm[Hg]', [152, 148, 144, 138, 134]),
+					...trend('8462-4', 'Diastolisk blodtrykk', 'mm[Hg]', [94, 92, 88, 84, 82]),
+					...trend('29463-7', 'Vekt', 'kg', [96, 94.5, 93, 92, 90.5])
+				];
 			}
 
 			async function render() {
@@ -84,8 +98,10 @@
 									.join('')}</ul>`
 							: '<p class="svak liten">Ingen aktive resepter.</p>'
 					}
+					<div id="eksempel"></div>
 					<p class="svak liten" style="margin-top:0.8rem">Demonstrasjonsapp, ikke til klinisk bruk. Viser bare det som står i journalen.</p>
 				`);
+				mountExampleControls(document.getElementById('eksempel'), { smart, measured, examples, onChange: render });
 			}
 		</script>
 	</body>

@@ -1,5 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { COEFFICIENTS, framinghamRisk, riskFromMgDl } from '../deploy/apus/demo-app/framingham.js';
+import { exampleObservation, isExample, isTestRecord } from '../deploy/apus/demo-app/example-data.js';
+
+describe('example data', () => {
+	it('is offered only against a test environment', () => {
+		expect(isTestRecord('https://epj.apps.apus.no/fhir')).toBe(true);
+		expect(isTestRecord('https://prov.apps.apus.no/fhir')).toBe(true);
+		expect(isTestRecord('http://localhost:5173/fhir')).toBe(true);
+		expect(isTestRecord('http://127.0.0.1:4173/fhir')).toBe(true);
+
+		expect(isTestRecord('https://journal.legekontor.no/fhir')).toBe(false);
+		expect(isTestRecord('https://epj.apps.apus.no.example.com/fhir')).toBe(false);
+		expect(isTestRecord('https://apps.apus.no/fhir')).toBe(false);
+		expect(isTestRecord('')).toBe(false);
+		expect(isTestRecord(undefined)).toBe(false);
+	});
+
+	it('says what it is, on the resource itself', () => {
+		const resource = exampleObservation('p1', { code: '8480-6', display: 'Systolisk', value: 140, unit: 'mm[Hg]', when: '2026-01-01T00:00:00Z' });
+		expect(isExample(resource)).toBe(true);
+		expect(resource.note[0].text).toContain('Eksempeldata');
+		expect(resource.subject.reference).toBe('Patient/p1');
+		expect(isExample({ resourceType: 'Observation' })).toBe(false);
+	});
+});
 
 describe('the heart risk demo', () => {
 	// The worked examples in D'Agostino et al., Circulation 2008, in the paper's own units.

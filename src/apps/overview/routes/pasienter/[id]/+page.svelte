@@ -143,7 +143,7 @@
 							<thead><tr><th>Måling</th><th class="hoyre">Verdi</th><th>Tidspunkt</th></tr></thead>
 							<tbody>
 								{#each g.malinger as m (m.id)}
-									<tr><td>{m.name}</td><td class="hoyre tall">{m.value}</td><td class="svak">{m.timestamp}</td></tr>
+									<tr><td>{m.name}{#if m.example} <span class="merke merke-advarsel">Eksempeldata</span>{/if}</td><td class="hoyre tall">{m.value}</td><td class="svak">{m.timestamp}</td></tr>
 								{/each}
 							</tbody>
 						</table>

@@ -14,16 +14,17 @@
 			 * Hjerterisiko.
 			 *
 			 * Fills in what the record knows and asks for the rest, so a clinician can
-			 * also try "what if the blood pressure came down". Nothing is saved: changing
-			 * a number here is a question, not a measurement.
+			 * also try "what if the blood pressure came down". Changing a number here is a
+			 * question, not a measurement, so it is not saved. Only example data is, on request.
 			 */
 			import { connect, escapeHtml as esc, SmartError } from '/smart.js';
 			import { dateText, latest, series } from '/chart.js';
 			import { AGE_RANGE, framinghamRisk } from '/framingham.js';
+			import { exampleObservation, monthsAgo, mountExampleControls } from '/example-data.js';
 
 			const SCOPE =
 				'openid fhirUser launch launch/patient online_access ' +
-				'patient/Patient.rs patient/Observation.rs patient/Condition.rs';
+				'patient/Patient.rs patient/Observation.rs patient/Observation.cu patient/Condition.rs';
 
 			const app = document.getElementById('app');
 			const el = (html) => (app.innerHTML = html);
@@ -50,6 +51,20 @@
 					<input id="${name}" name="${name}" type="number" step="${step}" value="${point ? esc(point.value) : ''}" />
 					<div class="svak liten">${source}</div>
 				</div>`;
+			}
+
+			/** Enough for the sum to be done. Invented. */
+			function examples() {
+				const add = (code, display, unit, value, months, lab = true) =>
+					exampleObservation(smart.patientId, { code, display, unit, value, lab, when: monthsAgo(months) });
+				return [
+					add('14647-2', 'Totalkolesterol', 'mmol/L', 6.2, 12),
+					add('14647-2', 'Totalkolesterol', 'mmol/L', 5.8, 1),
+					add('14646-4', 'HDL-kolesterol', 'mmol/L', 1.1, 12),
+					add('14646-4', 'HDL-kolesterol', 'mmol/L', 1.2, 1),
+					add('8480-6', 'Systolisk blodtrykk', 'mm[Hg]', 148, 12, false),
+					add('8480-6', 'Systolisk blodtrykk', 'mm[Hg]', 142, 1, false)
+				];
 			}
 
 			async function render() {
@@ -82,11 +97,14 @@
 						<label class="avkryssing"><input type="checkbox" name="royker" /> Røyker</label>
 						<label class="avkryssing"><input type="checkbox" name="diabetes" ${hasDiabetes ? 'checked' : ''} /> Diabetes ${hasDiabetes ? '<span class="svak liten">(fra journalen)</span>' : ''}</label>
 					</form>
+					<div id="eksempel"></div>
 					<p class="svak liten" style="margin-top:0.8rem">
 						Demonstrasjonsapp, ikke til klinisk bruk. Bruker Framingham-modellen (D'Agostino 2008), ikke NORRISK 2,
 						som er det norske retningslinjer bruker. Tallene som endres her, lagres ikke.
 					</p>
 				`);
+
+				mountExampleControls(document.getElementById('eksempel'), { smart, measured, examples, onChange: render });
 
 				const form = document.getElementById('skjema');
 				const result = document.getElementById('resultat');

@@ -35,21 +35,21 @@ const APPS: App[] = [
 	{
 		name: 'Diabetesoversikt (demo)',
 		host: 'https://diabetes.apps.apus.no',
-		scopes: `${READ} patient/Observation.rs patient/Condition.rs patient/MedicationRequest.rs`.split(' '),
+		scopes: `${READ} patient/Observation.rs patient/Observation.cu patient/Condition.rs patient/MedicationRequest.rs`.split(' '),
 		placement: 'ingen',
 		note: 'HbA1c, blodtrykk, vekt og legemidler på ett skjermbilde. Demonstrasjon.'
 	},
 	{
 		name: 'Vekstkurve',
 		host: 'https://vekst.apps.apus.no',
-		scopes: `${READ} patient/Observation.rs patient/Observation.c`.split(' '),
+		scopes: `${READ} patient/Observation.rs patient/Observation.cu`.split(' '),
 		placement: 'ingen',
 		note: 'Høyde og vekt over tid, med ny måling. Demonstrasjon, uten persentilkurver.'
 	},
 	{
 		name: 'Hjerterisiko',
 		host: 'https://hjerterisiko.apps.apus.no',
-		scopes: `${READ} patient/Observation.rs patient/Condition.rs`.split(' '),
+		scopes: `${READ} patient/Observation.rs patient/Observation.cu patient/Condition.rs`.split(' '),
 		placement: 'ingen',
 		note: 'Tiårsrisiko for hjerte- og karsykdom etter Framingham-modellen. Demonstrasjon, ikke NORRISK 2.'
 	},

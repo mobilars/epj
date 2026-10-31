@@ -53,6 +53,7 @@ data:
       location = /smart.js { try_files /smart.js =404; }
       location = /app.css  { try_files /app.css =404; }
       location = /chart.js { try_files /chart.js =404; }
+      location = /example-data.js { try_files /example-data.js =404; }
       location = /framingham.js { try_files /framingham.js =404; }
 
       # /launch and /callback are states of the same page, not separate files.

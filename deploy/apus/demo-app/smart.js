@@ -143,6 +143,7 @@ function client(tokens) {
 
 	return {
 		tokens,
+		iss: base,
 		patientId: tokens.patient ?? null,
 		/** Who is signed in, as a FHIR reference. The record requires it as author. */
 		fhirUser: tokens.fhirUser ?? null,

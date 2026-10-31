@@ -23,13 +23,19 @@
 			 */
 			import { connect, escapeHtml as esc, SmartError } from '/smart.js';
 			import { latest, lineChart, series } from '/chart.js';
+			import { exampleObservation, mountExampleControls } from '/example-data.js';
 
 			const HEIGHT = '8302-2';
 			const WEIGHT = '29463-7';
 
+			// Round numbers by year of age, to give the chart something to draw. Invented,
+			// and not a reference for anything.
+			const EXAMPLE_HEIGHT = [50, 75, 87, 95, 102, 109, 115, 121, 127, 133, 138, 144, 150, 157, 163, 167, 170, 172, 173];
+			const EXAMPLE_WEIGHT = [3.5, 10, 12.5, 14.5, 16.5, 18.5, 21, 23.5, 26, 29, 32, 36, 41, 47, 53, 58, 62, 65, 67];
+
 			const SCOPE =
 				'openid fhirUser launch launch/patient online_access ' +
-				'patient/Patient.rs patient/Observation.rs patient/Observation.c';
+				'patient/Patient.rs patient/Observation.rs patient/Observation.cu';
 
 			const app = document.getElementById('app');
 			const el = (html) => (app.innerHTML = html);
@@ -55,6 +61,23 @@
 				return months < 24 ? `${months} måneder` : `${Math.floor(months / 12)} år`;
 			}
 
+			function examplesFor(birthDate) {
+				if (!birthDate) return [];
+				const born = new Date(birthDate);
+				const age = Math.floor((Date.now() - born.getTime()) / (365.25 * 86400000));
+				const out = [];
+				for (let year = 0; year <= Math.min(age, 18); year++) {
+					const date = new Date(born);
+					date.setFullYear(born.getFullYear() + year);
+					const when = date.toISOString();
+					out.push(
+						exampleObservation(smart.patientId, { code: HEIGHT, display: 'Høyde', unit: 'cm', value: EXAMPLE_HEIGHT[year], when }),
+						exampleObservation(smart.patientId, { code: WEIGHT, display: 'Vekt', unit: 'kg', value: EXAMPLE_WEIGHT[year], when })
+					);
+				}
+				return out;
+			}
+
 			async function render(notice = '') {
 				const id = smart.patientId;
 				const [patient, observations] = await Promise.all([
@@ -66,7 +89,7 @@
 				const weights = series(measured, [WEIGHT]);
 				const [h, w] = [latest(heights), latest(weights)];
 				const bmi = h && w && h.value > 0 ? w.value / (h.value / 100) ** 2 : null;
-				const canWrite = smart.scopes.includes('patient/Observation.c');
+				const canWrite = smart.scopes.includes('patient/Observation.cu');
 
 				el(`
 					<div class="mellom">
@@ -89,10 +112,18 @@
 								</form>`
 							: '<p class="svak liten">Appen har ikke fått lov til å lagre målinger.</p>'
 					}
+					<div id="eksempel"></div>
 					<p class="svak liten" style="margin-top:0.8rem">
 						Demonstrasjonsapp, ikke til klinisk bruk. Uten persentilkurver, som må hentes fra de norske vekstkurvene.
 					</p>
 				`);
+
+				mountExampleControls(document.getElementById('eksempel'), {
+					smart,
+					measured,
+					examples: () => examplesFor(patient.body?.birthDate),
+					onChange: () => render()
+				});
 
 				document.getElementById('ny')?.addEventListener('submit', async (event) => {
 					event.preventDefault();

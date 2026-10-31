@@ -72,11 +72,44 @@ test.describe('demo apps', () => {
 		await expect(page.getByText('ikke NORRISK 2')).toBeVisible();
 	});
 
-	test('Vekstkurve shows what is there, and says when it may not save', async ({ page }) => {
+	test('Vekstkurve draws example data, labelled in the record too, and takes it out again', async ({ page }) => {
+		page.on('dialog', (dialog) => dialog.accept());
 		await launch(page, 'vekst.html', /Emma/);
 		await expect(page.getByRole('heading', { name: 'Vekstkurve' })).toBeVisible();
 		await expect(page.getByText('Ingen målinger av høyde.')).toBeVisible();
-		// The test app was not granted writing, so the form is not offered.
-		await expect(page.getByText('ikke fått lov til å lagre')).toBeVisible();
+
+		await page.getByRole('button', { name: 'Legg inn eksempeldata' }).click();
+		await expect(page.getByText('Ingen målinger av høyde.')).toHaveCount(0);
+		await expect(page.getByText('oppdiktet eksempeldata')).toBeVisible();
+		await expect(page.getByText(/KMI \d/)).toBeVisible();
+		const appUrl = page.url();
+
+		// The record says so as well.
+		await page.goto('/pasienter');
+		await waitOnHydration(page);
+		await page.getByRole('link', { name: /Emma/ }).first().click();
+		await expect(page.locator('.kort', { hasText: 'Siste målinger' }).getByText('Eksempeldata').first()).toBeVisible();
+
+		await page.goto(appUrl);
+		await page.getByRole('button', { name: 'Fjern eksempeldata' }).click();
+		await expect(page.getByText('Ingen målinger av høyde.')).toBeVisible();
+
+		await page.goto('/pasienter');
+		await waitOnHydration(page);
+		await page.getByRole('link', { name: /Emma/ }).first().click();
+		await expect(page.locator('.kort', { hasText: 'Siste målinger' })).toBeVisible();
+		await expect(page.locator('.kort', { hasText: 'Siste målinger' }).getByText('Eksempeldata')).toHaveCount(0);
+	});
+
+	test('Hjerterisiko can fill itself from example data, and leaves real measurements alone', async ({ page }) => {
+		page.on('dialog', (dialog) => dialog.accept());
+		await launch(page, 'hjerterisiko.html', /Bakken/);
+		await page.getByRole('button', { name: 'Legg inn eksempeldata' }).click();
+		await expect(page.getByLabel('Totalkolesterol')).toHaveValue('5.8');
+		await expect(page.locator('#resultat')).toContainText(/\d+,\d %/);
+
+		await page.getByRole('button', { name: 'Fjern eksempeldata' }).click();
+		await expect(page.getByLabel('Totalkolesterol')).toHaveValue('');
+		await expect(page.getByLabel('Systolisk blodtrykk')).toHaveValue('148');
 	});
 });

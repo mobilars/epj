@@ -66,7 +66,10 @@ export const load = (async (event) => {
 					forskrevet: formatsDate(m.authoredOn as string)
 				})),
 
+			// A measurement marked as a mistake is still in the record's history, but it
+			// is not one of the patient's latest measurements.
 			malinger: of('Observation')
+				.filter((o) => o.status !== 'entered-in-error')
 				.sort(sorterOnDate)
 				.slice(0, 12)
 				.map((o) => ({
@@ -75,7 +78,9 @@ export const load = (async (event) => {
 					value: o.valueQuantity
 						? `${(o.valueQuantity as { value: number }).value} ${(o.valueQuantity as { unit?: string }).unit ?? ''}`.trim()
 						: codeText(o.valueCodeableConcept) || String(o.valueString ?? ''),
-					timestamp: formatsDate((o.effectiveDateTime as string) ?? (o.issued as string), true)
+					timestamp: formatsDate((o.effectiveDateTime as string) ?? (o.issued as string), true),
+					// Invented by a demo app, and has to say so wherever it is shown.
+					example: ((o.meta as { tag?: { code?: string }[] })?.tag ?? []).some((t) => t.code === 'eksempeldata')
 				})),
 
 			notes: of('Composition')

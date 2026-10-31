@@ -47,6 +47,7 @@ configMapGenerator:
       - vekst.html=demo-app/vekst.html
       - hjerterisiko.html=demo-app/hjerterisiko.html
       - chart.js=demo-app/chart.js
+      - example-data.js=demo-app/example-data.js
       - framingham.js=demo-app/framingham.js
       - smart.js=demo-app/smart.js
       - app.css=demo-app/app.css

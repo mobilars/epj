@@ -17,7 +17,7 @@ export function series(observations, codes) {
 	const points = [];
 	for (const o of observations) {
 		const date = when(o);
-		if (!date) continue;
+		if (!date || o.status === 'entered-in-error') continue;
 		if (hasCode(o, codes) && typeof o.valueQuantity?.value === 'number') {
 			points.push({ date, value: o.valueQuantity.value, unit: o.valueQuantity.unit ?? '' });
 		}
