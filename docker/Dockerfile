@@ -11,6 +11,9 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 RUN npm run build && npm prune --omit=dev
+# The migrations are spread over the platform and the apps. Gathered with their
+# paths kept, so that a new app's migrations need no change here.
+RUN mkdir -p /migrations && cd src && find . -path '*/migrations/*.sql' | tar -cf - -T - | tar -xf - -C /migrations
 
 FROM node:22-alpine AS kjor
 WORKDIR /app
@@ -31,7 +34,7 @@ COPY --from=bygg --chown=epj:epj /app/build ./build
 COPY --from=bygg --chown=epj:epj /app/node_modules ./node_modules
 COPY --from=bygg --chown=epj:epj /app/package.json ./package.json
 # Migrasjonene leses fra disk ved oppstart.
-COPY --from=bygg --chown=epj:epj /app/src/platform/server/db/migrations ./src/platform/server/db/migrations
+COPY --from=bygg --chown=epj:epj /migrations ./src
 
 USER epj
 EXPOSE 3000

@@ -26,10 +26,6 @@ export interface Tenant {
 	status: 'aktiv' | 'suspendert' | 'avviklet';
 	/** Weakest sign-in method the organisation accepts: epost, passord, helseid. */
 	login_level: string;
-	/** Which journal in SFM this practice is, for a multi-tenant HelseID client. */
-	sfm_journal_id: string | null;
-	/** Top-level unit in Enhetsregisteret, when the practice is a sub-unit. */
-	sfm_parent_organisation_number: string | null;
 	note: string | null;
 	created_at: string;
 }

@@ -1,9 +1,9 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exec, one, getPool, query, transaction } from './index';
 
-function migrasjonskatalog(): string {
+function platformMigrations(): string {
 	const her = dirname(fileURLToPath(import.meta.url));
 	for (const candidate of [join(her, 'migrations'), join(process.cwd(), 'src/platform/server/db/migrations')]) {
 		try {
@@ -22,16 +22,40 @@ export interface Migration {
 	sql: string;
 }
 
+/** The platform's migrations and each app's. A missing src/apps is an error, not "no migrations". */
+function migrationDirectories(): string[] {
+	const platform = platformMigrations();
+	const apps = join(platform, '..', '..', '..', '..', 'apps');
+	const inApps = readdirSync(apps, { withFileTypes: true })
+		.filter((entry) => entry.isDirectory())
+		.map((entry) => join(apps, entry.name, 'migrations'))
+		.filter((directory) => existsSync(directory));
+	return [platform, ...inApps];
+}
+
+/**
+ * Wherever a migration lives, there is one numbered order for the whole database:
+ * an app's tables can refer to the platform's and the other way around, and
+ * `schema_migration` records the number alone. A number used twice would make
+ * one of the two never run, so it is refused.
+ */
 export function readMigrasjoner(): Migration[] {
-	const directory = migrasjonskatalog();
-	return readdirSync(directory)
-		.filter((f) => f.endsWith('.sql'))
-		.sort()
-		.map((file) => {
-			const m = /^(\d+)_(.+)\.sql$/.exec(file);
-			if (!m) throw new Error(`Ugyldig migrasjonsnavn: ${file}`);
-			return { version: Number(m[1]), name: m[2], sql: readFileSync(join(directory, file), 'utf8') };
-		});
+	const migrations = migrationDirectories().flatMap((directory) =>
+		readdirSync(directory)
+			.filter((f) => f.endsWith('.sql'))
+			.map((file) => {
+				const m = /^(\d+)_(.+)\.sql$/.exec(file);
+				if (!m) throw new Error(`Ugyldig migrasjonsnavn: ${file}`);
+				return { version: Number(m[1]), name: m[2], sql: readFileSync(join(directory, file), 'utf8') };
+			})
+	);
+	migrations.sort((a, b) => a.version - b.version);
+	for (let i = 1; i < migrations.length; i++) {
+		if (migrations[i].version === migrations[i - 1].version) {
+			throw new Error(`Two migrations share the number ${migrations[i].version}`);
+		}
+	}
+	return migrations;
 }
 
 /** Runs every migration not yet applied. Idempotent. */

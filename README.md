@@ -34,8 +34,8 @@ legekontorer med hver sine data, brukere, logg og nøkler.
 
 ## Hvor langt vi har kommet
 
-Koden er delt i `src/platform/` og `src/apps/<navn>/`, og en test holder grensen. De
-fleste funksjonene er fortsatt apper i samme kodebase, ikke selvstendige apper. Se
+Koden er delt i `src/platform/` og `src/apps/<navn>/`, og en test holder grensen.
+Appene våre ligger i samme kodebase og på samme tjener som plattformen. Se
 [plattform og apper](docs/arkitektur.md#plattform-og-apper).
 
 | | I dag |

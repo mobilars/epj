@@ -1,4 +1,5 @@
 import { config } from '$srv/config';
+import { nhnConfig } from '../config';
 import type { Part } from './msg-head';
 
 /**
@@ -77,7 +78,7 @@ export async function getRecipient(herId: string): Promise<CommunicationParty | 
 }
 
 async function searchLive(search: string): Promise<CommunicationParty[]> {
-	const url = config.integrations.nhn.addressRegistryUrl;
+	const url = nhnConfig.addressRegistryUrl;
 	if (!url) throw new Error('Adresseregisteret er ikke konfigurert (EPJ_NHN_ADDRESSREGISTRY_URL)');
 	const response = await fetch(`${url}/kommunikasjonsparter?sok=${encodeURIComponent(search)}`, {
 		headers: { accept: 'application/json' },

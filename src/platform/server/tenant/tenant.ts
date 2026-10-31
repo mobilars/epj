@@ -16,7 +16,7 @@ import { newToken } from '../util/ids';
  */
 
 const FIELD = `id, name, organisation_number, her_id, municipality_code, hostname, base_url,
-	partition_id, status, login_level, sfm_journal_id, sfm_parent_organisation_number, note, created_at`;
+	partition_id, status, login_level, note, created_at`;
 
 /**
  * Keeps the default organisation in step with the configuration.
@@ -113,8 +113,6 @@ export interface NewTenant {
 	adminNationalId?: string;
 	/** Weakest sign-in method the organisation will accept. */
 	loginLevel?: string;
-	sfmJournalId?: string | null;
-	sfmParentOrganisationNumber?: string | null;
 	/**
 	 * Address for the first administrator.
 	 *
@@ -258,8 +256,6 @@ export async function updateTenant(
 		herId?: string | null;
 		municipality_code?: string | null;
 		loginLevel?: string;
-		sfmJournalId?: string | null;
-		sfmParentOrganisationNumber?: string | null;
 		note?: string | null;
 	},
 	actor: AuditActor
@@ -277,13 +273,10 @@ export async function updateTenant(
 			municipality_code = COALESCE($6, municipality_code),
 			login_level = COALESCE($7, login_level),
 			note = COALESCE($8, note),
-			sfm_journal_id = COALESCE($9, sfm_journal_id),
-			sfm_parent_organisation_number = COALESCE($10, sfm_parent_organisation_number),
 			updated_at = now()
 		 WHERE id = $1`,
 		[id, change.name ?? null, change.hostname ?? null, change.baseUrl ?? null,
-		 change.herId ?? null, change.municipality_code ?? null, change.loginLevel ?? null, change.note ?? null,
-		 change.sfmJournalId ?? null, change.sfmParentOrganisationNumber ?? null]
+		 change.herId ?? null, change.municipality_code ?? null, change.loginLevel ?? null, change.note ?? null]
 	);
 	await log(
 		{ type: 'admin', subtype: 'tenant:endret', action: 'U', outcome: '0', entityRef: `Organization/${id}` },

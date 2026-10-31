@@ -1,6 +1,7 @@
 import { one, exec } from '$srv/db';
 import { requireTenant } from '$srv/tenant/context';
 import { config } from '$srv/config';
+import { helfoConfig } from '../config';
 import { newId } from '$srv/util/ids';
 import { log, type AuditActor } from '$srv/audit';
 
@@ -76,13 +77,13 @@ export async function getCopaymentStatus(
 }
 
 async function getFromHelfo(fnr: string): Promise<Omit<CopaymentStatus, 'patientId' | 'remainingOre' | 'fetchedAt'>> {
-	const url = config.integrations.helfo.copaymentUrl;
+	const url = helfoConfig.copaymentUrl;
 	if (!url) throw new Error('Helfo egenandelstjeneste er ikke konfigurert (EPJ_HELFO_COPAYMENT_URL)');
 	const response = await fetch(`${url}/frikortstatus`, {
 		method: 'POST',
 		headers: { 'content-type': 'application/json', accept: 'application/json' },
 		// The field names are Helfo's, not ours: they go on the wire as they stand.
-		body: JSON.stringify({ foedselsnummer: fnr, avtaleId: config.integrations.helfo.agreementId }),
+		body: JSON.stringify({ foedselsnummer: fnr, avtaleId: helfoConfig.agreementId }),
 		signal: AbortSignal.timeout(20_000)
 	});
 	if (!response.ok) throw new Error(`Helfo svarte ${response.status}`);

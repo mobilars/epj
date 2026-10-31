@@ -460,10 +460,10 @@ Skillet er synlig og håndhevet: koden ligger i `src/platform/` og `src/apps/<na
 hver app har et manifest, og en test feiler hvis grensen brytes. Se
 [arkitektur.md](arkitektur.md#plattform-og-apper), som også lister det som gjenstår.
 
-Neste steg er å **flytte ut**: gjøre funksjoner om til ekte apper, én om gangen.
-Notater og legemidler først, fordi det allerede finnes demonstrasjonsapper for begge.
-Meldinger, oppgjør og SFM trenger en tjenerdel og må vurderes hver for seg, og kan
-like gjerne bli værende i kodebasen som byttbare plattformapper.
+Appene blir værende i samme kodebase og på samme tjener, men skal være tydelig skilt
+fra plattformen i prosjektet. Å flytte dem ut er ikke et mål. Tillatelser,
+innstillinger og nye tabeller ligger nå hos appene. Det som gjenstår, er listet i
+arkitektur.md, og det meste av det ligger i plattformen med vilje.
 
 ## 7. Mindre ting
 

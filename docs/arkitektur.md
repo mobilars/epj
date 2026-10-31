@@ -91,22 +91,38 @@ app legges til eller fjernes:
 legg manifestet i `registry.ts`, og legg de korte filene i `src/platform/routes/`.
 Testen sier fra om det mangler noe.
 
+En app eier også dette, i sin egen mappe:
+
+| Hva | Hvor | Merk |
+| --- | --- | --- |
+| Tillatelser, og hvilke roller som får dem | `permissions` i `manifest.ts` | Bare for behandler, lab og resepsjon. `tests/role-permissions.test.ts` lister hva hver rolle får, og må endres samtidig |
+| Innstillinger per virksomhet | `practiceSettings` i `manifest.ts` | Plattformen lagrer dem og viser feltene på virksomhetens side |
+| Miljøvariabler | `server/config.ts` | |
+| Tabeller | `migrations/` | Samme nummerrekke som resten av databasen. Neste ledige nummer gjelder på tvers av alle mapper |
+
 ### Det som gjenstår
 
-Skillet er håndhevet i importene, men noe plattformkode vet fortsatt om appene:
+Skillet er håndhevet i importene. Dette ligger fortsatt i plattformen, de fleste med
+vilje:
 
-- Virksomhetens SFM-felt ligger i plattformens virksomhetsregister og i skjemaet for
-  plattformadministrasjon.
-- Tillatelsene, som `melding:les` og `oppgjor:send`, ligger i plattformens rollemodell.
+- **FHIR-scopene i rollemodellen** nevner ressurser som `MedicationRequest`. De sier
+  hva en rolle får lese og skrive i FHIR, og det gjelder også eksterne apper, så de
+  hører til plattformen.
+- **`journal:*`-tillatelsene** hører til journalen som helhet og til de lovpålagte
+  funksjonene, ikke til notat-appen.
+- **Eldre migrasjoner.** Tabellene for meldinger, oppgjør og legemidler ble opprettet i
+  migrasjoner som også inneholder plattformens tabeller. Migrasjoner som har kjørt
+  skal ikke skrives om, så de blir liggende. Nye tabeller legges hos appen som eier
+  dem.
+- **Filene i `src/platform/routes/`** som peker inn i appene. SvelteKit krever dem.
 - Oversiktskortene er ett skjermbilde i `overview`, som leser kliniske data direkte fra
   FHIR. Andre apper kan ikke bidra med egne kort der ennå.
 - Det å bytte ut en innebygd app virker for faner og sidepanel. Hovedmeny, snarveier og
   kort følger den innebygde appen.
 
-Ikke alt kan bli en vanlig SMART-app. Meldinger og oppgjør trenger nøkler mot NHN og
-Helfo og må ha en tjenerdel, og SFM krever legens eget HelseID-token
-([sfm.md](sfm.md)). De blir enten apper med egen tjener eller blir værende her, med de
-samme grensene som en app. Se [todo.md](todo.md) punkt 6c.
+Appene i `src/apps/` blir værende i denne kodebasen og på denne tjeneren. Det er ikke
+et mål å flytte dem ut. Kravet er at de er tydelig skilt fra plattformen i prosjektet,
+og at en virksomhet kan velge en ekstern app i stedet. Se [todo.md](todo.md) punkt 6c.
 
 ## Hvorfor grensene går der de går
 
@@ -348,13 +364,13 @@ src/platform/            plattformen
   styles/
   server/
     config.ts            konfigurasjon fra miljøvariabler
-    db/                  PostgreSQL, migrasjoner
+    db/                  PostgreSQL, plattformens migrasjoner
     fhir/                vokteren (gateway.ts), HAPI-klient, validering, kodeverk
     authz/               rollemodell, SMART-scope, tilgangsbeslutningen
     auth/                HelseID, OAuth, tokens, økter, tilleggene appene ber om ved pålogging
     audit/               hash-lenket sikkerhetslogg
     journal/             pasientopplysninger, utlevering, åpning fra andre programmer
-    tenant/              virksomhetskontekst, register, partisjoner i HAPI
+    tenant/              virksomhetskontekst, register, partisjoner i HAPI, appinnstillinger
     terminology/         ICPC-2 og søk i kodeverk
     workspace/           oppsett av arbeidsflate og pasientoversikt
     cds/                 klienten som kaller CDS Hooks
@@ -362,7 +378,8 @@ src/platform/            plattformen
 src/apps/                appene
   registry.ts, slots.ts, registry.server.ts   det eneste plattformen ser av dem
   <navn>/
-    manifest.ts          faner, menypunkter, snarveier og kort
+    manifest.ts          faner, menypunkter, snarveier, kort, tillatelser og innstillinger
+    migrations/          appens tabeller
     routes/              appens sider, med samme stier som adressene
     components/          komponenter
     server/              tjenerkode

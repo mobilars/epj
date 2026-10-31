@@ -27,7 +27,12 @@
  * restricted by law to particular professions, and a model built on access does
  * not know professions. Where that matters the answer is not a longer role list
  * but the HPR number the record already holds - see docs/todo.md.
+ *
+ * Permissions belonging to an app are declared in that app's manifest and joined
+ * with the platform's own here. tests/role-permissions.test.ts spells out the
+ * result, role by role.
  */
+import { appManifests, type AppPermissionId } from '$apps/registry';
 
 export const ROLES = [
 	'behandler',
@@ -42,6 +47,9 @@ export const ROLES = [
 
 export type Role = (typeof ROLES)[number];
 
+/** The roles an app may give a permission to: the staff who work in the record. */
+export type GrantableRole = Extract<Role, 'behandler' | 'lab' | 'resepsjon'>;
+
 export interface RoleDefinisjon {
 	name: string;
 	description: string;
@@ -55,20 +63,13 @@ export interface RoleDefinisjon {
 	canSeeAllPatients: boolean;
 }
 
-export const PERMISSIONS = [
+export const PLATFORM_PERMISSIONS = [
 	'journal:les',
 	'journal:skriv',
 	'journal:signer',
 	'journal:rett',
 	'journal:slett-begjaering',
 	'journal:utlever',
-	'resept:forskriv',
-	'resept:fornye',
-	'melding:les',
-	'melding:send',
-	'melding:signer',
-	'oppgjor:registrer',
-	'oppgjor:send',
 	'time:administrer',
 	'pasient:opprett',
 	'pasient:sperr',
@@ -80,7 +81,7 @@ export const PERMISSIONS = [
 	'plattform:administrer'
 ] as const;
 
-export type Permission = (typeof PERMISSIONS)[number];
+export type Permission = (typeof PLATFORM_PERMISSIONS)[number] | AppPermissionId;
 
 const CLINICAL_LESE = [
 	'user/Patient.rs', 'user/Encounter.rs', 'user/Condition.rs', 'user/Observation.rs',
@@ -106,7 +107,7 @@ const CLINICAL_SKRIVE = [
 	'user/Binary.cud'
 ];
 
-export const ROLE_DEFINISJONER: Record<Role, RoleDefinisjon> = {
+const PLATFORM_ROLE_DEFINITIONS: Record<Role, RoleDefinisjon> = {
 	behandler: {
 		name: 'Behandler',
 		description:
@@ -122,9 +123,7 @@ export const ROLE_DEFINISJONER: Record<Role, RoleDefinisjon> = {
 		],
 		permissions: [
 			'journal:les', 'journal:skriv', 'journal:signer', 'journal:rett', 'journal:slett-begjaering',
-			'journal:utlever', 'resept:forskriv', 'resept:fornye', 'melding:les', 'melding:send',
-			'melding:signer', 'oppgjor:registrer', 'time:administrer', 'pasient:opprett', 'pasient:sperr',
-			'logg:innsyn'
+			'journal:utlever', 'time:administrer', 'pasient:opprett', 'pasient:sperr', 'logg:innsyn'
 		],
 		canEmergencyAccess: true,
 		canSeeAllPatients: false
@@ -140,7 +139,7 @@ export const ROLE_DEFINISJONER: Record<Role, RoleDefinisjon> = {
 			// A lab result arrives as a PDF as often as as a value.
 			'user/Binary.r', 'user/Binary.cud'
 		],
-		permissions: ['journal:les', 'journal:skriv', 'melding:les'],
+		permissions: ['journal:les', 'journal:skriv'],
 		canEmergencyAccess: false,
 		canSeeAllPatients: false
 	},
@@ -153,10 +152,7 @@ export const ROLE_DEFINISJONER: Record<Role, RoleDefinisjon> = {
 			'user/Patient.crs', 'user/Appointment.cruds', 'user/Encounter.rs', 'user/Communication.rs',
 			'user/Coverage.rs', 'user/Claim.cruds', 'user/Practitioner.rs', 'user/Organization.rs'
 		],
-		permissions: [
-			'journal:les', 'journal:utlever', 'melding:les', 'time:administrer', 'pasient:opprett',
-			'oppgjor:registrer', 'oppgjor:send'
-		],
+		permissions: ['journal:les', 'journal:utlever', 'time:administrer', 'pasient:opprett'],
 		canEmergencyAccess: false,
 		canSeeAllPatients: false
 	},
@@ -195,6 +191,18 @@ export const ROLE_DEFINISJONER: Record<Role, RoleDefinisjon> = {
 		canSeeAllPatients: false
 	}
 };
+
+/** Each role with what the apps give it added. */
+export const ROLE_DEFINISJONER = Object.fromEntries(
+	ROLES.map((role) => {
+		const fromApps = appManifests
+			.flatMap((app) => app.permissions ?? [])
+			.filter((permission) => (permission.roles as readonly Role[]).includes(role))
+			.map((permission) => permission.id as Permission);
+		const definition = PLATFORM_ROLE_DEFINITIONS[role];
+		return [role, { ...definition, permissions: [...definition.permissions, ...fromApps] }];
+	})
+) as Record<Role, RoleDefinisjon>;
 
 export function isRole(v: string): v is Role {
 	return (ROLES as readonly string[]).includes(v);

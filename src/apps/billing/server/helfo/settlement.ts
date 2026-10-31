@@ -1,6 +1,7 @@
 import { one, exec, query, transaction } from '$srv/db';
 import { requireTenant } from '$srv/tenant/context';
 import { config } from '$srv/config';
+import { helfoConfig } from '../config';
 import { document, el } from '$srv/util/xml';
 import { newId } from '$srv/util/ids';
 import { log, type AuditActor } from '$srv/audit';
@@ -136,7 +137,7 @@ export async function sendSettlement(id: string, actor: AuditActor): Promise<{ o
 }
 
 async function sendToHelfo(file: string): Promise<{ reference: string; received: string }> {
-	const url = config.integrations.helfo.settlementUrl;
+	const url = helfoConfig.settlementUrl;
 	if (!url) throw new Error('Helfo oppgjørstjeneste er ikke konfigurert (EPJ_HELFO_SETTLEMENT_URL)');
 	const response = await fetch(`${url}/oppgjor`, {
 		method: 'POST',
@@ -201,7 +202,7 @@ export function buildSettlementFile(
 	const root = el('Oppgjorskrav', [
 		el('Kravhode', [
 			el('KravId', id),
-			el('Konto', config.integrations.helfo.agreementId || requireTenant().organisation_number),
+			el('Konto', helfoConfig.agreementId || requireTenant().organisation_number),
 			el('Organisasjonsnummer', requireTenant().organisation_number),
 			el('Virksomhet', requireTenant().name),
 			el('PeriodeFra', from),

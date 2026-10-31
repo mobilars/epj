@@ -98,6 +98,33 @@ test.describe('plattformadministrasjon', () => {
 		await expect(page.getByRole('status').filter({ hasText: 'Status endret' })).toContainText('standard: aktiv');
 	});
 
+	test("stores a setting an app declared, refuses a bad one, and clears it", async ({ page }) => {
+		await logInPlatform(page);
+		await page.goto(`${PLATFORM_URL}/systemadmin/standard`);
+		await waitOnHydration(page);
+		const save = page.getByRole('button', { name: 'Lagre', exact: true });
+		const parent = page.getByLabel('Overordnet organisasjonsnummer');
+
+		await parent.fill('123');
+		await save.click();
+		await expect(page.getByText('Overordnet organisasjonsnummer må være ni siffer.')).toBeVisible();
+		// The form posts as a full page. Typing before hydration is undone by it.
+		await waitOnHydration(page);
+
+		await parent.fill('100100126');
+		await save.click();
+		await expect(page.getByRole('status').filter({ hasText: 'Endringene er lagret' })).toBeVisible();
+		await page.goto(`${PLATFORM_URL}/systemadmin/standard`);
+		await waitOnHydration(page);
+		await expect(parent).toHaveValue('100100126');
+
+		await parent.fill('');
+		await save.click();
+		await expect(page.getByRole('status').filter({ hasText: 'Endringene er lagret' })).toBeVisible();
+		await page.goto(`${PLATFORM_URL}/systemadmin/standard`);
+		await expect(parent).toHaveValue('');
+	});
+
 	test('plattformvirksomheten kan ikke suspenderes', async ({ page }) => {
 		await logInPlatform(page);
 		const response = await page.request.post(`${PLATFORM_URL}/systemadmin?/status`, {

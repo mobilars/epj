@@ -12,7 +12,7 @@ export interface LoginExtension {
 	/** Further scopes to ask HelseID for. */
 	scopes(): string[];
 	/** Sent in a signed request object, for a multi-tenant HelseID client. */
-	authorizationDetails?(tenant: Tenant): unknown[] | null;
+	authorizationDetails?(tenant: Tenant): Promise<unknown[] | null>;
 	/** Whether the token should be kept for the length of the session. */
 	keepTokens(): boolean;
 	/** Called as the user signs out, while the token is still there. */

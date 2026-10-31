@@ -9,6 +9,7 @@
  * Labels are Norwegian, because they are shown as they stand. Kept free of server
  * code and of components, so it can be read anywhere.
  */
+import type { GrantableRole } from './server/authz/roles';
 
 export interface CardDeclaration {
 	id: string;
@@ -17,12 +18,32 @@ export interface CardDeclaration {
 	description: string;
 }
 
+/** Something an app lets people do, and which roles at a practice may do it. */
+export interface AppPermission {
+	id: string;
+	roles: readonly GrantableRole[];
+}
+
+/** A setting per practice, kept by the platform and shown on the practice's page. */
+export interface PracticeSettingField {
+	key: string;
+	label: string;
+	help: string;
+	inputMode?: 'numeric';
+	/** Regular expression a value must match. An empty value is always allowed. */
+	pattern: string;
+	/** Shown when the value does not match. */
+	invalid: string;
+}
+
 export interface AppManifest {
 	/** The directory under src/apps. */
 	id: string;
 	name: string;
 	/** Other apps this one may import from. Anything else is refused by a test. */
 	dependsOn?: string[];
+	permissions?: readonly AppPermission[];
+	practiceSettings?: PracticeSettingField[];
 	/** A tab in the patient record. An empty segment is the record's front page. */
 	patientTab?: { segment: string; label: string; order: number };
 	/** An entry in the main menu, for those holding any of the permissions. */

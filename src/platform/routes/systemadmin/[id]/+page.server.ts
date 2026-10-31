@@ -1,6 +1,7 @@
 import { error, fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { getTenant, updateTenant } from '$srv/tenant/tenant';
+import { practiceSettingsForm, readPracticeSettings, storePracticeSettings } from '$srv/tenant/app-settings';
 import { listPartitions } from '$srv/tenant/partition';
 import { actorFromContext } from '$srv/audit';
 import { LEVEL_TEXT, LOGIN_LEVELS, isLoginLevel } from '$srv/auth/login-level';
@@ -35,10 +36,9 @@ export const load: PageServerLoad = async (event) => {
 
 	return {
 		loginLevels: LOGIN_LEVELS.map((level) => ({ code: level, ...LEVEL_TEXT[level] })),
+		appSettings: await practiceSettingsForm(tenant.id),
 		organisation: {
 			loginLevel: tenant.login_level,
-			sfmJournalId: tenant.sfm_journal_id,
-			sfmParentOrganisationNumber: tenant.sfm_parent_organisation_number,
 			id: tenant.id,
 			name: tenant.name,
 			organisation_number: tenant.organisation_number,
@@ -74,14 +74,8 @@ export const actions: Actions = {
 		const form = await event.request.formData();
 		const text = (n: string) => String(form.get(n) ?? '').trim();
 
-		const sfmParent = text('sfmOverordnet');
-		if (sfmParent && !/^\d{9}$/.test(sfmParent)) {
-			return fail(400, { error: 'Overordnet organisasjonsnummer må være ni siffer.' });
-		}
-		const sfmJournal = text('sfmJournalId');
-		if (sfmJournal && !/^[\w-]{1,100}$/.test(sfmJournal)) {
-			return fail(400, { error: 'Journal-id i SFM kan bare inneholde bokstaver, tall og bindestrek.' });
-		}
+		const settings = readPracticeSettings(text);
+		if (!settings.ok) return fail(400, { error: settings.error });
 
 		const baseUrl = text('baseUrl');
 		if (baseUrl) {
@@ -101,13 +95,12 @@ export const actions: Actions = {
 				herId: text('herId') || null,
 				municipality_code: text('kommunenummer') || null,
 				loginLevel: isLoginLevel(text('innloggingsniva')) ? text('innloggingsniva') : undefined,
-				note: text('merknad') || null,
-				sfmJournalId: sfmJournal || null,
-				sfmParentOrganisationNumber: sfmParent || null
+				note: text('merknad') || null
 			},
 			actorFromContext(ctx)
 		);
 		if (!result.ok) return fail(400, { error: result.error });
+		await storePracticeSettings(event.params.id, settings.values, ctx.userId);
 		return { stored: true };
 	}
 };

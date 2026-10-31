@@ -1,6 +1,12 @@
-import type { AppManifest } from '$lib/app-manifest';
+import type { AppManifest, AppPermission } from '$lib/app-manifest';
+
+export const permissions = [
+	{ id: 'oppgjor:registrer', roles: ['behandler', 'resepsjon'] },
+	{ id: 'oppgjor:send', roles: ['resepsjon'] }
+] as const satisfies readonly AppPermission[];
 
 export const manifest: AppManifest = {
+	permissions,
 	id: 'billing',
 	name: 'Oppgjør',
 	patientTab: { segment: 'oppgjor', label: 'Oppgjør', order: 40 },

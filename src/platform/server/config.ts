@@ -257,18 +257,6 @@ export const config = {
 	integrations: {
 		/** `mock` runs everything locally without network. `live` requires an endpoint + client certificate. */
 		mode: (env.EPJ_INTEGRATION_MODE ?? 'mock') as 'mock' | 'live',
-		nhn: {
-			messageServerUrl: env.EPJ_NHN_MESSAGE_SERVER_URL ?? '',
-			herId: env.EPJ_ORG_HER_ID ?? '0000000',
-			addressRegistryUrl: env.EPJ_NHN_ADDRESSREGISTRY_URL ?? ''
-		},
-		helfo: {
-			/** Submission of billing cards to KUHR (settlement). */
-			settlementUrl: env.EPJ_HELFO_SETTLEMENT_URL ?? '',
-			/** Lookups against the exemption-card/copayment service. */
-			copaymentUrl: env.EPJ_HELFO_COPAYMENT_URL ?? '',
-			agreementId: env.EPJ_HELFO_AGREEMENT_ID ?? ''
-		},
 		/**
 		 * HelseID is the primary sign-in mechanism for health personnel. The
 		 * client authenticates with private_key_jwt; no shared secret.

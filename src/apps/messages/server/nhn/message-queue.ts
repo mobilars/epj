@@ -2,6 +2,7 @@ import { one, exec, withLock, query, transaction } from '$srv/db';
 import { requireTenant, withTenant } from '$srv/tenant/context';
 import { getTenant } from '$srv/tenant/tenant';
 import { config } from '$srv/config';
+import { nhnConfig } from '../config';
 import { newId } from '$srv/util/ids';
 import { log, type AuditActor } from '$srv/audit';
 import { fhirClient } from '$srv/fhir/client';
@@ -160,14 +161,14 @@ async function transport(recipientHer: string, xml: string, message_type: string
 		await mockLevering(recipientHer, xml, message_type);
 		return;
 	}
-	const url = config.integrations.nhn.messageServerUrl;
+	const url = nhnConfig.messageServerUrl;
 	if (!url) throw new Error('Meldingstjeneren er ikke konfigurert (EPJ_NHN_MESSAGE_SERVER_URL)');
 	const response = await fetch(`${url}/messages`, {
 		method: 'POST',
 		headers: {
 			'content-type': 'application/xml',
 			'x-receiver-her-id': recipientHer,
-			'x-sender-her-id': config.integrations.nhn.herId
+			'x-sender-her-id': nhnConfig.herId
 		},
 		body: xml,
 		signal: AbortSignal.timeout(30_000)

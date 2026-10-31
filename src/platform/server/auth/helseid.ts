@@ -229,7 +229,7 @@ export async function startLogin(cookies: Cookies, returnTo: string): Promise<st
 	// A multi-tenant client also says which practice and journal this is. That
 	// goes in a signed request object, short-lived like the assertion, so it
 	// cannot be altered on the way.
-	const details = extensions.flatMap((e) => e.authorizationDetails?.(requireTenant()) ?? []);
+	const details = (await Promise.all(extensions.map((e) => e.authorizationDetails?.(requireTenant())))).flatMap((d) => d ?? []);
 	const outgoing = details.length
 		? (
 				await oidc.buildAuthorizationUrlWithJAR(
