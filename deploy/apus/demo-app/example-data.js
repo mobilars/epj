@@ -2,7 +2,7 @@
 /**
  * Example data, for showing an app on a patient with nothing to show.
  *
- * These are invented measurements written into a patient's real record, so three things
+ * These are invented entries written into a patient's real record, so three things
  * keep them from being taken for real ones. The button only appears against a test
  * environment. Every value carries a tag and a note saying what it is, which the record
  * also shows. And it can be taken out again, the way the record takes anything out: by
@@ -42,19 +42,61 @@ export function exampleObservation(patientId, { code, display, value, unit, when
 		subject: { reference: `Patient/${patientId}` },
 		effectiveDateTime: when,
 		valueQuantity: { value, unit, system: 'http://unitsofmeasure.org', code: unit },
-		note: [{ text: 'Eksempeldata lagt inn fra en demonstrasjonsapp. Ikke en reell måling.' }]
+		note: NOTE
 	};
 }
+
+const NOTE = [{ text: 'Eksempeldata lagt inn fra en demonstrasjonsapp. Ikke reelle opplysninger.' }];
+
+export function exampleCondition(patientId, { code, text, when }) {
+	return {
+		resourceType: 'Condition',
+		meta: { tag: [EXAMPLE_TAG] },
+		clinicalStatus: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-clinical', code: 'active' }] },
+		verificationStatus: { coding: [{ system: VERIFICATION_STATUS, code: 'confirmed' }] },
+		category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-category', code: 'problem-list-item' }] }],
+		code: { coding: [{ system: 'urn:oid:2.16.578.1.12.4.1.1.7170', code, display: text }], text },
+		subject: { reference: `Patient/${patientId}` },
+		recordedDate: when,
+		note: NOTE
+	};
+}
+
+export function exampleMedication(patientId, { name, dosage, when }) {
+	return {
+		resourceType: 'MedicationRequest',
+		meta: { tag: [EXAMPLE_TAG] },
+		status: 'active',
+		intent: 'order',
+		medication: { concept: { text: name } },
+		subject: { reference: `Patient/${patientId}` },
+		authoredOn: when,
+		dosageInstruction: [{ text: dosage }],
+		note: NOTE
+	};
+}
+
+const VERIFICATION_STATUS = 'http://terminology.hl7.org/CodeSystem/condition-ver-status';
+
+/** Whether an entry has been taken out. A condition says so in a field of its own. */
+export const isRetired = (resource) =>
+	resource.status === 'entered-in-error' || (resource.verificationStatus?.coding ?? []).some((c) => c.code === 'entered-in-error');
+
+const retired = (resource) =>
+	resource.resourceType === 'Condition'
+		? { ...resource, verificationStatus: { coding: [{ system: VERIFICATION_STATUS, code: 'entered-in-error' }] } }
+		: { ...resource, status: 'entered-in-error' };
 
 /**
  * Draws the buttons into `target`, or nothing if this is not the place for them.
  *
- * `examples` returns what to add. `onChange` redraws the app afterwards.
+ * `resources` is what the app has read, `examples` returns what to add, and `onChange`
+ * redraws the app afterwards.
  */
-export function mountExampleControls(target, { smart, measured, examples, onChange }) {
+export function mountExampleControls(target, { smart, resources, examples, onChange }) {
 	if (!target || !isTestRecord(smart.iss) || !smart.scopes.includes(WRITE_SCOPE)) return;
 
-	const existing = measured.filter((o) => isExample(o) && o.status !== 'entered-in-error');
+	const existing = resources.filter((resource) => isExample(resource) && !isRetired(resource));
 	const planned = examples();
 	if (!existing.length && !planned.length) return;
 
@@ -62,9 +104,9 @@ export function mountExampleControls(target, { smart, measured, examples, onChan
 		<h2>Eksempeldata</h2>
 		${
 			existing.length
-				? `<div class="varsel varsel-advarsel liten">${existing.length} av målingene her er oppdiktet eksempeldata, ikke reelle målinger.</div>
+				? `<div class="varsel varsel-advarsel liten">${existing.length} av oppføringene her er oppdiktet eksempeldata, ikke reelle opplysninger.</div>
 					<button type="button" id="fjern-eksempler">Fjern eksempeldata</button>`
-				: `<p class="svak liten">Testmiljø. Legger inn ${planned.length} oppdiktede målinger på pasienten, så du kan se hvordan appen virker. De merkes tydelig og kan fjernes igjen.</p>
+				: `<p class="svak liten">Testmiljø. Legger inn ${planned.length} oppdiktede oppføringer på pasienten, så du kan se hvordan appen virker. De merkes tydelig og kan fjernes igjen.</p>
 					<button type="button" id="legg-inn-eksempler">Legg inn eksempeldata</button>`
 		}
 		<div id="eksempel-feil"></div>`;
@@ -75,7 +117,7 @@ export function mountExampleControls(target, { smart, measured, examples, onChan
 	};
 
 	target.querySelector('#legg-inn-eksempler')?.addEventListener('click', async () => {
-		if (!confirm(`Legge inn ${planned.length} oppdiktede målinger i journalen til denne pasienten?`)) return;
+		if (!confirm(`Legge inn ${planned.length} oppdiktede oppføringer i journalen til denne pasienten?`)) return;
 		const results = await Promise.all(planned.map((resource) => smart.create(resource)));
 		const rejected = results.find((r) => !r.ok);
 		if (rejected) return failed(rejected);
@@ -83,7 +125,7 @@ export function mountExampleControls(target, { smart, measured, examples, onChan
 	});
 
 	target.querySelector('#fjern-eksempler')?.addEventListener('click', async () => {
-		const results = await Promise.all(existing.map((resource) => smart.update({ ...resource, status: 'entered-in-error' })));
+		const results = await Promise.all(existing.map((resource) => smart.update(retired(resource))));
 		const rejected = results.find((r) => !r.ok);
 		if (rejected) return failed(rejected);
 		await onChange();

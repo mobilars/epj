@@ -49,6 +49,12 @@ function autorisasjonsHeader(): Record<string, string> {
 	return { authorization: `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}` };
 }
 
+/**
+ * HAPI reuses the result of an identical search from the last minute, so someone who
+ * saves something and looks again would not see it. In a record that is never right.
+ */
+const NOT_FROM_CACHE = { 'cache-control': 'no-cache' };
+
 async function call(
 	method: string,
 	path: string,
@@ -66,6 +72,7 @@ async function call(
 			method: method,
 			headers: {
 				accept: 'application/fhir+json',
+				...(method === 'GET' ? NOT_FROM_CACHE : {}),
 				...(body !== undefined ? { 'content-type': 'application/fhir+json' } : {}),
 				...(options.ifMatch ? { 'if-match': options.ifMatch } : {}),
 				...(options.ifNoneExist ? { 'if-none-exist': options.ifNoneExist } : {}),
@@ -139,6 +146,7 @@ export const fhirClient = {
 			headers: {
 				accept: 'application/fhir+json',
 				'content-type': 'application/x-www-form-urlencoded',
+				...NOT_FROM_CACHE,
 				...(o?.requestId ? { 'x-request-id': o.requestId } : {}),
 				...autorisasjonsHeader()
 			},

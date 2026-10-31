@@ -93,7 +93,7 @@
 							<tbody>
 								{#each g.diagnoses as d (d.id)}
 									<tr>
-										<td>{d.text}</td>
+										<td>{d.text}{#if d.example} <span class="merke merke-advarsel">Eksempeldata</span>{/if}</td>
 										<td class="mono">{d.code}</td>
 										<td><span class="merke" class:merke-ok={d.status === 'Aktiv'}>{d.status}</span></td>
 									</tr>
@@ -127,7 +127,7 @@
 					{:else}
 						<ul>
 							{#each g.medications as m (m.id)}
-								<li><strong>{m.name}</strong><br /><span class="svak">{m.dosage}</span></li>
+								<li><strong>{m.name}</strong>{#if m.example} <span class="merke merke-advarsel">Eksempeldata</span>{/if}<br /><span class="svak">{m.dosage}</span></li>
 							{/each}
 						</ul>
 					{/if}

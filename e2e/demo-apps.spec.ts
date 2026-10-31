@@ -59,6 +59,22 @@ test.describe('demo apps', () => {
 		await expect(page.getByText('Ingen diabetesdiagnose')).toHaveCount(0);
 	});
 
+	test('Diabetesoversikt adds a diagnosis and medicines as example data, and takes them out', async ({ page }) => {
+		page.on('dialog', (dialog) => dialog.accept());
+		await launch(page, 'diabetes.html', /Lie/);
+		await expect(page.getByText('Ingen diabetesdiagnose')).toBeVisible();
+
+		await page.getByRole('button', { name: 'Legg inn eksempeldata' }).click();
+		await expect(page.getByText('Metformin 500 mg')).toBeVisible();
+		await expect(page.getByText('Ingen diabetesdiagnose')).toHaveCount(0);
+		await expect(page.locator('strong', { hasText: '52 mmol/mol' })).toBeVisible();
+		await expect(page.getByText('oppdiktet eksempeldata')).toBeVisible();
+
+		await page.getByRole('button', { name: 'Fjern eksempeldata' }).click();
+		await expect(page.getByText('Ingen diabetesdiagnose')).toBeVisible();
+		await expect(page.getByText('Metformin 500 mg')).toHaveCount(0);
+	});
+
 	test('Hjerterisiko fills in what the record knows, and calculates when the rest is given', async ({ page }) => {
 		await launch(page, 'hjerterisiko.html', /Bakken/);
 		await expect(page.getByRole('heading', { name: 'Hjerterisiko' })).toBeVisible();

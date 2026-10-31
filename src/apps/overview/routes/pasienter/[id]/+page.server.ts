@@ -8,6 +8,14 @@ import { acceptedActions, callHook, sendFeedback, type Card, type Suggestion } f
 import { resolveLayout } from '$srv/workspace/layout';
 
 /** Clinical overview: diagnoses, medicines, allergies, latest measurements and notes. */
+/** Invented by a demo app, and has to say so wherever it is shown. */
+const isExample = (resource: Record<string, unknown>) =>
+	((resource.meta as { tag?: { code?: string }[] })?.tag ?? []).some((t) => t.code === 'eksempeldata');
+
+/** A condition marked as a mistake is not one the patient has. */
+const enteredInError = (condition: Record<string, unknown>) =>
+	((condition.verificationStatus as { coding?: { code?: string }[] })?.coding ?? []).some((c) => c.code === 'entered-in-error');
+
 export const load = (async (event) => {
 	const ctx = event.locals.auth;
 	const parent = await event.parent();
@@ -41,8 +49,10 @@ export const load = (async (event) => {
 		layout: layout.cards,
 		grupper: {
 			diagnoses: of('Condition')
+				.filter((c) => !enteredInError(c))
 				.map((c) => ({
 					id: c.id as string,
+					example: isExample(c),
 					text: codeText(c.code),
 					code: codeValue(c.code).code ?? '',
 					status: klinisksStatus(c),
@@ -61,6 +71,7 @@ export const load = (async (event) => {
 				.filter((m) => m.status === 'active')
 				.map((m) => ({
 					id: m.id as string,
+					example: isExample(m),
 					name: codeText((m.medication as { concept?: unknown })?.concept),
 					dosage: ((m.dosageInstruction as { text?: string }[]) ?? [])[0]?.text ?? '',
 					forskrevet: formatsDate(m.authoredOn as string)
@@ -79,8 +90,7 @@ export const load = (async (event) => {
 						? `${(o.valueQuantity as { value: number }).value} ${(o.valueQuantity as { unit?: string }).unit ?? ''}`.trim()
 						: codeText(o.valueCodeableConcept) || String(o.valueString ?? ''),
 					timestamp: formatsDate((o.effectiveDateTime as string) ?? (o.issued as string), true),
-					// Invented by a demo app, and has to say so wherever it is shown.
-					example: ((o.meta as { tag?: { code?: string }[] })?.tag ?? []).some((t) => t.code === 'eksempeldata')
+					example: isExample(o)
 				})),
 
 			notes: of('Composition')

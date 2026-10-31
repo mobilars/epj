@@ -35,7 +35,7 @@ const APPS: App[] = [
 	{
 		name: 'Diabetesoversikt (demo)',
 		host: 'https://diabetes.apps.apus.no',
-		scopes: `${READ} patient/Observation.rs patient/Observation.cu patient/Condition.rs patient/MedicationRequest.rs`.split(' '),
+		scopes: `${READ} patient/Observation.rs patient/Observation.cu patient/Condition.rs patient/Condition.cu patient/MedicationRequest.rs patient/MedicationRequest.cu`.split(' '),
 		placement: 'ingen',
 		note: 'HbA1c, blodtrykk, vekt og legemidler på ett skjermbilde. Demonstrasjon.'
 	},

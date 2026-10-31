@@ -20,11 +20,11 @@
 			 */
 			import { connect, escapeHtml as esc, SmartError } from '/smart.js';
 			import { lineChart, series } from '/chart.js';
-			import { exampleObservation, monthsAgo, mountExampleControls } from '/example-data.js';
+			import { exampleCondition, exampleMedication, exampleObservation, isRetired, monthsAgo, mountExampleControls } from '/example-data.js';
 
 			const SCOPE =
 				'openid fhirUser launch launch/patient online_access ' +
-				'patient/Patient.rs patient/Observation.rs patient/Observation.cu patient/Condition.rs patient/MedicationRequest.rs';
+				'patient/Patient.rs patient/Observation.rs patient/Observation.cu patient/Condition.rs patient/Condition.cu patient/MedicationRequest.rs patient/MedicationRequest.cu';
 
 			const app = document.getElementById('app');
 			const el = (html) => (app.innerHTML = html);
@@ -49,7 +49,12 @@
 				const months = [24, 18, 12, 6, 1];
 				const trend = (code, display, unit, values, lab = false) =>
 					values.map((value, i) => exampleObservation(smart.patientId, { code, display, unit, value, lab, when: monthsAgo(months[i]) }));
+				const id = smart.patientId;
 				return [
+					exampleCondition(id, { code: 'T90', text: 'Diabetes type 2', when: monthsAgo(30) }),
+					exampleMedication(id, { name: 'Metformin 500 mg', dosage: '1 tablett morgen og kveld', when: monthsAgo(28) }),
+					exampleMedication(id, { name: 'Empagliflozin 10 mg', dosage: '1 tablett om morgenen', when: monthsAgo(12) }),
+					exampleMedication(id, { name: 'Atorvastatin 20 mg', dosage: '1 tablett om kvelden', when: monthsAgo(24) }),
 					...trend('4548-4', 'HbA1c', 'mmol/mol', [68, 62, 57, 54, 52], true),
 					...trend('8480-6', 'Systolisk blodtrykk', 'mm[Hg]', [152, 148, 144, 138, 134]),
 					...trend('8462-4', 'Diastolisk blodtrykk', 'mm[Hg]', [94, 92, 88, 84, 82]),
@@ -69,6 +74,7 @@
 				// T89 and T90 in ICPC-2, E10 and E11 in ICD-10.
 				const diabetes = smart
 					.entries(conditions)
+					.filter((c) => !isRetired(c))
 					.filter((c) => (c.code?.coding ?? []).some((k) => /^(T89|T90|E10|E11)/.test(k.code ?? '')));
 				const active = smart.entries(medications).filter((m) => (m.status ?? 'active') === 'active');
 
@@ -101,7 +107,12 @@
 					<div id="eksempel"></div>
 					<p class="svak liten" style="margin-top:0.8rem">Demonstrasjonsapp, ikke til klinisk bruk. Viser bare det som står i journalen.</p>
 				`);
-				mountExampleControls(document.getElementById('eksempel'), { smart, measured, examples, onChange: render });
+				mountExampleControls(document.getElementById('eksempel'), {
+					smart,
+					resources: [...measured, ...smart.entries(conditions), ...smart.entries(medications)],
+					examples,
+					onChange: render
+				});
 			}
 		</script>
 	</body>

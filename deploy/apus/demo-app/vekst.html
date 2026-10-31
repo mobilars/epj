@@ -120,7 +120,7 @@
 
 				mountExampleControls(document.getElementById('eksempel'), {
 					smart,
-					measured,
+					resources: measured,
 					examples: () => examplesFor(patient.body?.birthDate),
 					onChange: () => render()
 				});
