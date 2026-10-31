@@ -454,6 +454,21 @@ Det som er bygget, står i K-4.9 til K-4.13. Gjenstår:
   som startes med SMART-launch, ikke krever en egen HelseID-pålogging i
   tillegg.
 
+## 6c. Skille plattform og apper **[V]**
+
+Målbildet er at plattformen er ramme, tilgang og appstyring, og at appene står for
+funksjonene. Se [arkitektur.md](arkitektur.md#plattform-og-apper). I dag ligger
+notater, legemidler, meldinger og oppgjør inne i plattformen. Foreslått rekkefølge:
+
+1. **Gjøre skillet synlig.** Flytte funksjonene inn i egne mapper, uten å endre
+   adresser, og samle `integrations/`, `journal/` og `cds/` etter funksjon.
+2. **Håndheve det.** Et manifest per modul i stedet for faste faner i plattformens
+   kode, og en test som feiler når plattformkode importerer en modul, eller en modul
+   går utenom plattformens offentlige grensesnitt.
+3. **Flytte ut.** Gjøre funksjoner om til ekte apper, én om gangen. Notater og
+   legemidler først, fordi det allerede finnes demonstrasjonsapper for begge.
+   Meldinger, oppgjør og SFM trenger en tjenerdel og må vurderes hver for seg.
+
 ## 7. Mindre ting
 
 - Eksport av regningskort til regnskapssystem (SAF-T).

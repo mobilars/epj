@@ -1,5 +1,67 @@
 # Arkitektur
 
+## Plattform og apper
+
+**Målbildet:** Plattformen er rammen, og appene er journalen.
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ APPENE – det klinikeren jobber i                                 │
+│                                                                  │
+│  Notater · Legemidler · Meldinger · Oppgjør · LIMS · Spirare …   │
+│  fra oss eller fra andre leverandører, byttbare per virksomhet   │
+└──────────────┬───────────────────────────────────┬───────────────┘
+        SMART on FHIR                         CDS Hooks
+┌──────────────▼───────────────────────────────────▼───────────────┐
+│ PLATTFORMEN – vet ikke hva en resept er                          │
+│                                                                  │
+│  Ramme og menyer · pasientkontekst · appkatalog og appstyring    │
+│  Pålogging (HelseID) · OAuth 2.1 · roller · virksomheter         │
+│  /fhir med vokteren: tjenstlig behov, sperring, nødrett, logg    │
+└──────────────┬──────────────────────────────────┬────────────────┘
+┌──────────────▼───────────────┐  ┌───────────────▼────────────────┐
+│ HAPI FHIR R5 – kliniske data │  │ PostgreSQL – identitet, tilgang│
+│ én partisjon per virksomhet  │  │ og sikkerhetslogg              │
+└──────────────────────────────┘  └────────────────────────────────┘
+```
+
+Plattformen skal ikke vite hva en resept er. Den vet hvem du er, hvilken pasient du
+står i, hva du har lov til, og hvilke apper virksomheten har valgt.
+
+### Dagens kode mot målbildet
+
+Dette er ikke der koden er i dag. Under `src/routes/` ligger plattform og
+funksjoner side om side, og ingenting skiller dem:
+
+| Hva | Hvor | Tilhører |
+| --- | --- | --- |
+| Pålogging, OAuth, FHIR-fasaden | `logg-inn/`, `logg-ut/`, `oauth/`, `fhir/` | Plattformen |
+| Administrasjon, utviklerportal, innstillinger | `admin/`, `systemadmin/`, `utvikler/`, `innstillinger/` | Plattformen |
+| Appvisning, åpne pasient fra andre programmer | `apper/`, `pasienter/[id]/apper/`, `apne/` | Plattformen |
+| Pasientramme, pasientsøk, pasientopplysninger | `pasienter/`, `pasienter/[id]/+layout`, `rediger/` | Plattformen |
+| Sperring, nødrett, innsynslogg, utlevering | `pasienter/[id]/sperring/`, `nodrett/`, `logg/`, `utlevering/` | Plattformen: lovpålagt, skal ikke kunne byttes ut |
+| Journalnotater | `pasienter/[id]/notater/` | App |
+| Legemidler og SFM | `pasienter/[id]/legemidler/`, `sfm/` | App |
+| Meldinger | `meldinger/`, `pasienter/[id]/meldinger/` | App |
+| Oppgjør | `oppgjor/`, `pasienter/[id]/oppgjor/` | App |
+| Pasientoversikt og arbeidsflate | `pasienter/[id]/+page`, `+page` | Kort fra apper, ramme fra plattformen |
+| Beslutningsstøtte | `cds-services/` | Apper |
+
+De ekte eksterne appene ligger ikke i `src/` i det hele tatt. De kjører for seg, på
+egne adresser, og demonstrasjonsappene ligger i `deploy/apus/demo-app/`. Det samme
+skillet finnes i `src/lib/server/`: `integrations/`, `journal/` og `cds/` er stort sett
+funksjoner, resten er plattform.
+
+### Veien dit
+
+Se [todo.md](todo.md) punkt 6c. Kortversjonen: først synliggjøre skillet i koden,
+så håndheve det, og til slutt flytte funksjoner ut til ekte apper, én om gangen.
+
+Ikke alt kan bli en vanlig SMART-app. Meldinger og oppgjør trenger nøkler mot NHN og
+Helfo og må ha en tjenerdel, og SFM krever legens eget HelseID-token
+([sfm.md](sfm.md)). De blir enten apper med egen tjener eller innebygde moduler med
+de samme grensene som en app.
+
 ## Hvorfor grensene går der de går
 
 Systemet er delt i tre, og delingen følger ett prinsipp: **kliniske data skal

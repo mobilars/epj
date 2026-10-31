@@ -1,17 +1,49 @@
-# EPJ — elektronisk pasientjournal for norske fastleger
+# EPJ — en åpen plattform for journalapper
 
-Journalsystem for allmennpraksis bygget på **HL7 FHIR R5**, med **HAPI FHIR** som
-klinisk lager, **PostgreSQL** som database og **SvelteKit** som applikasjon.
-Systemet støtter **SMART on FHIR**-apper, bruker **HelseID** til pålogging, og
-har integrasjoner mot **Sentral forskrivningsmodul (SFM)**, **NHN
-meldingstjener** og **Helfo**. Én installasjon kan betjene flere legekontorer:
-hver virksomhet har sin egen partisjon i HAPI, sine egne brukere, sin egen
-sikkerhetslogg og sine egne signeringsnøkler.
+**Plattformen er rammen. Appene er journalen.** Plattformen eier det alle apper
+trenger: innlogging, tilgang, pasientkontekst, menyer, appstyring og sikkerhetslogg.
+Det klinikeren faktisk jobber med, som notater, legemidler og meldinger, skal være
+apper oppå den. En virksomhet skal kunne bytte ut en app uten at vi slipper en ny
+versjon av plattformen, og andre leverandører skal kunne lage apper på like vilkår.
 
-> **Status:** fungerende referanseimplementasjon med fullstendig testdekning.
-> Den er *ikke* satt i klinisk drift, og flere verdier må verifiseres mot
-> gjeldende regelverk før den kan brukes på ekte pasientopplysninger.
-> Se [docs/apne-punkter.md](docs/apne-punkter.md).
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ APPENE – det klinikeren jobber i                                 │
+│                                                                  │
+│  Notater · Legemidler · Meldinger · Oppgjør · LIMS · Spirare …   │
+│  fra oss eller fra andre leverandører, byttbare per virksomhet   │
+└──────────────┬───────────────────────────────────┬───────────────┘
+        SMART on FHIR                         CDS Hooks
+┌──────────────▼───────────────────────────────────▼───────────────┐
+│ PLATTFORMEN – vet ikke hva en resept er                          │
+│                                                                  │
+│  Ramme og menyer · pasientkontekst · appkatalog og appstyring    │
+│  Pålogging (HelseID) · OAuth 2.1 · roller · virksomheter         │
+│  /fhir med vokteren: tjenstlig behov, sperring, nødrett, logg    │
+└──────────────┬──────────────────────────────────┬────────────────┘
+┌──────────────▼───────────────┐  ┌───────────────▼────────────────┐
+│ HAPI FHIR R5 – kliniske data │  │ PostgreSQL – identitet, tilgang│
+│ én partisjon per virksomhet  │  │ og sikkerhetslogg              │
+└──────────────────────────────┘  └────────────────────────────────┘
+```
+
+Plattformen er åpen gjennom standarder: **SMART on FHIR** for apper, **CDS Hooks**
+for beslutningsstøtte og **FHIR R5** for data. Den er laget for norske legekontor,
+med **HelseID** og norske tilgangsregler, og én installasjon kan betjene flere
+legekontorer med hver sine data, brukere, logg og nøkler.
+
+## Hvor langt vi har kommet
+
+Dette er målbildet, ikke dagens kode. I dag ligger mye funksjonalitet fortsatt inne i
+plattformen. Se [veien dit](docs/arkitektur.md#plattform-og-apper).
+
+| | I dag |
+| --- | --- |
+| **Plattformen** | Bygget: pålogging, roller, FHIR med vokteren, appkatalog, sikkerhetslogg |
+| **SMART-apper** | Virker, også fra andre leverandører. Fire demonstrasjonsapper følger med (`deploy/apus/demo-app/`) |
+| **Innebygde funksjoner** | Notater, legemidler, meldinger og oppgjør ligger i selve plattformen. De skal skilles ut |
+| **SFM, NHN, Helfo** | Ikke koblet til. Alt kjører mot lokale simulatorer. SFM er bygget, men avslått: se [docs/sfm.md](docs/sfm.md) |
+| **Klinisk bruk** | Ikke klart. Se [åpne punkter](docs/apne-punkter.md) |
 
 ## Kom i gang
 
@@ -39,7 +71,7 @@ npm run dev
 | Dokument | Innhold |
 | --- | --- |
 | [Kravdokument](docs/kravdokument.md) | Funksjonelle og ikke-funksjonelle krav, med sporing til kode og test |
-| [Arkitektur](docs/arkitektur.md) | Komponenter, dataflyt og hvorfor grensene går der de går |
+| [Arkitektur](docs/arkitektur.md) | Plattform og apper, komponenter, dataflyt og hvorfor grensene går der de går |
 | [Sikkerhet og personvern](docs/sikkerhet.md) | Tilgangsmodell, trusselvurdering og forholdet til Normen |
 | [Samsvar med EPJ-standarden](docs/epj-standard.md) | Tilgangsstyring, retting, sletting og sperring |
 | [API](docs/api.md) | FHIR R5-endepunktet, OAuth 2.1, scopes og feilhåndtering |
@@ -53,31 +85,12 @@ npm run dev
 | [Åpne punkter](docs/apne-punkter.md) | Det som må avklares eller verifiseres før produksjon |
 | [Veikart og oppgaveliste](docs/todo.md) | Det som ikke er bygget ennå, og hva det vil kreve |
 
-## Arkitektur i korte trekk
+## Sikkerhetsprinsippet
 
-```
-                      ┌───────────────────────────────┐
-   Nettleser ────────▶│  SvelteKit                    │
-   SMART-app ────────▶│  · journalgrensesnitt         │
-   Backend-tjeneste ─▶│  · OAuth 2.1-server           │
-                      │  · /fhir-fasade  ◀── vokteren │
-                      └───────┬───────────────┬───────┘
-                              │               │
-                     ┌────────▼──────┐  ┌─────▼─────────┐
-                     │ HAPI FHIR R5  │  │ PostgreSQL    │
-                     │ kliniske data │  │ skjema «epj»  │
-                     └───────┬───────┘  │ identitet,    │
-                             │          │ tilgang, logg │
-                     ┌───────▼───────┐  └───────────────┘
-                     │ PostgreSQL    │
-                     │ HAPI-skjema   │
-                     └───────────────┘
-```
-
-HAPI FHIR eier de kliniske dataene. Alt utenfra går gjennom `/fhir`-fasaden,
-som håndhever scope, rolle, tjenstlig behov og sperring, og skriver
-sikkerhetslogg for hvert kall — også de som avvises. HAPI eksponeres aldri
-direkte.
+HAPI FHIR eier de kliniske dataene og eksponeres aldri direkte. Alt går gjennom
+`/fhir`-fasaden, *vokteren*, som håndhever scope, rolle, tjenstlig behov og sperring,
+og skriver sikkerhetslogg for hvert kall, også de som avvises. Det gjelder appene, og
+det gjelder plattformens egne sider. Se [arkitektur](docs/arkitektur.md).
 
 ## Datautveksling
 
@@ -93,11 +106,11 @@ direkte.
   lesbar utskrift i HTML eller ren tekst for pasienten selv. Hjemmelen velges i
   skjemaet og havner som `purposeOfUse` i sikkerhetsloggen.
 
-## Ingen runtime-avhengigheter utover PostgreSQL-driveren
+## Få avhengigheter
 
-Applikasjonen bruker bare `pg` i drift. JWS, TOTP, kryptering, XML-bygging og
--parsing er implementert direkte mot Node sitt standardbibliotek. I et system
-som behandler helseopplysninger er hver avhengighet også en forsyningskjederisiko.
+Applikasjonen har tre avhengigheter i drift: `pg`, `jose` og `openid-client`. TOTP,
+kryptering og XML er skrevet direkte mot Node sitt standardbibliotek. I et system som
+behandler helseopplysninger er hver avhengighet også en forsyningskjederisiko.
 
 ## Kommandoer
 
@@ -112,9 +125,9 @@ npm run test:e2e     # ende-til-ende-tester (Playwright)
 npm run test:alle    # begge deler
 ```
 
-## Lisens og bruk
+## Før klinisk bruk
 
-Dette er en referanseimplementasjon. Før klinisk bruk må virksomheten blant
+Systemet er ikke satt i klinisk drift. Før det kan skje, må virksomheten blant
 annet gjennomføre risikovurdering og personvernkonsekvensvurdering, inngå
 databehandleravtaler, og få integrasjonene mot SFM, NHN og Helfo godkjent av de
 respektive partene. Se [docs/apne-punkter.md](docs/apne-punkter.md).
