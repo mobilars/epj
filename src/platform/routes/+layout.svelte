@@ -2,6 +2,7 @@
 	import Nedtrekk from '$lib/components/Nedtrekk.svelte';
 	import Shortcuts from '$lib/components/Shortcuts.svelte';
 	import { appManifests } from '$apps/registry';
+	import { externalAppLabel } from '$lib/external-app';
 
 	const menuEntries = appManifests
 		.flatMap((app) => (app.mainMenu ? [app.mainMenu] : []))
@@ -126,9 +127,9 @@
 			     through the start endpoint that mints its launch. -->
 			{#each mainMenuApps as app (app.clientId)}
 				{#if app.openInNewTab}
-					<a class="ekstern-lenke" title="Ekstern app – ikke en del av journalen" href="/apper/{app.clientId}/start" target="_blank" rel="noopener">{app.name} ↗</a>
+					<a class="ekstern-lenke" title={externalAppLabel(app.name)} href="/apper/{app.clientId}/start" target="_blank" rel="noopener">{app.name} ↗</a>
 				{:else}
-					<a class="ekstern-lenke" title="Ekstern app – ikke en del av journalen" href="/apper/{app.clientId}" aria-current={page.url.pathname === `/apper/${app.clientId}` ? 'page' : undefined}>{app.name}</a>
+					<a class="ekstern-lenke" title={externalAppLabel(app.name)} href="/apper/{app.clientId}" aria-current={page.url.pathname === `/apper/${app.clientId}` ? 'page' : undefined}>{app.name}</a>
 				{/if}
 			{/each}
 

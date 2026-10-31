@@ -9,21 +9,23 @@
 	 * marking. It is on unless the person has turned it off under Innstillinger.
 	 */
 	import { page } from '$app/state';
+	import { externalAppLabel } from '$lib/external-app';
 	import type { HTMLIframeAttributes } from 'svelte/elements';
 
 	let {
 		frame = $bindable(null),
-		label = 'Ekstern app – ikke en del av journalen',
+		label,
+		title,
 		class: frameClass = 'appramme',
 		...attributes
-	}: HTMLIframeAttributes & { frame?: HTMLIFrameElement | null; label?: string; class?: string } = $props();
+	}: HTMLIframeAttributes & { frame?: HTMLIFrameElement | null; label?: string; title: string; class?: string } = $props();
 
 	const marked = $derived(page.data.markExternalApps !== false);
 </script>
 
 <div class="ekstern" class:merket={marked}>
-	{#if marked}<div class="ekstern-stripe">{label}</div>{/if}
-	<iframe bind:this={frame} class={frameClass} {...attributes}></iframe>
+	{#if marked}<div class="ekstern-stripe">{label ?? externalAppLabel(title)}</div>{/if}
+	<iframe bind:this={frame} class={frameClass} {title} {...attributes}></iframe>
 </div>
 
 <style>

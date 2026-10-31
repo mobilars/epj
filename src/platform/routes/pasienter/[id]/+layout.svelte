@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Nedtrekk from '$lib/components/Nedtrekk.svelte';
 	import ExternalFrame from '$lib/components/ExternalFrame.svelte';
+	import { externalAppLabel } from '$lib/external-app';
 	import { appManifests } from '$apps/registry';
 	import { patientSidePanel as SidePanel } from '$apps/slots';
 
@@ -48,7 +49,8 @@
 				? `/pasienter/${data.patientId}/apper/${app.clientId}`
 				: `/pasienter/${data.patientId}${segment ? `/${segment}` : ''}`,
 			text,
-			app: Boolean(app)
+			app: Boolean(app),
+			appName: app?.name
 		};
 	};
 
@@ -57,7 +59,6 @@
 	 *
 	 * What a clinician opens many times a day, and what the tab bar is for.
 	 */
-	const EXTERNAL_TITLE = 'Ekstern app – ikke en del av journalen';
 
 	const appTabs = appManifests
 		.flatMap((app) => (app.patientTab ? [app.patientTab] : []))
@@ -147,7 +148,7 @@
 			<a
 				href={f.href}
 				class:ekstern-lenke={f.app}
-				title={f.app ? EXTERNAL_TITLE : undefined}
+				title={f.appName ? externalAppLabel(f.appName) : undefined}
 				aria-current={page.url.pathname === f.href ? 'page' : undefined}
 			>{f.text}</a>
 		{/each}
@@ -156,7 +157,7 @@
 			<a
 				{href}
 				class="ekstern-lenke"
-				title={EXTERNAL_TITLE}
+				title={externalAppLabel(app.name)}
 				target={app.openInNewTab ? '_blank' : undefined}
 				rel={app.openInNewTab ? 'noopener' : undefined}
 				aria-current={page.url.pathname === href ? 'page' : undefined}
@@ -169,7 +170,7 @@
 						<a
 							href={appLenke(app)}
 							class="ekstern-lenke"
-							title={EXTERNAL_TITLE}
+							title={externalAppLabel(app.name)}
 							target={app.openInNewTab ? '_blank' : undefined}
 							rel={app.openInNewTab ? 'noopener' : undefined}
 						>{app.name}{#if app.openInNewTab} ↗{/if}</a>
