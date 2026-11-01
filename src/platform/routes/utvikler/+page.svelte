@@ -46,6 +46,10 @@
 			<span class="merke {merke(app.status)}">{app.statusText}</span>
 		</div>
 		{#if app.summary}<p class="svak">{app.summary}</p>{/if}
+		<p class="liten">
+			Klient-id: <strong class="mono" data-testid="app-client-id">{app.clientId}</strong><br />
+			<span class="svak">Den samme i alle virksomheter som installerer appen.</span>
+		</p>
 
 		{#if app.status === 'avvist' && app.reviewNote}
 			<div class="varsel varsel-feil">

@@ -10,6 +10,7 @@ import { SETTING, getSetting, themeAttribute } from '$srv/auth/settings';
 import { methodIsEnough } from '$srv/auth/login-level';
 import { getUser, rolesFor } from '$srv/auth/users';
 import { ensurePractitioner } from '$srv/auth/practitioner';
+import { tenantIdForCredential } from '$srv/auth/credential-tenant';
 import { validateAccessToken } from '$srv/auth/tokens';
 import { parseScopes } from '$srv/authz/scopes';
 import { permissionsForRoles, scopesForRoles } from '$srv/authz/roles';
@@ -91,7 +92,8 @@ async function contextFromBearer(authorization: string, event: Parameters<Handle
  */
 async function resolveTenant(
 	hostname: string,
-	sessionTenantId?: string | null
+	sessionTenantId: string | null | undefined,
+	credentialTenantId: () => Promise<string | null>
 ): Promise<{ tenant: Tenant; isPlatform: boolean } | { error: string; status: number }> {
 	const funnet = await getTenantOnHostname(hostname);
 	if (funnet) {
@@ -118,9 +120,13 @@ async function resolveTenant(
 	 * The isolation is unchanged. The id comes from the session, which is
 	 * server-side and cannot be named by the client, and the session is verified
 	 * inside that organisation exactly as it is on a dedicated hostname.
+	 *
+	 * An app's server has no session. It carries a code or a token the record issued,
+	 * which says more exactly whose the request is than a cookie riding along would.
 	 */
-	if (sessionTenantId) {
-		const theirs = await getTenant(sessionTenantId);
+	for (const id of [await credentialTenantId(), sessionTenantId]) {
+		if (!id) continue;
+		const theirs = await getTenant(id);
 		if (theirs && theirs.status === 'aktiv') return { tenant: theirs, isPlatform: false };
 	}
 
@@ -139,7 +145,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 		config.tenant.platformHostname && event.url.hostname === config.tenant.platformHostname
 			? null
 			: await tenantIdForSession(event.cookies);
-	const resolution = await resolveTenant(event.url.hostname, sessionTenant);
+	const resolution = await resolveTenant(event.url.hostname, sessionTenant, () =>
+		tenantIdForCredential(event.request, event.url.pathname)
+	);
 	if ('error' in resolution) {
 		return new Response(resolution.error, { status: resolution.status, headers: { 'content-type': 'text/plain; charset=utf-8' } });
 	}

@@ -93,6 +93,28 @@ export async function jwks(): Promise<{ keys: Jwk[] }> {
 	return { keys };
 }
 
+/**
+ * What the address publishes for apps to verify tokens with.
+ *
+ * Practices sharing an address share `iss` and so the place an app fetches keys from,
+ * and a fetch has nothing to say whose it is. These are public keys, and each token
+ * names its own by `kid`. Verifying inside the record stays with `jwks`, one practice's.
+ */
+export async function publishedJwks(): Promise<{ keys: Jwk[] }> {
+	const tenant = requireTenant();
+	const own = await jwks();
+	if (tenant.hostname) return own;
+	const rows = await query<KeyRow>(
+		`SELECT s.* FROM signing_key s
+		 JOIN tenant t ON t.id = s.tenant_id
+		 WHERE t.hostname IS NULL AND t.base_url = $1 AND t.status = 'aktiv'
+		   AND (s.active = true OR s.phased_out_after IS NULL OR s.phased_out_after > now())
+		 ORDER BY s.created_at DESC`,
+		[tenant.base_url]
+	);
+	return { keys: rows.map((r) => r.public_jwk) };
+}
+
 /** Maintenance. Deliberately across organisations: deletes only retired keys. */
 export async function removeExpiredKeys(): Promise<number> {
 	jwksCache.clear();

@@ -66,13 +66,14 @@ describeIf('catalogue', () => {
 		return id;
 	}
 
-	it('installs the same app as separate clients in each practice', async () => {
+	it('installs the same app under one id, as a client of its own in each practice', async () => {
 		const app = (await getCatalogueApp(appId))!;
 		const ia = await withTenant(a, () => installApp(app, null));
 		const ib = await withTenant(b, () => installApp(app, null));
-		expect(ia.clientId).not.toBe(ib.clientId);
-		expect(await withTenant(a, () => getClient(ia.clientId))).toBeTruthy();
-		expect(await withTenant(a, () => getClient(ib.clientId))).toBeNull();
+		expect(ia.clientId).toBe(app.client_id);
+		expect(ib.clientId).toBe(app.client_id);
+		expect((await withTenant(a, () => getClient(ia.clientId)))?.tenant_id).toBe(a.id);
+		expect((await withTenant(b, () => getClient(ib.clientId)))?.tenant_id).toBe(b.id);
 	});
 
 	it('says who made an installed app, only for the practice that installed it', async () => {
@@ -142,7 +143,7 @@ describeIf('catalogue', () => {
 			const app = (await getCatalogueApp(id))!;
 			const inA = await withTenant(a, () => installApp(app, null));
 			const inB = await withTenant(b, () => installApp(app, null));
-			expect(inA.clientId).not.toBe(inB.clientId);
+			expect(inA.clientId).toBe(inB.clientId);
 
 			for (const [tenant, clientId] of [[a, inA.clientId], [b, inB.clientId]] as const) {
 				expect((await withTenant(tenant, () => tokenRequest(clientId, secret))).ok).toBe(true);

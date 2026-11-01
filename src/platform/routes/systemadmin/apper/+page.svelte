@@ -28,6 +28,7 @@
 	{#if app.description}<p class="svak">{app.description}</p>{/if}
 	<table>
 		<tbody>
+			<tr><th>Klient-id</th><td class="mono">{app.clientId}</td></tr>
 			<tr><th>Launch</th><td class="mono">{app.launchUrl}</td></tr>
 			<tr><th>Redirect</th><td class="mono">{app.redirectUris.join(' ')}</td></tr>
 			<tr><th>Plassering</th><td>{app.placement}</td></tr>
@@ -65,6 +66,7 @@
 				{#if app.status !== 'godkjent'}<span class="merke merke-fare">Trukket tilbake</span>{/if}
 				<span class="svak liten">· installert hos {app.installs} {app.installs === 1 ? 'virksomhet' : 'virksomheter'}</span>
 			</summary>
+			<p class="liten">Klient-id: <span class="mono">{app.clientId}</span></p>
 			<form method="POST" action="?/plattformapp">
 				<input type="hidden" name="id" value={app.id} />
 				<AppForm {app} idPrefix={app.id} showReplacesTab />

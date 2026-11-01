@@ -97,9 +97,19 @@ De ligger i samme katalog, men eies av plattformen og forvaltes under
 Plattformadministrasjon → Apper. De regnes som godkjent, og endringer gjelder med en gang
 i virksomheter som har dem. Virksomheter installerer dem fra appgalleriet som alle andre.
 
-En app med egen tjener kan bruke klienthemmelighet eller offentlige nøkler. Hemmeligheten
-hører til appen og ikke til virksomheten, og lages i utviklerportalen. Klient-id-en er ulik
-i hver virksomhet.
+En app med egen tjener kan bruke klienthemmelighet eller offentlige nøkler. Hemmeligheten og
+klient-id-en hører til appen og er de samme i alle virksomheter, slik at en app med mange kunder
+har én registrering. Hver virksomhet har likevel sin egen rad, med egne samtykker, egen status
+og egne tokens, så å sperre appen ett sted lar de andre være i fred. Hvilken kunde en oppstart
+kom fra, står i tokenet som `smart_app_officeApiUrl` og `tenant`, med virksomhetens id som verdi.
+
+**Felles adresse og `iss`.** Virksomheter uten eget vertsnavn deler adresse og `iss`, slik WebMeds
+kunder gjør. En person plasseres av sesjonen sin. En apptjener har ingen sesjon, så den plasseres
+av koden eller tokenet den har fått av journalen, og alt sjekkes deretter inne i den virksomheten.
+`/oauth/jwks` viser de offentlige nøklene til alle som deler adressen. Backend-tjenester
+(`client_credentials`) har verken kode eller token å bli plassert av, og trenger derfor foreløpig
+eget vertsnavn. Det samme gjelder apper i nettleseren som kaller FHIR direkte, fordi
+CORS-svaret bare kjenner opprinnelsene til standardvirksomheten før tokenet er lest.
 
 **Slik legger du til en app i kodebasen:** Lag `src/apps/<navn>/` med `manifest.ts` og `routes/`,
 legg manifestet i `registry.ts`, og legg de korte filene i `src/platform/routes/`.

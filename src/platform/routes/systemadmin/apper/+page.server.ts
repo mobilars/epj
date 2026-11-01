@@ -32,6 +32,7 @@ export const load: PageServerLoad = async (event) => {
 	const shape = (list: Awaited<ReturnType<typeof appsWithStatus>>) =>
 		list.map((a) => ({
 			id: a.id,
+			clientId: a.client_id,
 			name: a.name,
 			summary: a.summary,
 			description: a.description,

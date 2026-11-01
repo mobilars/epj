@@ -1,7 +1,7 @@
 import { exec, one, query, transaction } from '../db';
 import { newId, newToken } from '../util/ids';
 import { hashPassword } from '../util/crypto';
-import { registerClient, setKlientstatus, setPlacement, setReplacesTab, setRequireConsent, type Placement } from '../auth/clients';
+import { deleteClient, getClient, registerClient, setKlientstatus, setPlacement, setReplacesTab, setRequireConsent, type Placement } from '../auth/clients';
 import { requireTenant } from '../tenant/context';
 
 /**
@@ -10,10 +10,14 @@ import { requireTenant } from '../tenant/context';
  *
  * An entry here is a description, not an installation. A practice that
  * installs one gets an ordinary client in its own register, with its own
- * client id and its own secret if it needs one - so two practices running the
- * same app share nothing, and revoking it at one leaves the other alone. That
- * is also what keeps the blast radius of a bad app to the practices that chose
- * it.
+ * consents, status and tokens - so revoking it at one leaves the other alone.
+ * That is also what keeps the blast radius of a bad app to the practices that
+ * chose it.
+ *
+ * The client id and the secret are the app's, the same in every practice. An app
+ * serving many customers holds one registration, and learns which customer a launch
+ * came from in the token, as `tenant` and `smart_app_officeApiUrl`. Every lookup of a
+ * client is within a practice, so the shared id does not let one reach another.
  *
  * Platform apps are entries too, owned by the platform rather than a developer, and
  * managed in platform administration. They are approved as they stand, and a change
@@ -44,6 +48,8 @@ const PLATFORM_DEVELOPER = 'plattform-apus';
 
 export interface CatalogueApp {
 	id: string;
+	/** The same in every practice that installs the app. */
+	client_id: string;
 	developer_id: string;
 	name: string;
 	summary: string;
@@ -86,7 +92,7 @@ export interface AppInput {
 	replacesTab?: string | null;
 }
 
-const FIELD = `id, developer_id, name, summary, description, launch_url, redirect_uris, scopes, placement,
+const FIELD = `id, client_id, developer_id, name, summary, description, launch_url, redirect_uris, scopes, placement,
 	contact_email, privacy_url, databehandleravtale, client_type, secret_hash, jwks, jwks_uri, is_platform_app, replaces_tab,
 	status, review_note, reviewed_at, created_at, updated_at`;
 
@@ -404,10 +410,12 @@ export async function installsForTenant(): Promise<Install[]> {
 /**
  * Installs a catalogue app into the practice.
  *
- * The client is the practice's own: its own id, its own consent, its own
- * placement. What the catalogue supplies is the description and the addresses
- * the platform approved - and the scopes, which the practice cannot widen
- * beyond what was reviewed.
+ * The client is the practice's own: its own consent, its own placement. What
+ * the catalogue supplies is the id, the description and the addresses the platform
+ * approved - and the scopes, which the practice cannot widen beyond what was reviewed.
+ *
+ * An earlier removal left a blocked client under this id. Installing again is a new
+ * decision, so it goes, with the consents and the revoked tokens that belonged to it.
  */
 export async function installApp(
 	app: CatalogueApp,
@@ -415,7 +423,9 @@ export async function installApp(
 ): Promise<{ clientId: string }> {
 	const tenantId = requireTenant().id;
 	return transaction(async () => {
+		if ((await getClient(app.client_id))?.status === 'sperret') await deleteClient(app.client_id);
 		const { client } = await registerClient({
+			clientId: app.client_id,
 			name: app.name,
 			type: app.client_type === 'public' ? 'public' : 'confidential',
 			category: 'smart-ehr',

@@ -47,6 +47,17 @@
 			med appens navn.
 		</li>
 		<li>
+			<strong>Én klient-id og én hemmelighet for alle kunder.</strong> De hører til appen, og står på
+			appen din her i portalen. Hvilken virksomhet en oppstart kom fra, står i tokenet:
+			<span class="mono">smart_app_officeApiUrl</span> i access-tokenet, og
+			<span class="mono">tenant</span> i både tokenet og svaret fra token-endepunktet. Verdien er
+			stabil, og skal behandles som en nøkkel.
+		</li>
+		<li>
+			<strong>Flere virksomheter kan ha samme <span class="mono">iss</span>.</strong> Finn ikke kunden
+			ut fra adressen. Bruk koden og tokenet du fikk, så finner journalen riktig virksomhet.
+		</li>
+		<li>
 			<strong>Legg klient-id-en på launch-URL-en</strong> med <span class="mono">{'{client_id}'}</span>.
 			Da kan den samme appen brukes fra flere journaler uten å bygges på nytt.
 		</li>

@@ -32,6 +32,7 @@ export const load: PageServerLoad = async (event) => {
 		profile: { name: developer.name, organisation: developer.organisation, email: developer.email },
 		apps: apps.map((a) => ({
 			id: a.id,
+			clientId: a.client_id,
 			name: a.name,
 			summary: a.summary,
 			description: a.description,

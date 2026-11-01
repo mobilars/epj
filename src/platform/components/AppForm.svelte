@@ -65,7 +65,7 @@
 <div class="felt">
 	<label for="{idPrefix}-launch">Launch-URL</label>
 	<input id="{idPrefix}-launch" name="launchUrl" required value={app?.launchUrl ?? ''} placeholder="https://app.example/launch?client_id={'{client_id}'}" />
-	<small class="svak">Skriv <span class="mono">{'{client_id}'}</span> der klient-id-en skal settes inn ved installasjon.</small>
+	<small class="svak">Skriv <span class="mono">{'{client_id}'}</span> der klient-id-en skal settes inn.</small>
 </div>
 <div class="felt">
 	<label for="{idPrefix}-redirect">Redirect-URI-er</label>
@@ -86,8 +86,8 @@
 	</select>
 	{#if clientType === 'secret'}
 		<small class="svak">
-			Hemmeligheten lages når du lagrer, og vises bare én gang. Den samme hemmeligheten gjelder i alle
-			virksomheter, mens klient-id-en er ulik i hver.
+			Hemmeligheten lages når du lagrer, og vises bare én gang. Hemmeligheten og klient-id-en er de
+			samme i alle virksomheter.
 		</small>
 	{/if}
 </div>

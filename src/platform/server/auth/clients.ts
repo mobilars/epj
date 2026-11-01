@@ -62,6 +62,8 @@ export async function listClients(): Promise<OAuthClient[]> {
 }
 
 export interface NewClient {
+	/** The app's own id, for one from the catalogue. Otherwise one is made. */
+	clientId?: string;
 	name: string;
 	type: 'public' | 'confidential';
 	category: ClientCategory;
@@ -89,7 +91,7 @@ export interface NewClient {
 }
 
 export async function registerClient(inValue: NewClient): Promise<{ client: OAuthClient; secret?: string }> {
-	const clientId = `epj-${newId()}`;
+	const clientId = inValue.clientId ?? `epj-${newId()}`;
 	const secret = inValue.type === 'confidential' && !inValue.jwks && !inValue.jwksUri ? newToken(32) : undefined;
 	await exec(
 		`INSERT INTO oauth_client (client_id, tenant_id, name, type, client_category, secret_hash, jwks, jwks_uri,
